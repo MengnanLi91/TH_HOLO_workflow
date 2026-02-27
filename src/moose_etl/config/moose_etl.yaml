@@ -1,0 +1,46 @@
+# MOOSE Simulation ETL Pipeline — Hydra configuration
+#
+# Usage (from src/ directory):
+#   python run_etl.py \
+#       etl.source.input_dir=../data \
+#       etl.source.data_dir=../data \
+#       etl.sink.output_dir=../data/processed
+#
+# Override num_processes, grid resolution, compression, etc. on the CLI.
+
+defaults:
+  - _self_
+
+etl:
+  processing:
+    num_processes: 4
+
+  source:
+    _target_: moose_etl.data_sources.exodus_source.ExodusDataSource
+    # Directory containing Exodus (.e) files
+    input_dir: ???
+    # Directory containing CSV probe files (defaults to input_dir if omitted)
+    data_dir: ???
+
+  transformations:
+    moose_transform:
+      _target_: moose_etl.transformations.moose_transform.MooseDataTransformation
+      # Regular-grid resolution for CNN-based models
+      grid_nx: 64
+      grid_ny: 64
+      # Epsilon for numerical stability in std normalization
+      eps: 1.0e-8
+
+  sink:
+    _target_: moose_etl.data_sources.zarr_sink.MooseZarrSink
+    # Directory where .zarr stores will be written
+    output_dir: ???
+    overwrite_existing: true
+    compression_level: 3
+    compression_method: zstd
+    chunk_size_mb: 1.0
+
+  # Optional: validate output after processing
+  # validator:
+  #   _target_: moose_etl.validators.MooseDatasetValidator
+  #   output_dir: ${etl.sink.output_dir}

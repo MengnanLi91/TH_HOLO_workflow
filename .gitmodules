@@ -1,0 +1,9 @@
+[submodule "moose"]
+	path = moose
+	url = git@github.com:idaholab/moose.git
+[submodule "physicsnemo-curator"]
+	path = physicsnemo-curator
+	url = git@github.com:NVIDIA/physicsnemo-curator.git
+[submodule "physicsnemo"]
+	path = physicsnemo
+	url = git@github.com:NVIDIA/physicsnemo.git
