@@ -1,108 +1,82 @@
 # TH_HOLO_workflow
 
-A [PhysicsNeMo](https://github.com/NVIDIA/physicsnemo)-based data pipeline for
-reading MOOSE thermal-hydraulics simulation outputs and preparing them for ML
-training (surrogate modelling, super-resolution, state reconstruction).
+TH_HOLO_workflow is a PhysicsNeMo-based ETL pipeline that converts MOOSE
+thermal-hydraulics outputs (Exodus + CSV probes) into ML-ready Zarr datasets.
 
-## Repository layout
+## TH_HOLO_workflow Plot
 
-```
-TH_HOLO_workflow/
-├── data/                        # Raw simulation files (not tracked by git)
-│   ├── *.e                      # Exodus mesh + field output files
-│   ├── *_out_*_*.csv            # CSV line-probe output files
-│   └── processed/               # Generated Zarr stores (written by ETL)
-├── docs/
-│   ├── etl_pipeline.md          # ETL pipeline deep-dive
-│   └── dataset.md               # PyTorch Dataset API reference
-├── src/
-│   ├── run_etl.py               # ETL entry point (Hydra CLI)
-│   ├── read_exdous.py           # Exodus inspection helpers
-│   ├── moose_etl/               # ETL package
-│   │   ├── schemas.py           # MooseRawData / MooseProcessedData dataclasses
-│   │   ├── config/moose_etl.yaml
-│   │   ├── data_sources/
-│   │   │   ├── exodus_source.py # ExodusDataSource — reads .e files
-│   │   │   ├── csv_source.py    # CSVProbeSource  — reads CSV line probes
-│   │   │   └── zarr_sink.py     # MooseZarrSink   — writes Zarr stores
-│   │   ├── transformations/
-│   │   │   └── moose_transform.py  # MooseDataTransformation
-│   │   └── validators.py        # MooseDatasetValidator
-│   └── dataset/
-│       └── moose_dataset.py     # PyTorch Dataset (graph / point_cloud / grid)
-├── moose/                       # git submodule — MOOSE framework
-└── physicsnemo-curator/         # git submodule — PhysicsNeMo Curator base classes
+```mermaid
+flowchart LR
+    A["MOOSE Simulation Outputs<br/>Exodus (.e) + CSV Probes"] --> B["ETL Pipeline<br/>Read -> Transform -> Validate"]
+    B --> C["Processed Dataset<br/>Zarr Stores (data/processed/*.zarr)"]
+    C --> D["Training Interface<br/>MooseDataset (graph | point_cloud | grid)"]
 ```
 
-## Environment setup
+## What It Does
 
-The pipeline runs inside the `moose-physicsnemo` conda environment.
+- Reads simulation outputs from Exodus `.e` files and CSV line-probe files.
+- Normalizes fields and creates graph and regular-grid representations.
+- Writes one compressed `.zarr` store per simulation run.
+- Provides a PyTorch dataset interface for graph, point-cloud, and grid training.
+
+## Quick Start
 
 ```bash
-conda activate moose-physicsnemo
-
-# Install physicsnemo-curator from the submodule (first time only)
-pip install -e physicsnemo-curator/
-
-# netCDF4 is required for reading Exodus files
-pip install netCDF4
+git submodule update --init --recursive
+docker compose build etl-dev
+docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name lid_driven'
 ```
 
-## Quick start
+The `lid_driven` config is defined in `src/moose_etl/config/lid_driven.yaml` and writes output to `data/processed/lid-driven/*.zarr`.
 
-### 1. Run the ETL pipeline
+You can still override values on the command line if needed:
 
 ```bash
-cd src/
-python run_etl.py \
-    etl.source.input_dir=../data \
-    etl.source.data_dir=../data \
-    etl.sink.output_dir=../data/processed
+docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name lid_driven \
+  etl.processing.num_processes=8'
 ```
 
-This reads every `*.e` file under `data/`, runs the full
-normalize → graph → grid-interpolate pipeline, and writes one
-`{sim_name}.zarr` store per simulation to `data/processed/`.
+To create a new dataset config, copy `src/moose_etl/config/lid_driven.yaml` to
+`src/moose_etl/config/<your_config>.yaml`, update the source/sink paths, then run:
 
-See [`docs/etl_pipeline.md`](docs/etl_pipeline.md) for configuration options
-and a full description of the pipeline stages.
-
-### 2. Load data for training
-
-```python
-import sys
-sys.path.insert(0, "src")
-
-from dataset.moose_dataset import MooseDataset
-
-# Graph mode — for GNN / MeshGraphNet models
-ds = MooseDataset("data/processed", mode="graph")
-sample = ds[0]
-# sample keys: coords, edge_index, elem_fields, node_fields,
-#              probe_data, field_names, norm_stats, sim_name, time_steps
-
-# Grid mode — for CNN / FNO models
-ds_grid = MooseDataset("data/processed", mode="grid")
-sample = ds_grid[0]
-# sample keys: grid_x, grid_y, grid_fields, field_names, norm_stats, ...
-
-# Select a single time step
-ds_t0 = MooseDataset("data/processed", mode="graph", time_idx=0)
+```bash
+docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name <your_config>'
 ```
 
-See [`docs/dataset.md`](docs/dataset.md) for the full Dataset API.
+## Train an FNO with PhysicsNeMo
 
-## Data sources
+After ETL generates `*.zarr` stores, you can train a baseline FNO model.
 
-| File pattern | Description |
-|---|---|
-| `{sim_name}.e` | Exodus II file — mesh geometry + element solution fields |
-| `{sim_prefix}_out_{probe_name}_{timestep:04d}.csv` | CSV line-probe — TKE, TKED, pressure, vel_x, vel_y, x, y, z |
+Use the template config at `src/config/train_fno.yaml`:
 
-The Exodus and CSV files do **not** need to share the same filename prefix —
-they are treated as independent data sources.
+```bash
+docker compose build etl
+docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml'
+```
 
-## Further reading
+Use `etl-ngc` instead of `etl` if you prefer the NGC PhysicsNeMo base image.
+CLI flags override config values, for example:
 
-- [ETL pipeline](docs/etl_pipeline.md) — stages, config keys, Zarr layout
-- [Dataset API](docs/dataset.md) — modes, tensor shapes, denormalization
+```bash
+docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml --epochs 50'
+```
+
+## Evaluate an FNO Checkpoint
+
+Use the template config at `src/config/eval_fno.yaml`:
+
+```bash
+docker compose run --rm etl bash -lc 'cd src && python eval_fno.py --config config/eval_fno.yaml'
+```
+
+## Documentation
+
+### User docs
+
+- [Getting Started (Docker setup, run modes, logs, troubleshooting)](docs/user/getting_started.md)
+
+### Developer docs
+
+- [ETL Pipeline Internals](docs/dev/etl_pipeline.md)
+- [Dataset API](docs/dev/dataset.md)
+- [FNO Training and Evaluation](docs/dev/fno_train_eval.md)

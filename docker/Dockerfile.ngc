@@ -1,0 +1,70 @@
+FROM scratch AS certs
+COPY docker/certs/ /
+
+FROM nvcr.io/nvidia/physicsnemo/physicsnemo:25.11
+
+# PhysicsNeMo, PyTorch, hydra-core, omegaconf, zarr, scipy are pre-installed.
+# We only need to add the MOOSE-specific dependencies.
+
+ARG EXTRA_CA_CERT_B64=""
+# pip equivalent of uv's --allow-insecure-host: --trusted-host <host>
+# Example: PIP_TRUSTED_HOST_FLAGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org"
+ARG PIP_TRUSTED_HOST_FLAGS=""
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY} \
+    http_proxy=${HTTP_PROXY} \
+    https_proxy=${HTTPS_PROXY} \
+    no_proxy=${NO_PROXY} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+COPY physicsnemo-curator /workspace/physicsnemo-curator
+
+# Inject org CA certificates (same mechanism as Dockerfile.physicsnemo-cpu).
+# Place your cert under docker/certs/*.pem/.crt/.cer, or pass EXTRA_CA_CERT_B64.
+COPY --from=certs . /tmp/certs/
+RUN if [ -n "${EXTRA_CA_CERT_B64}" ]; then \
+    echo "${EXTRA_CA_CERT_B64}" | base64 -d > /tmp/certs/extra-ca.pem; \
+    fi \
+    && cp /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-bundle.pem 2>/dev/null || true \
+    && found=0 \
+    && for cert_file in /tmp/certs/*; do \
+    [ -e "${cert_file}" ] || continue; \
+    case "${cert_file}" in \
+    *.pem|*.crt|*.cer) \
+    cat "${cert_file}" >> /etc/ssl/certs/ca-bundle.pem; \
+    found=1 ;; \
+    esac; \
+    done \
+    && if [ "${found}" -eq 0 ]; then \
+    echo "No custom CA files found under /tmp/certs (supported: .pem/.crt/.cer)"; \
+    fi \
+    && rm -rf /tmp/certs
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem \
+    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-bundle.pem
+
+# netCDF4 is pre-installed in the NGC image; the install below is a no-op but
+# kept explicit so the image is self-documenting.
+# physicsnemo-curator — our ETL base classes (editable install from submodule).
+#
+# PIP_CERT tells pip (and its build-dep subprocess) where to find the CA bundle.
+# PIP_TRUSTED_HOST_FLAGS can bypass TLS entirely as a last resort:
+#   PIP_TRUSTED_HOST_FLAGS="--trusted-host pypi.org --trusted-host files.pythonhosted.org"
+RUN pip install --no-cache-dir \
+    --cert /etc/ssl/certs/ca-bundle.pem \
+    ${PIP_TRUSTED_HOST_FLAGS} \
+    netCDF4 \
+    && pip install --no-cache-dir \
+    --cert /etc/ssl/certs/ca-bundle.pem \
+    ${PIP_TRUSTED_HOST_FLAGS} \
+    -e /workspace/physicsnemo-curator
+
+CMD ["bash"]

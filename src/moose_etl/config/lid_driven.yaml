@@ -1,0 +1,14 @@
+defaults:
+  - moose_etl
+  - _self_
+
+etl:
+  processing:
+    num_processes: 4
+
+  source:
+    input_dir: ../data/lid-driven
+    data_dir: ../data/lid-driven
+
+  sink:
+    output_dir: ../data/processed/lid-driven

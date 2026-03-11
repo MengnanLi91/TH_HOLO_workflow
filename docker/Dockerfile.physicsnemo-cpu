@@ -1,0 +1,76 @@
+FROM scratch AS certs
+COPY docker/certs/ /
+
+FROM python:3.11-slim
+
+ARG UV_ALLOW_INSECURE_HOST_FLAGS=""
+ARG EXTRA_CA_CERT_B64=""
+ARG INSTALL_PHYSICSNEMO=1
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_SYSTEM_PYTHON=1 \
+    UV_BREAK_SYSTEM_PACKAGES=1 \
+    HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY} \
+    http_proxy=${HTTP_PROXY} \
+    https_proxy=${HTTPS_PROXY} \
+    no_proxy=${NO_PROXY} \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.10.3 /uv /uvx /bin/
+
+WORKDIR /workspace
+COPY physicsnemo-curator /workspace/physicsnemo-curator
+
+COPY --from=certs . /tmp/certs/
+RUN if [ -n "${EXTRA_CA_CERT_B64}" ]; then \
+    echo "${EXTRA_CA_CERT_B64}" | base64 -d > /tmp/certs/extra-ca.pem; \
+    fi \
+    && cp /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-bundle.pem 2>/dev/null || true \
+    && found=0 \
+    && for cert_file in /tmp/certs/*; do \
+    [ -e "${cert_file}" ] || continue; \
+    case "${cert_file}" in \
+    *.pem|*.crt|*.cer) \
+    cat "${cert_file}" >> /etc/ssl/certs/ca-bundle.pem; \
+    found=1 ;; \
+    esac; \
+    done \
+    && if [ "${found}" -eq 0 ]; then \
+    echo "No custom CA files found under /tmp/certs (supported: .pem/.crt/.cer)"; \
+    fi \
+    && rm -rf /tmp/certs
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem \
+    NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-bundle.pem
+
+# CPU-only PhysicsNeMo install (no CUDA extras on macOS without NVIDIA GPUs).
+# --native-tls and --allow-insecure-host are global uv flags; they must come
+# before the subcommand name (uv --native-tls pip install ...).
+RUN if [ "${INSTALL_PHYSICSNEMO}" = "1" ]; then \
+    uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system "nvidia-physicsnemo"; \
+    fi \
+    && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system \
+    "hydra-core>=1.3" \
+    "omegaconf>=2.3" \
+    "netCDF4" \
+    "scipy" \
+    "zarr" \
+    && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system -e /workspace/physicsnemo-curator
+
+CMD ["bash"]

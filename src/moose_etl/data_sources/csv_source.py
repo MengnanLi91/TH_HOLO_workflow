@@ -101,7 +101,7 @@ class CSVProbeSource:
             # Use the last time step file (typically steady state)
             csv_path = file_list[-1]
             try:
-                arr, columns = _read_csv(csv_path)
+                arr, columns = read_csv(csv_path)
                 probe_data[probe_name] = arr
                 if not probe_columns:
                     probe_columns = columns
@@ -111,7 +111,7 @@ class CSVProbeSource:
         return probe_data, probe_columns
 
 
-def _read_csv(path: Path) -> tuple[np.ndarray, list[str]]:
+def read_csv(path: Path) -> tuple[np.ndarray, list[str]]:
     """Read a MOOSE output CSV file into a numpy array.
 
     Returns:

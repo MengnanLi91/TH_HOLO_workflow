@@ -3,3 +3,14 @@
 __pycache__/
 data/
 src/outputs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# SSL Certificates (keep .gitkeep)
+docker/certs/*.pem
+docker/certs/*.crt
+docker/certs/*.cer
+.DS_Store

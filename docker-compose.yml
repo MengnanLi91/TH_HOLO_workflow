@@ -1,0 +1,74 @@
+services:
+  # Minimal dev image — ETL pipeline only, no PhysicsNeMo or PyTorch (~300 MB).
+  # Use this for fast iteration and testing the ETL pipeline.
+  etl-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      additional_contexts:
+        certs: ${CA_CERT_DIR:-./docker/certs}
+      args:
+        EXTRA_CA_CERT_B64: ${EXTRA_CA_CERT_B64:-}
+        PIP_TRUSTED_HOST_FLAGS: ${PIP_TRUSTED_HOST_FLAGS:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: th-holo-physicsnemo:dev
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # Lightweight CPU image built from python:3.11-slim.
+  # Builds faster and avoids the 13 GB NGC download.
+  etl:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.physicsnemo-cpu
+      additional_contexts:
+        certs: ${CA_CERT_DIR:-./docker/certs}
+      args:
+        INSTALL_PHYSICSNEMO: ${INSTALL_PHYSICSNEMO:-1}
+        UV_ALLOW_INSECURE_HOST_FLAGS: ${UV_ALLOW_INSECURE_HOST_FLAGS:-}
+        EXTRA_CA_CERT_B64: ${EXTRA_CA_CERT_B64:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: th-holo-physicsnemo:cpu
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    shm_size: "1gb"
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # NGC-based image (nvcr.io/nvidia/physicsnemo/physicsnemo:25.11).
+  # ~13 GB but ships a pre-tested PhysicsNeMo + PyTorch + CUDA stack.
+  # Runs CPU-only on macOS (no --gpus needed).
+  # Requires a free NGC account: https://ngc.nvidia.com
+  etl-ngc:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ngc
+      additional_contexts:
+        certs: ${CA_CERT_DIR:-./docker/certs}
+      args:
+        EXTRA_CA_CERT_B64: ${EXTRA_CA_CERT_B64:-}
+        PIP_TRUSTED_HOST_FLAGS: ${PIP_TRUSTED_HOST_FLAGS:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: th-holo-physicsnemo:ngc
+    platform: ${DOCKER_PLATFORM:-linux/arm64}
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    shm_size: "1gb"
+    stdin_open: true
+    tty: true
+    command: bash

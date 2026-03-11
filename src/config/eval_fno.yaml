@@ -1,0 +1,10 @@
+zarr_dir: ../data/processed/lid-driven
+checkpoint: ../data/models/lid_driven_fno.mdlus
+input_fields: pressure,vel_x,vel_y
+output_fields: pressure,vel_x,vel_y
+input_time_idx: 0
+target_time_idx: -1
+batch_size: 4
+num_workers: 0
+device: auto
+metrics_out: ../data/models/lid_driven_fno_metrics.json

@@ -25,11 +25,8 @@ _SRC_DIR = Path(__file__).resolve().parents[2]  # src/
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-# Reuse decoding helpers from the existing read_exdous.py
-from read_exdous import (  # noqa: E402
-    _build_name_lookup,
-    _decode_entity_names,
-)
+# Reuse decoding helpers from read_exdous.py
+from read_exdous import ExodusReader
 
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
@@ -60,6 +57,7 @@ class ExodusDataSource(DataSource):
         self.input_dir = Path(input_dir)
         self.data_dir = Path(data_dir) if data_dir else self.input_dir
         self._csv_source = CSVProbeSource(self.data_dir)
+        self._exodus_reader = ExodusReader(use_rich=False)
 
     # ------------------------------------------------------------------
     # DataSource interface
@@ -149,7 +147,7 @@ class ExodusDataSource(DataSource):
         time_steps = np.array(ds.variables["time_whole"][:], dtype=np.float32)
 
         # --- Element variable names ---
-        names_by_kind = _build_name_lookup(ds)
+        names_by_kind = self._exodus_reader.build_name_lookup(ds)
         elem_field_names: list[str] = names_by_kind.get("element", [])
 
         # --- Element variable arrays ---

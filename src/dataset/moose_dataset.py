@@ -100,7 +100,7 @@ class MooseDataset(Dataset):
         sim_name: str = str(meta.attrs["sim_name"])
         time_steps = torch.from_numpy(np.array(meta["time_steps"], dtype=np.float32))
 
-        norm_stats = _load_norm_stats(meta)
+        norm_stats = load_norm_stats(meta)
 
         sample: dict = {
             "field_names": field_names,
@@ -126,23 +126,23 @@ class MooseDataset(Dataset):
         self, root, field_names: list[str], probe_columns: list[str]
     ) -> dict:
         mesh = root["mesh"]
-        coords = _to_tensor(mesh["coords"])                   # [N, D]
+        coords = to_tensor(mesh["coords"])                   # [N, D]
         connectivity = torch.from_numpy(np.array(mesh["connectivity"], dtype=np.int64))
         edge_src = torch.from_numpy(np.array(mesh["edge_src"], dtype=np.int64))
         edge_dst = torch.from_numpy(np.array(mesh["edge_dst"], dtype=np.int64))
         edge_index = torch.stack([edge_src, edge_dst], dim=0)  # [2, M]
 
         # Element fields [T, E, F]
-        elem_fields = _load_fields(root["fields"], field_names)
-        elem_fields = _slice_time(elem_fields, self.time_idx)
+        elem_fields = load_fields(root["fields"], field_names)
+        elem_fields = slice_time(elem_fields, self.time_idx)
 
         # Interpolate element fields to nodes via simple centroid averaging
-        node_fields = _elem_to_node(elem_fields, connectivity, coords.shape[0])
+        node_fields = elem_to_node(elem_fields, connectivity, coords.shape[0])
 
         # Probes
         probes_grp = root["probes"]
         probe_data = {
-            name: _to_tensor(probes_grp[name])
+            name: to_tensor(probes_grp[name])
             for name in probes_grp.array_keys()
         }
 
@@ -156,12 +156,12 @@ class MooseDataset(Dataset):
 
     def _load_point_cloud(self, root, field_names: list[str]) -> dict:
         mesh = root["mesh"]
-        coords = _to_tensor(mesh["coords"])  # [N, D]
+        coords = to_tensor(mesh["coords"])  # [N, D]
         connectivity = torch.from_numpy(np.array(mesh["connectivity"], dtype=np.int64))
 
-        elem_fields = _load_fields(root["fields"], field_names)  # [T, E, F]
-        elem_fields = _slice_time(elem_fields, self.time_idx)
-        node_fields = _elem_to_node(elem_fields, connectivity, coords.shape[0])
+        elem_fields = load_fields(root["fields"], field_names)  # [T, E, F]
+        elem_fields = slice_time(elem_fields, self.time_idx)
+        node_fields = elem_to_node(elem_fields, connectivity, coords.shape[0])
 
         return {
             "coords": coords,
@@ -170,17 +170,17 @@ class MooseDataset(Dataset):
 
     def _load_grid(self, root, field_names: list[str]) -> dict:
         grid_grp = root["grid"]
-        grid_x = _to_tensor(grid_grp["x"])  # [Nx]
-        grid_y = _to_tensor(grid_grp["y"])  # [Ny]
+        grid_x = to_tensor(grid_grp["x"])  # [Nx]
+        grid_y = to_tensor(grid_grp["y"])  # [Ny]
 
         # Load each field and stack: [T, Nx, Ny, F]
         field_arrays = [
-            _to_tensor(grid_grp[name]).unsqueeze(-1)  # [T, Nx, Ny, 1]
+            to_tensor(grid_grp[name]).unsqueeze(-1)  # [T, Nx, Ny, 1]
             for name in field_names
             if name in grid_grp
         ]
         grid_fields = torch.cat(field_arrays, dim=-1)  # [T, Nx, Ny, F]
-        grid_fields = _slice_time(grid_fields, self.time_idx)
+        grid_fields = slice_time(grid_fields, self.time_idx)
 
         return {
             "grid_x": grid_x,
@@ -207,7 +207,7 @@ class MooseDataset(Dataset):
         import zarr
 
         root = zarr.open(str(self.sim_paths[0]), mode="r")
-        norm_stats = _load_norm_stats(root["metadata"])
+        norm_stats = load_norm_stats(root["metadata"])
         if field_name not in norm_stats:
             raise KeyError(f"Field '{field_name}' not found in norm_stats.")
         stats = norm_stats[field_name]
@@ -220,15 +220,15 @@ class MooseDataset(Dataset):
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
-def _to_tensor(arr) -> torch.Tensor:
+def to_tensor(arr) -> torch.Tensor:
     """Convert a zarr array to a float32 torch tensor."""
     return torch.from_numpy(np.array(arr, dtype=np.float32))
 
 
-def _load_fields(fields_grp, field_names: list[str]) -> torch.Tensor:
+def load_fields(fields_grp, field_names: list[str]) -> torch.Tensor:
     """Load and stack element fields from a zarr group → [T, E, F]."""
     arrays = [
-        _to_tensor(fields_grp[name]).unsqueeze(-1)   # [T, E, 1]
+        to_tensor(fields_grp[name]).unsqueeze(-1)   # [T, E, 1]
         for name in field_names
         if name in fields_grp
     ]
@@ -237,14 +237,14 @@ def _load_fields(fields_grp, field_names: list[str]) -> torch.Tensor:
     return torch.cat(arrays, dim=-1)  # [T, E, F]
 
 
-def _slice_time(tensor: torch.Tensor, time_idx: int) -> torch.Tensor:
+def slice_time(tensor: torch.Tensor, time_idx: int) -> torch.Tensor:
     """If time_idx >= 0, select that time step and remove the T dimension."""
     if time_idx >= 0:
         return tensor[time_idx]  # removes T dim
     return tensor
 
 
-def _elem_to_node(
+def elem_to_node(
     elem_fields: torch.Tensor,
     connectivity: torch.Tensor,
     n_nodes: int,
@@ -286,7 +286,7 @@ def _elem_to_node(
     return node_fields.reshape(*leading, n_nodes, F)
 
 
-def _load_norm_stats(meta_grp) -> dict[str, dict[str, float]]:
+def load_norm_stats(meta_grp) -> dict[str, dict[str, float]]:
     """Read per-field normalization stats from metadata/norm_stats/."""
     stats: dict[str, dict[str, float]] = {}
     if "norm_stats" not in meta_grp:
