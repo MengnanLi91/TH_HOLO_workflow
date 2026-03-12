@@ -1,5 +1,7 @@
 # TH_HOLO_workflow
 
+[![pytest](https://github.com/MengnanLi91/TH_HOLO_workflow/actions/workflows/pytest.yml/badge.svg)](https://github.com/MengnanLi91/TH_HOLO_workflow/actions/workflows/pytest.yml)
+
 TH_HOLO_workflow is a PhysicsNeMo-based ETL pipeline that converts MOOSE
 thermal-hydraulics outputs (Exodus + CSV probes) into ML-ready Zarr datasets.
 
@@ -7,9 +9,11 @@ thermal-hydraulics outputs (Exodus + CSV probes) into ML-ready Zarr datasets.
 
 ```mermaid
 flowchart LR
-    A["MOOSE Simulation Outputs<br/>Exodus (.e) + CSV Probes"] --> B["ETL Pipeline<br/>Read -> Transform -> Validate"]
-    B --> C["Processed Dataset<br/>Zarr Stores (data/processed/*.zarr)"]
-    C --> D["Training Interface<br/>MooseDataset (graph | point_cloud | grid)"]
+    A["MOOSE outputs (.e + CSV probes)"]
+    B["ETL pipeline (read, transform, validate)"]
+    C["Processed dataset (*.zarr)"]
+    D["Training interface: MooseDataset (graph | point_cloud | grid)"]
+    A --> B --> C --> D
 ```
 
 ## What It Does

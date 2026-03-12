@@ -62,6 +62,7 @@ RUN pip install --no-cache-dir \
     --cert /etc/ssl/certs/ca-bundle.pem \
     ${PIP_TRUSTED_HOST_FLAGS} \
     netCDF4 \
+    "pytest>=9.0" \
     && pip install --no-cache-dir \
     --cert /etc/ssl/certs/ca-bundle.pem \
     ${PIP_TRUSTED_HOST_FLAGS} \
