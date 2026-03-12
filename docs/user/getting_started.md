@@ -112,27 +112,36 @@ python run_etl.py --config-name lid_driven
 ## FNO training and evaluation
 
 Use the `etl` or `etl-ngc` service for PhysicsNeMo + PyTorch scripts.
-Edit these templates first:
+Edit this template first:
 
-- `src/config/train_fno.yaml`
-- `src/config/eval_fno.yaml`
+- `src/config/fno.yaml`
+
+`fno.yaml` is a Hydra config that inherits `src/config/default.yaml` and sets
+an FNO example for train/evaluate.
 
 ### Train
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno'
 ```
 
 ### Evaluate
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python eval_fno.py --config config/eval_fno.yaml'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno'
+```
+
+Generate velocity-field comparison plots during evaluation:
+
+```bash
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno \
+  output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
 CLI flags override YAML values:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml --epochs 50'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno training.epochs=50'
 ```
 
 ## Logs

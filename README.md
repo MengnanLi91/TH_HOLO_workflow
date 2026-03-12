@@ -45,28 +45,32 @@ docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-n
 
 ## Train an FNO with PhysicsNeMo
 
-After ETL generates `*.zarr` stores, you can train a baseline FNO model.
-
-Use the template config at `src/config/train_fno.yaml`:
+After ETL generates `*.zarr` stores, train with the generic framework using
+the FNO example config at `src/config/fno.yaml`.
 
 ```bash
 docker compose build etl
-docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno'
 ```
 
 Use `etl-ngc` instead of `etl` if you prefer the NGC PhysicsNeMo base image.
-CLI flags override config values, for example:
+Override config values directly on the CLI, for example:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train_fno.py --config config/train_fno.yaml --epochs 50'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno training.epochs=50'
 ```
 
 ## Evaluate an FNO Checkpoint
 
-Use the template config at `src/config/eval_fno.yaml`:
+```bash
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno'
+```
+
+To save ground-truth vs predicted velocity-field plots during evaluation:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python eval_fno.py --config config/eval_fno.yaml'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno \
+  output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
 ## Documentation

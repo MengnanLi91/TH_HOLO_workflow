@@ -1,0 +1,60 @@
+defaults:
+  - _self_
+
+model:
+  name: fno
+  entrypoint: null
+  adapter: null
+  params:
+    dimension: 2
+    latent_channels: 32
+    num_fno_layers: 4
+    num_fno_modes: 12
+    padding: 5
+    decoder_layers: 1
+    decoder_layer_size: 32
+
+data:
+  zarr_dir: ???
+  input_fields: null
+  output_fields: null
+  input_time_idx: 0
+  target_time_idx: -1
+  split:
+    strategy: sequential
+    train_ratio: 0.8
+    seed: 42
+
+training:
+  epochs: 20
+  batch_size: 4
+  num_workers: 0
+  lr: 1.0e-3
+  seed: 42
+  device: auto
+  loss: mse
+  experiment: null
+
+eval:
+  checkpoint: null
+  run_meta: null
+  batch_size: 4
+  num_workers: 0
+  device: auto
+  experiment: null
+
+output:
+  checkpoint: ../data/models/${model.name}_model.mdlus
+  metrics_out: null
+  plot_dir: null
+  plot_max_cases: 3
+  plot_case_indices: null
+  plot_velocity_x_field: vel_x
+  plot_velocity_y_field: vel_y
+  plot_quiver_step: 4
+  plot_cmap: viridis
+  plot_dpi: 150
+
+hydra:
+  job:
+    chdir: false

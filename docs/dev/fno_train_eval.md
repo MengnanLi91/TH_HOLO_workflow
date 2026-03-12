@@ -1,102 +1,71 @@
 # FNO Training and Evaluation
 
-This page explains how `src/train_fno.py` and `src/eval_fno.py` work with ETL-generated
-Zarr datasets.
+This page describes the FNO workflow using the generic training framework.
 
-## Scripts and configs
+## Entry points and configs
 
-- Training script: `src/train_fno.py`
-- Evaluation script: `src/eval_fno.py`
-- Train config template: `src/config/train_fno.yaml`
-- Eval config template: `src/config/eval_fno.yaml`
+- Training entry point: `src/train.py`
+- Evaluation entry point: `src/evaluate.py`
+- Base config: `src/config/default.yaml`
+- FNO example config: `src/config/fno.yaml`
 
-Both scripts support:
+`fno.yaml` inherits `default.yaml` and sets FNO-specific model/data/training/eval/output values.
 
-- `--config <yaml>` for YAML defaults
-- CLI overrides of any YAML value
+## Train an FNO model
 
-## Data loading and supervision pairs
+From `src/`:
 
-Both scripts use `MooseGridPairDataset` (defined in `src/train_fno.py`), which wraps
-`MooseDataset(mode="grid", time_idx=-1)`.
+```bash
+python train.py --config-name fno
+```
 
-How samples are built:
+With overrides:
 
-1. All `*.zarr` files in `zarr_dir` are discovered and sorted.
-2. For each case, `grid_fields` has shape `[T, Nx, Ny, F]`.
-3. Input tensor `x` is selected from one time index (`input_time_idx`) and selected
-   channels (`input_fields`), then permuted to `[Cin, Nx, Ny]`.
-4. Target tensor `y` is selected from `target_time_idx` and `output_fields`, also
-   permuted to `[Cout, Nx, Ny]`.
+```bash
+python train.py --config-name fno training.epochs=50 model.params.num_fno_layers=6
+```
 
-Notes:
+Training writes:
 
-- The first case is used only as a schema reference (field names, grid size, number of
-  timesteps). It is not the only reference target used for loss/metrics.
-- Every batch target comes from that batch's own Zarr case.
-- Time indices support negative indexing (`-1` means last step).
+- checkpoint: `output.checkpoint` (for example `../data/models/lid_driven_fno.mdlus`)
+- run metadata: `run_meta.json` next to the checkpoint
 
-## Training flow (`train_fno.py`)
+`run_meta.json` stores resolved data fields, split names, adapter, model entrypoint, and model params.
 
-High-level steps:
+## Evaluate an FNO checkpoint
 
-1. Parse config/CLI and create `MooseGridPairDataset`.
-2. Build `DataLoader` with shuffle enabled.
-3. Create PhysicsNeMo `FNO` with:
-   - `in_channels = len(input_fields)`
-   - `out_channels = len(output_fields)`
-4. Train with Adam optimizer and MSE loss (`physicsnemo.metrics.general.mse`).
-5. Save checkpoint as `.mdlus` via `model.save(...)`.
+From `src/`:
 
-Progress reporting:
+```bash
+python evaluate.py --config-name fno
+```
 
-- If `tqdm` is installed, training shows one progress bar over epochs.
-- If `tqdm` is not installed, one log line is printed per epoch.
+You can also pass checkpoint explicitly:
 
-## Evaluation flow (`eval_fno.py`)
+```bash
+python evaluate.py --config-name fno eval.checkpoint=../data/models/lid_driven_fno.mdlus
+```
 
-High-level steps:
+Evaluation reads `run_meta.json` from the checkpoint directory (or `eval.run_meta` if set),
+reconstructs the dataset/split, and computes element-weighted metrics.
 
-1. Parse config/CLI and create the same dataset mapping (fields + time indices).
-2. Build `DataLoader` with `shuffle=False`.
-3. Load trained model from `.mdlus` with `Module.from_checkpoint(...)`.
-4. Run inference under `torch.no_grad()`.
-5. Accumulate overall and per-field metrics and print/save them.
+## Optional plots during evaluation
 
-## Metric definitions
+```bash
+python evaluate.py --config-name fno output.plot_dir=../data/models/lid_driven_fno_plots
+```
 
-Let `pred` and `y` be `[B, C, Nx, Ny]`.
+Plot controls:
 
-Per-batch overall MSE:
+- `output.plot_max_cases`
+- `output.plot_case_indices`
+- `output.plot_velocity_x_field`
+- `output.plot_velocity_y_field`
+- `output.plot_quiver_step`
+- `output.plot_cmap`
+- `output.plot_dpi`
 
-- `mse_batch = mean((pred - y)^2)` over all elements.
+## Notes
 
-Per-batch per-field MSE:
-
-- `mse_field_batch[c] = mean((pred - y)^2, dim=(0, 2, 3))[c]`
-- This averages over batch and spatial dimensions, keeping channel `c`.
-
-Final reported metrics:
-
-- `overall_mse = mean(mse_batch over batches)`
-- `overall_rmse = sqrt(overall_mse)`
-- `per_field_mse[c] = mean(mse_field_batch[c] over batches)`
-- `per_field_rmse[c] = sqrt(per_field_mse[c])`
-
-Important:
-
-- Current aggregation is a mean of batch means. If the final batch has fewer samples,
-  this is slightly different from an exact sample-weighted global mean.
-
-## Normalization and interpretation
-
-ETL writes normalized fields, so training/eval losses are in normalized units.
-If you need metrics in physical units, denormalize with each field's `mean` and `std`
-from metadata before computing final physical-unit errors.
-
-## Recommended workflow
-
-1. Train on one directory (for example `data/processed/lid-driven-train`).
-2. Evaluate on a different holdout directory (for example `data/processed/lid-driven-val`).
-3. Keep `input_fields`, `output_fields`, `input_time_idx`, and `target_time_idx`
-   consistent between training and evaluation unless you intentionally change task setup.
+- The legacy wrappers `train_fno.py` / `eval_fno.py` are removed.
+- Use `train.py` / `evaluate.py` for all supervised one-step models, including FNO.
