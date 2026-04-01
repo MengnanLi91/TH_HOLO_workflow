@@ -187,13 +187,17 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     )
 
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
+    num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
     train_idx, test_idx, train_sims, test_sims = split_indices(
-        num_cases=len(dataset),
+        num_cases=num_cases,
         split_cfg=split_cfg,
         sim_names=dataset.sim_names,
     )
 
-    train_dataset = Subset(dataset, train_idx)
+    if hasattr(dataset, "subset_by_case_indices"):
+        train_dataset = dataset.subset_by_case_indices(train_idx)
+    else:
+        train_dataset = Subset(dataset, train_idx)
 
     epochs = int(training_cfg.get("epochs", 20))
     batch_size = int(training_cfg.get("batch_size", 4))
@@ -270,13 +274,21 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         split_meta["train_file"] = str(_resolve_path(str(split_cfg["train_file"])))
         split_meta["test_file"] = str(_resolve_path(str(split_cfg["test_file"])))
 
-    data_meta = {
-        "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
-        "input_fields": list(dataset.input_fields),
-        "output_fields": list(dataset.output_fields),
-        "input_time_idx": int(dataset.input_time_idx),
-        "target_time_idx": int(dataset.target_time_idx),
-    }
+    if adapter_name == "pointwise":
+        data_meta = {
+            "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
+            "input_columns": list(dataset.input_columns),
+            "output_columns": list(dataset.output_columns),
+            "adapter": adapter_name,
+        }
+    else:
+        data_meta = {
+            "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
+            "input_fields": list(dataset.input_fields),
+            "output_fields": list(dataset.output_fields),
+            "input_time_idx": int(dataset.input_time_idx),
+            "target_time_idx": int(dataset.target_time_idx),
+        }
 
     run_meta = {
         "code_version": _git_code_version(),
@@ -376,18 +388,28 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     if not data_meta:
         raise ValueError(f"run_meta at {run_meta_path} is missing 'data' section.")
 
-    data_cfg = {
-        "zarr_dir": data_meta["zarr_dir"],
-        "input_fields": data_meta.get("input_fields"),
-        "output_fields": data_meta.get("output_fields"),
-        "input_time_idx": int(data_meta.get("input_time_idx", 0)),
-        "target_time_idx": int(data_meta.get("target_time_idx", -1)),
-    }
+    if adapter_name == "pointwise":
+        data_cfg = {
+            "zarr_dir": data_meta["zarr_dir"],
+            "input_columns": data_meta.get("input_columns"),
+            "output_columns": data_meta.get("output_columns"),
+        }
+    else:
+        data_cfg = {
+            "zarr_dir": data_meta["zarr_dir"],
+            "input_fields": data_meta.get("input_fields"),
+            "output_fields": data_meta.get("output_fields"),
+            "input_time_idx": int(data_meta.get("input_time_idx", 0)),
+            "target_time_idx": int(data_meta.get("target_time_idx", -1)),
+        }
 
     dataset = adapter.build_dataset(data_cfg)
     split_meta = dict(run_meta.get("split") or {})
     test_idx, train_sims, test_sims = _indices_for_test_split(dataset.sim_names, split_meta)
-    eval_dataset = Subset(dataset, test_idx)
+    if hasattr(dataset, "subset_by_case_indices"):
+        eval_dataset = dataset.subset_by_case_indices(test_idx)
+    else:
+        eval_dataset = Subset(dataset, test_idx)
 
     device = _resolve_device(str(eval_cfg.get("device", "auto")))
     batch_size = int(eval_cfg.get("batch_size", 4))
@@ -423,7 +445,10 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         device=device,
     )
 
-    output_fields = list(dataset.output_fields)
+    if hasattr(dataset, "output_columns"):
+        output_fields = list(dataset.output_columns)
+    else:
+        output_fields = list(dataset.output_fields)
     total_se_per_field = torch.zeros(len(output_fields), dtype=torch.float64)
     total_samples = 0
 

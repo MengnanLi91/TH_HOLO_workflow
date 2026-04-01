@@ -182,9 +182,70 @@ class GraphAdapter(ModelAdapter):
         return field_se, num_graphs
 
 
+class PointwiseAdapter(ModelAdapter):
+    """Adapter for tabular / pointwise MLP models.
+
+    Expects datasets producing ``(x, y)`` tuples of shape
+    ``(D_in,)`` and ``(D_out,)`` which the default collate batches into
+    ``(B, D_in)`` and ``(B, D_out)``.
+    """
+
+    family = "pointwise"
+
+    def build_dataset(self, data_cfg: dict):
+        from training.datasets_tabular import TabularPairDataset
+
+        return TabularPairDataset(
+            zarr_dir=data_cfg["zarr_dir"],
+            input_columns=parse_field_list(data_cfg.get("input_columns")),
+            output_columns=parse_field_list(data_cfg.get("output_columns")),
+        )
+
+    def dataset_info(self, dataset) -> dict:
+        return {
+            "in_features": dataset.in_features,
+            "out_features": dataset.out_features,
+        }
+
+    def build_batch(self, raw_batch, device: torch.device):
+        pin_memory = device.type == "cuda"
+        x, y = raw_batch
+        return (
+            x.to(device, non_blocking=pin_memory),
+            y.to(device, non_blocking=pin_memory),
+        )
+
+    def forward_train(self, model, batch) -> tuple[torch.Tensor, torch.Tensor]:
+        x, y = batch
+        pred = model(x)
+        return pred, y
+
+    def forward_eval(self, model, batch) -> tuple[torch.Tensor, torch.Tensor]:
+        x, y = batch
+        pred = model(x)
+        return pred, y
+
+    def accumulate_metrics(
+        self,
+        batch,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+    ) -> tuple[torch.Tensor, int]:
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"Prediction shape {tuple(pred.shape)} does not match "
+                f"target shape {tuple(target.shape)}."
+            )
+        squared = (pred - target) ** 2
+        field_se = squared.sum(dim=0)
+        num_samples = int(pred.shape[0])
+        return field_se, num_samples
+
+
 ADAPTER_REGISTRY = {
     "grid": GridAdapter,
     "graph": GraphAdapter,
+    "pointwise": PointwiseAdapter,
 }
 
 

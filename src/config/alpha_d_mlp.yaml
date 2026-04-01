@@ -1,0 +1,33 @@
+defaults:
+  - default
+  - _self_
+
+model:
+  name: mlp
+  params:
+    layer_size: 128
+    num_layers: 6
+    activation_fn: silu
+    skip_connections: true
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  input_columns: [log10_Re, Dr, Lr, z_hat, d_local_over_D, is_upstream, is_contraction, is_throat, is_expansion, is_downstream]
+  output_columns: [log_alpha_D]
+  split:
+    strategy: random
+    train_ratio: 0.8
+    seed: 42
+
+training:
+  epochs: 200
+  batch_size: 2048
+  num_workers: 4
+  lr: 3.0e-4
+  seed: 42
+  device: auto
+  loss: mse
+
+output:
+  checkpoint: ../data/models/alpha_d_mlp.mdlus
+  metrics_out: ../data/models/alpha_d_mlp_metrics.json

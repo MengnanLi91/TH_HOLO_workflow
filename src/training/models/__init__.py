@@ -16,8 +16,8 @@ MODEL_REGISTRY: dict[str, ModelEntry] = {}
 
 
 def register_model(name: str, build_fn: Callable, adapter: str) -> None:
-    if adapter not in {"grid", "graph"}:
-        raise ValueError(f"adapter must be 'grid' or 'graph', got '{adapter}'.")
+    if adapter not in {"grid", "graph", "pointwise"}:
+        raise ValueError(f"adapter must be 'grid', 'graph', or 'pointwise', got '{adapter}'.")
     if name in MODEL_REGISTRY:
         raise ValueError(f"Model '{name}' is already registered.")
     MODEL_REGISTRY[name] = ModelEntry(build_fn=build_fn, adapter=adapter)
@@ -74,11 +74,11 @@ def get_build_fn_and_adapter(model_cfg: dict) -> tuple[Callable, str]:
         if not adapter_name:
             raise ValueError(
                 "model.adapter is required when using model.entrypoint. "
-                "Set model.adapter to 'grid' or 'graph'."
+                "Set model.adapter to 'grid', 'graph', or 'pointwise'."
             )
-        if adapter_name not in {"grid", "graph"}:
+        if adapter_name not in {"grid", "graph", "pointwise"}:
             raise ValueError(
-                f"model.adapter must be 'grid' or 'graph', got '{adapter_name}'."
+                f"model.adapter must be 'grid', 'graph', or 'pointwise', got '{adapter_name}'."
             )
         return build_fn, adapter_name
 
@@ -109,9 +109,15 @@ def model_entrypoint_string(model_cfg: dict, build_fn: Callable) -> str:
 
 
 def _load_builtins() -> None:
-    from training.models import afno, fno, meshgraphnet, pix2pix
-
-    _ = (afno, fno, meshgraphnet, pix2pix)
+    builtin_modules = (
+        "training.models.afno",
+        "training.models.fno",
+        "training.models.meshgraphnet",
+        "training.models.mlp",
+        "training.models.pix2pix",
+    )
+    for module_name in builtin_modules:
+        importlib.import_module(module_name)
 
 
 _load_builtins()
