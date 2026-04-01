@@ -65,6 +65,24 @@ Plot controls:
 - `output.plot_cmap`
 - `output.plot_dpi`
 
+## Other built-in models
+
+The generic training framework supports multiple model families through the
+adapter pattern.  All use the same `train.py` / `evaluate.py` entry points.
+
+| Model | Config name | Adapter | Use case |
+|-------|-------------|---------|----------|
+| FNO | `fno` | grid | Regular-grid operator learning |
+| AFNO | *(custom)* | grid | Adaptive Fourier neural operator |
+| Pix2Pix | *(custom)* | grid | Image-to-image translation |
+| MeshGraphNet | *(custom)* | graph | Unstructured mesh GNN |
+| MLP (FullyConnected) | `alpha_d_mlp` | pointwise | Tabular/axial-profile surrogate |
+
+The MLP model uses the `pointwise` adapter, which reads per-case `.zarr`
+stores containing `features/` and `targets/` arrays (tabular data).  See
+[Alpha-D Surrogate Tutorial](../user/alpha_d_surrogate.md) for the full
+workflow.
+
 ## Notes
 
 - The legacy wrappers `train_fno.py` / `eval_fno.py` are removed.

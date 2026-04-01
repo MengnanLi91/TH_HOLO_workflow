@@ -77,11 +77,34 @@ docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name
   output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
+## Train an MLP Surrogate for Darcy Resistance
+
+The alpha-D workflow extracts Darcy resistance coefficient profiles from a
+parametric study of flow contraction-expansion simulations, then trains a
+PhysicsNeMo `FullyConnected` MLP surrogate.
+
+```bash
+# 1. Extract alpha_D profiles from CFD output
+cd src && python run_alpha_d_etl.py \
+    etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
+    etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
+
+# 2. Train MLP
+cd src && python train.py --config-name alpha_d_mlp
+
+# 3. Evaluate
+cd src && python evaluate.py --config-name alpha_d_mlp \
+    eval.checkpoint=../data/models/alpha_d_mlp.mdlus
+```
+
+See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full walkthrough.
+
 ## Documentation
 
 ### User docs
 
 - [Getting Started (Docker setup, run modes, logs, troubleshooting)](docs/user/getting_started.md)
+- [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md)
 
 ### Developer docs
 
