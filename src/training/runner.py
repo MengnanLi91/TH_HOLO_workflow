@@ -9,8 +9,15 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
-from torch.utils.data import DataLoader, Subset
+try:
+    import torch
+    from torch.utils.data import DataLoader, Subset
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "PyTorch is required for training/evaluation but is not installed in this "
+        "environment. Use the `etl` or `etl-ngc` Docker service, or install `torch` "
+        "in your active environment."
+    ) from exc
 
 from training import import_physicsnemo_attr
 from training.adapters import get_adapter

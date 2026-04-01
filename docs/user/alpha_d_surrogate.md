@@ -27,6 +27,8 @@ The model is PhysicsNeMo's `FullyConnected` MLP.
 ## Prerequisites
 
 - `moose-physicsnemo` conda environment (or the `etl` Docker service)
+- If using Docker Compose, use `etl` or `etl-ngc` for training/evaluation.
+  `etl-dev` is ETL-only and does not include PyTorch.
 - Completed parametric study cases under
   `data/flow_contraction_expansion/parametric_study/` (each case directory
   must contain `simulation_out.e` and `case_metadata.txt`)
@@ -141,7 +143,7 @@ the axial-profile MLP.
 ### Run training
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
 ```
 
 This trains a 6-layer FullyConnected MLP (`layer_size=128`,
@@ -151,16 +153,16 @@ This trains a 6-layer FullyConnected MLP (`layer_size=128`,
 
 ```bash
 # More epochs, different learning rate
-cd src && python train.py --config-name alpha_d_mlp \
-    training.epochs=500 training.lr=1e-4
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+  training.epochs=500 training.lr=1e-4'
 
 # Larger model
-cd src && python train.py --config-name alpha_d_mlp \
-    model.params.layer_size=256 model.params.num_layers=8
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+  model.params.layer_size=256 model.params.num_layers=8'
 
 # Different data directory (if your Zarr stores are elsewhere)
-cd src && python train.py --config-name alpha_d_mlp \
-    data.zarr_dir=../data/my_processed_cases
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+  data.zarr_dir=../data/my_processed_cases'
 ```
 
 ### Training output
@@ -204,8 +206,8 @@ Config file: `src/config/alpha_d_mlp.yaml`
 ## Step 3: Evaluate
 
 ```bash
-cd src && python evaluate.py --config-name alpha_d_mlp \
-    eval.checkpoint=../data/models/alpha_d_mlp.mdlus
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
+  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
 ```
 
 The evaluator:
@@ -228,9 +230,9 @@ indicate better fits.
 ### Verify with metrics JSON
 
 ```bash
-cd src && python evaluate.py --config-name alpha_d_mlp \
-    eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
-    output.metrics_out=../data/models/alpha_d_mlp_metrics.json
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
+  eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
+  output.metrics_out=../data/models/alpha_d_mlp_metrics.json'
 ```
 
 Then inspect:
@@ -243,17 +245,17 @@ python -c "import json; m=json.load(open('../data/models/alpha_d_mlp_metrics.jso
 
 ```bash
 # 1. Extract alpha_D profiles from CFD
-cd src && python run_alpha_d_etl.py \
-    etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
-    etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
+docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py \
+  etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
+  etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed'
 
 # 2. Train MLP surrogate
-cd src && python train.py --config-name alpha_d_mlp
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
 
 # 3. Evaluate on held-out cases
-cd src && python evaluate.py --config-name alpha_d_mlp \
-    eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
-    output.metrics_out=../data/models/alpha_d_mlp_metrics.json
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
+  eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
+  output.metrics_out=../data/models/alpha_d_mlp_metrics.json'
 ```
 
 ## Architecture notes

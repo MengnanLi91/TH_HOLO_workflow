@@ -26,7 +26,7 @@ flowchart LR
 ## Quick Start
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init physicsnemo-curator physicsnemo
 docker compose build etl-dev
 docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name lid_driven'
 ```
@@ -85,16 +85,16 @@ PhysicsNeMo `FullyConnected` MLP surrogate.
 
 ```bash
 # 1. Extract alpha_D profiles from CFD output
-cd src && python run_alpha_d_etl.py \
-    etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
-    etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
+docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py \
+  etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
+  etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed'
 
 # 2. Train MLP
-cd src && python train.py --config-name alpha_d_mlp
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
 
 # 3. Evaluate
-cd src && python evaluate.py --config-name alpha_d_mlp \
-    eval.checkpoint=../data/models/alpha_d_mlp.mdlus
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
+  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
 ```
 
 See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full walkthrough.
