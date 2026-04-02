@@ -41,5 +41,17 @@ class Experiment:
         prepared = self.adapter.build_batch(batch, self.device)
         return self.adapter.forward_eval(self.model, prepared)
 
+    def validation_step(self, batch) -> float:
+        """Compute validation loss for one batch.
+
+        Override in subclasses for custom validation logic (e.g., weighted
+        metrics, physics-informed losses).  The default uses ``eval_step``
+        followed by ``loss_fn``.
+        """
+        if self.loss_fn is None:
+            raise RuntimeError("Experiment.validation_step requires loss_fn.")
+        pred, target = self.eval_step(batch)
+        return float(self.loss_fn(pred, target).detach().cpu())
+
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)

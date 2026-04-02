@@ -30,6 +30,13 @@ class TabularPairDataset(Dataset):
         Feature column names to select.  If *None*, use all features.
     output_columns : list[str] or None
         Target column names to select.  If *None*, use all targets.
+    normalize : bool
+        If *True*, z-score normalize input features after loading.
+        Statistics are computed from the loaded data (or from externally
+        supplied ``norm_stats``).
+    norm_stats : dict or None
+        Externally supplied ``{"x_mean": Tensor, "x_std": Tensor}``.
+        If *None* and *normalize* is True, computed from the loaded data.
     """
 
     def __init__(
@@ -37,6 +44,8 @@ class TabularPairDataset(Dataset):
         zarr_dir: str | Path,
         input_columns: list[str] | None = None,
         output_columns: list[str] | None = None,
+        normalize: bool = False,
+        norm_stats: dict | None = None,
     ):
         import json
 
@@ -105,6 +114,29 @@ class TabularPairDataset(Dataset):
             [np.full(n, i, dtype=np.int32) for i, n in enumerate(rows_per_case)]
         )
 
+        # Feature normalization
+        self.normalize = normalize
+        if norm_stats is not None:
+            self.norm_stats = norm_stats
+        elif normalize:
+            self.norm_stats = self._compute_norm_stats(self._x)
+        else:
+            self.norm_stats = None
+
+        if self.normalize and self.norm_stats is not None:
+            self._x = (self._x - self.norm_stats["x_mean"]) / self.norm_stats["x_std"]
+
+    # ------------------------------------------------------------------
+    # Normalization
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_norm_stats(x: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Compute per-feature mean and std from a data tensor."""
+        mean = x.mean(dim=0)
+        std = x.std(dim=0).clamp(min=1e-8)
+        return {"x_mean": mean, "x_std": std}
+
     # ------------------------------------------------------------------
     # Public properties
     # ------------------------------------------------------------------
@@ -155,9 +187,10 @@ class TabularPairDataset(Dataset):
         new._x = self._x[mask]
         new._y = self._y[mask]
         new._case_ids_unique = [self._case_ids_unique[i] for i in case_indices]
+        new.normalize = self.normalize
+        new.norm_stats = self.norm_stats  # share parent's stats (don't recompute)
 
         # Rebuild rows_per_case and row_case_idx for the subset
-        old_to_new = {old: new_i for new_i, old in enumerate(case_indices)}
         new._rows_per_case = [self._rows_per_case[i] for i in case_indices]
         new._row_case_idx = np.concatenate(
             [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]

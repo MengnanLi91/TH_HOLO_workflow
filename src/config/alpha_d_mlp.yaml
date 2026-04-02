@@ -12,8 +12,9 @@ model:
 
 data:
   zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
-  input_columns: [log10_Re, Dr, Lr, z_hat, d_local_over_D, is_upstream, is_contraction, is_throat, is_expansion, is_downstream]
+  input_columns: [log10_Re, Dr, Lr, z_hat, d_local_over_D, A_local_over_A, is_upstream, is_throat, is_downstream]
   output_columns: [log_alpha_D]
+  normalize: true
   split:
     strategy: random
     train_ratio: 0.8
@@ -23,11 +24,74 @@ training:
   epochs: 200
   batch_size: 2048
   num_workers: 4
-  lr: 3.0e-4
+  lr: 1.0e-4
   seed: 42
   device: auto
   loss: mse
+  weight_decay: 1.0e-5
 
 output:
   checkpoint: ../data/models/alpha_d_mlp.mdlus
   metrics_out: ../data/models/alpha_d_mlp_metrics.json
+
+# Hyperparameter optimization.  Set hpo=null on the CLI to skip HPO and
+# train directly with the parameters above.
+hpo:
+  study_name: alpha_d_mlp_hpo
+  direction: minimize
+  n_trials: 100
+  seed: 42
+  show_progress_bar: true
+  storage: sqlite:///../data/hpo/${hpo.study_name}.db
+  load_if_exists: true
+  retrain_best: true
+  output_dir: ../data/hpo
+
+  sampler:
+    name: TPESampler
+    params:
+      seed: ${hpo.seed}
+
+  pruner:
+    name: MedianPruner
+    params:
+      n_startup_trials: 5
+      n_warmup_steps: 10
+
+  validation:
+    split_ratio: 0.2
+    seed: ${hpo.seed}
+
+  search_space:
+    training.lr:
+      type: float
+      low: 1.0e-5
+      high: 1.0e-2
+      log: true
+
+    training.batch_size:
+      type: categorical
+      choices: [512, 1024, 2048, 4096]
+
+    training.weight_decay:
+      type: float
+      low: 1.0e-6
+      high: 1.0e-3
+      log: true
+
+    model.params.layer_size:
+      type: categorical
+      choices: [64, 128, 256, 512]
+
+    model.params.num_layers:
+      type: int
+      low: 2
+      high: 10
+
+    model.params.activation_fn:
+      type: categorical
+      choices: [silu, gelu, tanh]
+
+    model.params.skip_connections:
+      type: categorical
+      choices: [true, false]

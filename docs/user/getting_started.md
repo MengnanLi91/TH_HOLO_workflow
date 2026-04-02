@@ -266,6 +266,7 @@ python -c "import your_package; print(your_package.__version__)"
 ## Next references
 
 - [Alpha-D surrogate tutorial](alpha_d_surrogate.md) -- extract Darcy resistance profiles and train an MLP
+- [Hyperparameter optimization](hyperparameter_optimization.md) -- Optuna-based HPO for any model
 - [ETL pipeline internals](../dev/etl_pipeline.md)
 - [Dataset API](../dev/dataset.md)
 - [FNO training and evaluation details](../dev/fno_train_eval.md)

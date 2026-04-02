@@ -199,6 +199,7 @@ class PointwiseAdapter(ModelAdapter):
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=parse_field_list(data_cfg.get("input_columns")),
             output_columns=parse_field_list(data_cfg.get("output_columns")),
+            normalize=bool(data_cfg.get("normalize", False)),
         )
 
     def dataset_info(self, dataset) -> dict:

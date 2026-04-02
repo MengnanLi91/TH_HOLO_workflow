@@ -33,7 +33,8 @@ except ModuleNotFoundError:
     tqdm = None
 
 
-def _to_plain_dict(cfg: Any) -> dict[str, Any]:
+def to_plain_dict(cfg: Any) -> dict[str, Any]:
+    """Convert OmegaConf DictConfig or dict to a plain dict."""
     if isinstance(cfg, dict):
         return cfg
 
@@ -50,7 +51,11 @@ def _to_plain_dict(cfg: Any) -> dict[str, Any]:
     raise TypeError(f"Expected dict-like config, got {type(cfg)}")
 
 
-def _set_seed(seed: int) -> None:
+_to_plain_dict = to_plain_dict
+
+
+def set_seed(seed: int) -> None:
+    """Seed all random number generators for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -58,12 +63,19 @@ def _set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def _resolve_device(device_arg: str) -> torch.device:
+_set_seed = set_seed
+
+
+def resolve_device(device_arg: str) -> torch.device:
+    """Parse a device string ('auto', 'cpu', 'cuda') into a torch.device."""
     if device_arg == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device_arg == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("Requested CUDA but no CUDA device is available.")
     return torch.device(device_arg)
+
+
+_resolve_device = resolve_device
 
 
 def _resolve_path(raw_path: str | Path) -> Path:
@@ -84,7 +96,7 @@ def _load_object(entrypoint: str):
     return getattr(module, object_name)
 
 
-def _build_experiment(
+def build_experiment(
     experiment_entrypoint: str | None,
     model,
     optimizer,
@@ -92,6 +104,7 @@ def _build_experiment(
     adapter,
     device: torch.device,
 ) -> Experiment:
+    """Instantiate an Experiment from an optional entrypoint string."""
     if experiment_entrypoint:
         experiment_cls = _load_object(experiment_entrypoint)
     else:
@@ -111,6 +124,9 @@ def _build_experiment(
         )
 
     return experiment
+
+
+_build_experiment = build_experiment
 
 
 def _git_code_version() -> str:
@@ -143,7 +159,8 @@ def _collect_resolved_model_params(
     return resolved
 
 
-def _normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
+def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
+    """Fill in default values for a split config dict."""
     normalized = dict(split_cfg)
     normalized.setdefault("strategy", "sequential")
     if normalized["strategy"] in {"sequential", "random"}:
@@ -153,10 +170,16 @@ def _normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     return normalized
 
 
-def train(cfg: dict | Any) -> dict[str, Any]:
-    """Train a supervised model and save checkpoint + run_meta.json."""
-    cfg_dict = _to_plain_dict(cfg)
+_normalize_split_cfg = normalize_split_cfg
 
+
+def prepare_training(cfg_dict: dict) -> dict[str, Any]:
+    """Build adapter, dataset, dataset_info, and build_fn from a config dict.
+
+    Returns a dict with keys: model_cfg, data_cfg, training_cfg, output_cfg,
+    adapter_name, adapter, dataset, dataset_info, build_fn, device, seed.
+    This is the shared setup that both ``train()`` and HPO use.
+    """
     model_cfg = dict(cfg_dict.get("model") or {})
     data_cfg = dict(cfg_dict.get("data") or {})
     training_cfg = dict(cfg_dict.get("training") or {})
@@ -166,14 +189,80 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         raise ValueError("data.zarr_dir is required.")
 
     seed = int(training_cfg.get("seed", 42))
-    _set_seed(seed)
+    set_seed(seed)
 
-    device = _resolve_device(str(training_cfg.get("device", "auto")))
+    device = resolve_device(str(training_cfg.get("device", "auto")))
     build_fn, adapter_name = get_build_fn_and_adapter(model_cfg)
     adapter = get_adapter(adapter_name)
 
     dataset = adapter.build_dataset(data_cfg)
     dataset_info = adapter.dataset_info(dataset)
+
+    return {
+        "model_cfg": model_cfg,
+        "data_cfg": data_cfg,
+        "training_cfg": training_cfg,
+        "output_cfg": output_cfg,
+        "adapter_name": adapter_name,
+        "adapter": adapter,
+        "dataset": dataset,
+        "dataset_info": dataset_info,
+        "build_fn": build_fn,
+        "device": device,
+        "seed": seed,
+    }
+
+
+def train_one_epoch(experiment: Experiment, dataloader: DataLoader) -> float:
+    """Run one training epoch, return average loss.
+
+    Raises ``RuntimeError`` if the dataloader produces zero batches.
+    """
+    running_loss = 0.0
+    num_batches = 0
+    for batch in dataloader:
+        running_loss += experiment.training_step(batch)
+        num_batches += 1
+    if num_batches == 0:
+        raise RuntimeError("No training batches were produced.")
+    return running_loss / num_batches
+
+
+def compute_val_loss(experiment: Experiment, val_loader: DataLoader) -> float:
+    """Evaluate on a validation loader, return average loss.
+
+    Uses ``experiment.validation_step()`` which defaults to
+    ``eval_step() + loss_fn``.  Custom experiments can override it.
+
+    Raises ``RuntimeError`` if the loader produces zero batches.
+    """
+    total = 0.0
+    n = 0
+    with torch.no_grad():
+        for batch in val_loader:
+            total += experiment.validation_step(batch)
+            n += 1
+    if n == 0:
+        raise RuntimeError("Validation loader produced zero batches.")
+    return total / n
+
+
+def train(cfg: dict | Any) -> dict[str, Any]:
+    """Train a supervised model and save checkpoint + run_meta.json."""
+    cfg_dict = to_plain_dict(cfg)
+
+    prep = prepare_training(cfg_dict)
+    model_cfg = prep["model_cfg"]
+    data_cfg = prep["data_cfg"]
+    training_cfg = prep["training_cfg"]
+    output_cfg = prep["output_cfg"]
+    adapter_name = prep["adapter_name"]
+    adapter = prep["adapter"]
+    dataset = prep["dataset"]
+    dataset_info = prep["dataset_info"]
+    build_fn = prep["build_fn"]
+    device = prep["device"]
+    seed = prep["seed"]
 
     model_params = dict(model_cfg.get("params") or {})
     model = build_fn(model_params, dataset_info).to(device)
@@ -181,7 +270,11 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     loss_name = str(training_cfg.get("loss", "mse"))
     loss_fn = get_loss_fn(loss_name)
     lr = float(training_cfg.get("lr", 1.0e-3))
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    weight_decay = float(training_cfg.get("weight_decay", 0.0))
+    if weight_decay > 0:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     experiment_entrypoint = training_cfg.get("experiment")
     experiment = _build_experiment(

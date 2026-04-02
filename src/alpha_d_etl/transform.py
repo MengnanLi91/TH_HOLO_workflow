@@ -47,26 +47,18 @@ def _local_diameter(z: np.ndarray, z_throat_start: float, z_throat_end: float,
 
 def _region_flags(z_hat: np.ndarray, z_norm_throat_start: float,
                   z_norm_throat_end: float) -> dict[str, np.ndarray]:
-    """Compute region one-hot flags from normalized z coordinate.
+    """Compute region flags from normalized z coordinate.
 
-    Regions (relative to normalized z where 0=start of ROI, 1=end of ROI):
-      - upstream:    z_hat < z_norm_throat_start
-      - contraction: transitional zone (simplified: same as throat for abrupt)
-      - throat:      z_norm_throat_start <= z_hat <= z_norm_throat_end
-      - expansion:   transitional zone (simplified: same as throat for abrupt)
-      - downstream:  z_hat > z_norm_throat_end
+    Returns ``is_upstream``, ``is_throat``, ``is_downstream`` as float32
+    one-hot arrays.  The ``is_contraction`` and ``is_expansion`` flags are
+    omitted because the abrupt geometry makes them always zero.
     """
     upstream = (z_hat < z_norm_throat_start).astype(np.float32)
     downstream = (z_hat > z_norm_throat_end).astype(np.float32)
     throat = ((z_hat >= z_norm_throat_start) & (z_hat <= z_norm_throat_end)).astype(np.float32)
-    # For abrupt contraction, contraction and expansion are zero-width
-    contraction = np.zeros_like(z_hat, dtype=np.float32)
-    expansion = np.zeros_like(z_hat, dtype=np.float32)
     return {
         "is_upstream": upstream,
-        "is_contraction": contraction,
         "is_throat": throat,
-        "is_expansion": expansion,
         "is_downstream": downstream,
     }
 
@@ -75,8 +67,6 @@ def _sample_weights(region_flags: dict[str, np.ndarray]) -> np.ndarray:
     """Assign per-station sample weights for future weighted loss."""
     w = np.ones(len(region_flags["is_upstream"]), dtype=np.float32)
     w[region_flags["is_throat"] > 0.5] = 5.0
-    w[region_flags["is_contraction"] > 0.5] = 3.0
-    w[region_flags["is_expansion"] > 0.5] = 3.0
     return w
 
 
@@ -215,53 +205,67 @@ class AlphaDTransformation(DataTransformation):
         D_local = _local_diameter(station_z, z_throat_start, z_throat_end, D_big, D_contraction_m)
         D_h = D_local  # hydraulic diameter = pipe diameter for circular cross-section
 
-        dynamic_head = 0.5 * self.rho * V_bulk**2
         # Darcy friction formulation: -dP/dz = alpha_D * (rho * V^2) / (2 * D_h)
         # => alpha_D = -dP/dz * 2 * D_h / (rho * V^2)
         alpha_D = -dp_dz * 2.0 * D_h / (self.rho * V_bulk**2)
 
-        # Clamp alpha_D to positive range for log transform
-        alpha_D = np.maximum(alpha_D, 1e-8)
-        log_alpha_D = np.log(alpha_D)
-
         # --- Total pressure drop across ROI ---
         delta_p_case = float(p_avg[0] - p_avg[-1])
 
-        # --- Build feature vectors ---
+        # --- Build feature vectors for ALL stations first ---
         z_hat = (station_z - z_roi_start) / (z_roi_end - z_roi_start)
         d_local_over_D = D_local / D_big
+        A_local_over_A = (D_local / D_big) ** 2  # area ratio
         regions = _region_flags(
             z_hat,
             (z_throat_start - z_roi_start) / (z_roi_end - z_roi_start),
             (z_throat_end - z_roi_start) / (z_roi_end - z_roi_start),
         )
-        weights = _sample_weights(regions)
+
+        # --- Filter out non-physical stations ---
+        # Keep only stations where alpha_D > 0 (adverse pressure gradient = resistance).
+        # Stations with alpha_D <= 0 indicate favorable pressure gradient or
+        # numerical noise -- not meaningful for a resistance coefficient.
+        physical_mask = alpha_D > 0
+        n_physical = physical_mask.sum()
+        if n_physical < 5:
+            logger.warning(
+                "Skipping %s: only %d physical stations (alpha_D > 0).",
+                case_name, n_physical,
+            )
+            return None
+
+        log_alpha_D = np.log(alpha_D[physical_mask])
+        weights = _sample_weights(
+            {k: v[physical_mask] for k, v in regions.items()}
+        )
 
         feature_names = [
             "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-            "is_upstream", "is_contraction", "is_throat", "is_expansion", "is_downstream",
+            "A_local_over_A", "is_upstream", "is_throat", "is_downstream",
         ]
         target_names = ["log_alpha_D"]
 
+        n_out = int(n_physical)
         features = np.column_stack([
-            np.full(self.n_stations, math.log10(Re), dtype=np.float32),
-            np.full(self.n_stations, Dr, dtype=np.float32),
-            np.full(self.n_stations, Lr, dtype=np.float32),
-            z_hat.astype(np.float32),
-            d_local_over_D.astype(np.float32),
-            regions["is_upstream"],
-            regions["is_contraction"],
-            regions["is_throat"],
-            regions["is_expansion"],
-            regions["is_downstream"],
-        ])  # [N_stations, 10]
+            np.full(n_out, math.log10(Re), dtype=np.float32),
+            np.full(n_out, Dr, dtype=np.float32),
+            np.full(n_out, Lr, dtype=np.float32),
+            z_hat[physical_mask].astype(np.float32),
+            d_local_over_D[physical_mask].astype(np.float32),
+            A_local_over_A[physical_mask].astype(np.float32),
+            regions["is_upstream"][physical_mask],
+            regions["is_throat"][physical_mask],
+            regions["is_downstream"][physical_mask],
+        ])  # [n_out, 9]
 
-        targets = log_alpha_D.astype(np.float32).reshape(-1, 1)  # [N_stations, 1]
+        targets = log_alpha_D.astype(np.float32).reshape(-1, 1)
 
         self.logger.info(
-            "  %s: %d stations, delta_p=%.4f Pa, alpha_D range=[%.3f, %.3f]",
-            case_name, self.n_stations, delta_p_case,
-            float(alpha_D.min()), float(alpha_D.max()),
+            "  %s: %d/%d physical stations, delta_p=%.4f Pa, "
+            "log_alpha_D range=[%.2f, %.2f]",
+            case_name, n_out, self.n_stations, delta_p_case,
+            float(log_alpha_D.min()), float(log_alpha_D.max()),
         )
 
         return {

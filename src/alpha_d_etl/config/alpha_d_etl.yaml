@@ -1,9 +1,8 @@
 # Alpha-D ETL Pipeline — extract Darcy resistance profiles from CFD output.
 #
 # Usage (from src/ directory):
-#   python run_alpha_d_etl.py \
-#       etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
-#       etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
+#   python run_alpha_d_etl.py
+#   python run_alpha_d_etl.py etl.processing.num_processes=8
 
 defaults:
   - _self_
@@ -14,7 +13,7 @@ etl:
 
   source:
     _target_: alpha_d_etl.source.AlphaDSource
-    input_dir: ???
+    input_dir: ../data/flow_contraction_expansion/parametric_study
     manifest: null
     mesh_scale: 1.0
     exodus_filename: simulation_out.e
@@ -29,5 +28,5 @@ etl:
 
   sink:
     _target_: alpha_d_etl.sink.AlphaDZarrSink
-    output_dir: ???
+    output_dir: ../data/flow_contraction_expansion/parametric_study/processed
     overwrite_existing: true

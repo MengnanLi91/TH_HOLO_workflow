@@ -83,6 +83,21 @@ stores containing `features/` and `targets/` arrays (tabular data).  See
 [Alpha-D Surrogate Tutorial](../user/alpha_d_surrogate.md) for the full
 workflow.
 
+## Hyperparameter optimization
+
+All models support Optuna-based hyperparameter optimization via
+`run_hpo.py`.  Create an HPO config that inherits from the model's
+training config and defines a search space over `training.*` and
+`model.params.*` paths.
+
+```bash
+cd src && python run_hpo.py --config-name hpo_alpha_d_mlp
+```
+
+See [Hyperparameter Optimization Guide](../user/hyperparameter_optimization.md)
+for search-space format, study settings, output artifacts, and how to add
+HPO for new models.
+
 ## Notes
 
 - The legacy wrappers `train_fno.py` / `eval_fno.py` are removed.

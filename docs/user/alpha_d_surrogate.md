@@ -245,17 +245,17 @@ python -c "import json; m=json.load(open('../data/models/alpha_d_mlp_metrics.jso
 
 ```bash
 # 1. Extract alpha_D profiles from CFD
-docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py \
-  etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
-  etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed'
+docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py'
 
-# 2. Train MLP surrogate
+# 2. Train (HPO + retrain best, all in one command)
 docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+
+# 2b. Train directly without HPO (power user)
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp hpo=null'
 
 # 3. Evaluate on held-out cases
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
-  eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
-  output.metrics_out=../data/models/alpha_d_mlp_metrics.json'
+  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
 ```
 
 ## Architecture notes
@@ -272,6 +272,22 @@ The alpha_D pipeline integrates with the existing generic training framework:
   train and test).
 - **ETL**: `AlphaDSource` / `AlphaDTransformation` / `AlphaDZarrSink` in
   `src/alpha_d_etl/`, following the PhysicsNeMo Curator pattern.
+
+## Note: HPO is built into training
+
+The `alpha_d_mlp.yaml` config includes an `hpo` section with a search
+space.  When you run `python train.py --config-name alpha_d_mlp`, it
+automatically runs Optuna HPO first, then retrains with the best
+hyperparameters.
+
+To skip HPO and train directly with the parameters in the config:
+
+```bash
+cd src && python train.py --config-name alpha_d_mlp hpo=null
+```
+
+See [Hyperparameter Optimization Guide](hyperparameter_optimization.md)
+for details on search-space format, study settings, and output artifacts.
 
 ## Next steps (planned)
 

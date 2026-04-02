@@ -33,6 +33,7 @@ training:
   seed: 42
   device: auto
   loss: mse
+  weight_decay: 0.0
   experiment: null
 
 eval:
@@ -54,6 +55,8 @@ output:
   plot_quiver_step: 4
   plot_cmap: viridis
   plot_dpi: 150
+
+hpo: null
 
 hydra:
   job:

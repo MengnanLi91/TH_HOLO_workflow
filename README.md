@@ -85,12 +85,13 @@ PhysicsNeMo `FullyConnected` MLP surrogate.
 
 ```bash
 # 1. Extract alpha_D profiles from CFD output
-docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py \
-  etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
-  etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed'
+docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py'
 
-# 2. Train MLP
+# 2. Train (HPO + retrain best, all in one command)
 docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+
+# 2b. Or skip HPO and train directly
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp hpo=null'
 
 # 3. Evaluate
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
@@ -105,6 +106,7 @@ See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full wa
 
 - [Getting Started (Docker setup, run modes, logs, troubleshooting)](docs/user/getting_started.md)
 - [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md)
+- [Hyperparameter Optimization](docs/user/hyperparameter_optimization.md)
 
 ### Developer docs
 
