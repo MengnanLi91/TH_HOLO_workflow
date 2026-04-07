@@ -1,0 +1,48 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/physicsnemo/physicsnemo:25.11
+
+%files
+    physicsnemo-curator /workspace/physicsnemo-curator
+    docker/certs/ /tmp/certs/
+
+%environment
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem
+    export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem
+    export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-bundle.pem
+
+%post
+    # Handle custom CA certs
+    cp /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-bundle.pem 2>/dev/null || true
+    found=0
+    for cert_file in /tmp/certs/*; do
+        [ -e "${cert_file}" ] || continue
+        case "${cert_file}" in
+            *.pem|*.crt|*.cer)
+                cat "${cert_file}" >> /etc/ssl/certs/ca-bundle.pem
+                found=1 ;;
+        esac
+    done
+    if [ "${found}" -eq 0 ]; then
+        echo "No custom CA files found under /tmp/certs (supported: .pem/.crt/.cer)"
+    fi
+    rm -rf /tmp/certs
+
+    # Set env vars for install step
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem
+    export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem
+
+    # PhysicsNeMo, PyTorch, hydra-core, omegaconf, zarr, scipy are pre-installed
+    pip install --no-cache-dir \
+        --cert /etc/ssl/certs/ca-bundle.pem \
+        netCDF4 \
+        "optuna>=4.0" \
+        "pytest>=9.0"
+
+    pip install --no-cache-dir \
+        --cert /etc/ssl/certs/ca-bundle.pem \
+        -e /workspace/physicsnemo-curator
+
+%runscript
+    exec bash "$@"

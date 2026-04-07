@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import copy
+
 import numpy as np
 try:
     import torch
@@ -299,6 +301,28 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     else:
         train_dataset = Subset(dataset, train_idx)
 
+    # Early stopping: carve a validation split from the training cases.
+    early_stop_cfg = dict(training_cfg.get("early_stopping") or {})
+    patience = int(early_stop_cfg.get("patience", 0))
+    use_early_stopping = patience > 0
+    val_dataset = None
+    val_case_idx: list = []
+
+    if use_early_stopping:
+        val_ratio = float(early_stop_cfg.get("val_ratio", 0.15))
+        rng_es = random.Random(seed + 1)
+        shuffled_train = list(train_idx)
+        rng_es.shuffle(shuffled_train)
+        n_val_cases = max(1, round(len(shuffled_train) * val_ratio))
+        val_case_idx = shuffled_train[:n_val_cases]
+        train_case_idx = shuffled_train[n_val_cases:]
+        if hasattr(dataset, "subset_by_case_indices"):
+            train_dataset = dataset.subset_by_case_indices(train_case_idx)
+            val_dataset = dataset.subset_by_case_indices(val_case_idx)
+        else:
+            train_dataset = Subset(dataset, train_case_idx)
+            val_dataset = Subset(dataset, val_case_idx)
+
     epochs = int(training_cfg.get("epochs", 20))
     batch_size = int(training_cfg.get("batch_size", 4))
     num_workers = int(training_cfg.get("num_workers", 0))
@@ -319,12 +343,36 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         collate_fn=adapter.collate_fn(),
     )
 
+    val_loader = None
+    if use_early_stopping and val_dataset is not None:
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=device.type == "cuda",
+            persistent_workers=num_workers > 0,
+            collate_fn=adapter.collate_fn(),
+        )
+
+    scheduler_name = str(training_cfg.get("lr_scheduler") or "")
+    scheduler = None
+    if scheduler_name == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=epochs, eta_min=1e-7
+        )
+
     model_name = str(model_cfg.get("name", "custom"))
     print(
         f"Training model='{model_name}' adapter='{adapter_name}' on {len(train_dataset)} "
         f"train case(s), {len(test_idx)} test case(s), device={device}."
     )
+    if use_early_stopping:
+        print(f"Early stopping enabled (patience={patience}, val_cases={len(val_case_idx)}).")
 
+    best_val_loss = float("inf")
+    best_state_dict = None
+    patience_counter = 0
     last_avg_loss = float("nan")
     epoch_iter = range(1, epochs + 1)
     epoch_progress = None
@@ -348,10 +396,38 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         last_avg_loss = avg_loss
         experiment.on_epoch_end(int(epoch), avg_loss)
 
-        if epoch_progress is not None:
-            epoch_progress.set_postfix(loss=f"{avg_loss:.3e}")
+        if scheduler is not None:
+            scheduler.step()
+
+        if use_early_stopping and val_loader is not None:
+            val_loss = compute_val_loss(experiment, val_loader)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_state_dict = copy.deepcopy(model.state_dict())
+                patience_counter = 0
+            else:
+                patience_counter += 1
+            if epoch_progress is not None:
+                epoch_progress.set_postfix(
+                    loss=f"{avg_loss:.3e}", val=f"{val_loss:.3e}", patience=patience_counter
+                )
+            else:
+                print(
+                    f"epoch {epoch}/{epochs}: loss={avg_loss:.6e} "
+                    f"val_loss={val_loss:.6e} patience={patience_counter}/{patience}"
+                )
+            if patience_counter >= patience:
+                print(f"Early stopping at epoch {epoch} (best val_loss={best_val_loss:.6e}).")
+                break
         else:
-            print(f"epoch {epoch}/{epochs}: loss={avg_loss:.6e}")
+            if epoch_progress is not None:
+                epoch_progress.set_postfix(loss=f"{avg_loss:.3e}")
+            else:
+                print(f"epoch {epoch}/{epochs}: loss={avg_loss:.6e}")
+
+    if use_early_stopping and best_state_dict is not None:
+        model.load_state_dict(best_state_dict)
+        print(f"Restored best weights (val_loss={best_val_loss:.6e}).")
 
     checkpoint_value = output_cfg.get("checkpoint")
     if not checkpoint_value:
@@ -403,8 +479,10 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "epochs": epochs,
             "loss": loss_name,
             "lr": lr,
+            "lr_scheduler": scheduler_name or None,
             "seed": seed,
             "final_train_loss": float(last_avg_loss),
+            "best_val_loss": float(best_val_loss) if use_early_stopping else None,
             "experiment": experiment_entrypoint,
         },
         "checkpoint": str(checkpoint_path),

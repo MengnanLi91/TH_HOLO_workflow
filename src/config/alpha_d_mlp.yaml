@@ -21,7 +21,7 @@ data:
     seed: 42
 
 training:
-  epochs: 200
+  epochs: 1000
   batch_size: 2048
   num_workers: 4
   lr: 1.0e-4
@@ -29,6 +29,10 @@ training:
   device: auto
   loss: mse
   weight_decay: 1.0e-5
+  lr_scheduler: cosine
+  early_stopping:
+    patience: 30
+    val_ratio: 0.15
 
 output:
   checkpoint: ../data/models/alpha_d_mlp.mdlus
@@ -75,18 +79,18 @@ hpo:
 
     training.weight_decay:
       type: float
-      low: 1.0e-6
-      high: 1.0e-3
+      low: 1.0e-4
+      high: 1.0e-1
       log: true
 
     model.params.layer_size:
       type: categorical
-      choices: [64, 128, 256, 512]
+      choices: [32, 64, 128, 256]
 
     model.params.num_layers:
       type: int
       low: 2
-      high: 10
+      high: 6
 
     model.params.activation_fn:
       type: categorical

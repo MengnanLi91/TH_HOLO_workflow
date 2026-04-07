@@ -32,14 +32,35 @@ def create_study(hpo_cfg: dict) -> optuna.Study:
         storage_dir = Path(storage.replace("sqlite:///", "")).parent
         storage_dir.mkdir(parents=True, exist_ok=True)
 
-    return optuna.create_study(
-        study_name=hpo_cfg.get("study_name", "hpo_study"),
-        direction=hpo_cfg.get("direction", "minimize"),
-        sampler=sampler,
-        pruner=pruner,
-        storage=storage,
-        load_if_exists=hpo_cfg.get("load_if_exists", True),
-    )
+    study_name = hpo_cfg.get("study_name", "hpo_study")
+    load_if_exists = hpo_cfg.get("load_if_exists", True)
+    try:
+        return optuna.create_study(
+            study_name=study_name,
+            direction=hpo_cfg.get("direction", "minimize"),
+            sampler=sampler,
+            pruner=pruner,
+            storage=storage,
+            load_if_exists=load_if_exists,
+        )
+    except optuna.exceptions.DuplicatedStudyError:
+        db_path = storage.replace("sqlite:///", "") if storage else "<storage>"
+        print(
+            f"\n[HPO Error] Study '{study_name}' already exists in the database.\n"
+            f"  This happens when hpo.load_if_exists=false but the study name is already\n"
+            f"  registered in: {db_path}\n"
+            f"\n"
+            f"  Fix options:\n"
+            f"    1) Resume the existing study (recommended):\n"
+            f"         hpo.load_if_exists=true\n"
+            f"\n"
+            f"    2) Start fresh under a new name (old study preserved):\n"
+            f"         hpo.study_name={study_name}_v2\n"
+            f"\n"
+            f"    3) Delete the database and start over:\n"
+            f"         rm {db_path}\n"
+        )
+        raise
 
 
 def run_hpo(cfg_dict: dict) -> dict[str, Any]:

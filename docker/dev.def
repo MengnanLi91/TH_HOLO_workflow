@@ -1,0 +1,76 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+%files
+    physicsnemo-curator /workspace/physicsnemo-curator
+    docker/certs/ /tmp/certs/
+
+%environment
+    export DEBIAN_FRONTEND=noninteractive
+    export PYTHONDONTWRITEBYTECODE=1
+    export PYTHONUNBUFFERED=1
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem
+    export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem
+    export PIP_CERT=/etc/ssl/certs/ca-bundle.pem
+
+%post
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        openssl \
+        build-essential \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Handle custom CA certs with validation
+    mkdir -p /usr/local/share/ca-certificates/custom
+    found=0
+    idx=0
+    for cert_file in /tmp/certs/*; do
+        [ -e "${cert_file}" ] || continue
+        case "${cert_file}" in
+            *.pem|*.crt|*.cer)
+                if ! openssl x509 -in "${cert_file}" -noout >/dev/null 2>&1; then
+                    echo "WARN: ${cert_file} is not a valid X.509 certificate; skipping." >&2
+                    continue
+                fi
+                if ! openssl x509 -in "${cert_file}" -noout -text | grep -q "CA:TRUE"; then
+                    echo "WARN: ${cert_file} is not a CA certificate (CA:TRUE missing); skipping." >&2
+                    continue
+                fi
+                idx=$((idx+1))
+                cp "${cert_file}" "/usr/local/share/ca-certificates/custom/custom-${idx}.crt"
+                found=1 ;;
+        esac
+    done
+    if [ "${found}" -eq 0 ]; then
+        echo "No custom CA files found under /tmp/certs (supported: .pem/.crt/.cer)."
+    fi
+    update-ca-certificates
+    cp /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-bundle.pem
+    rm -rf /tmp/certs /usr/local/share/ca-certificates/custom
+
+    # Set env vars for install step
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem
+    export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem
+    export PIP_CERT=/etc/ssl/certs/ca-bundle.pem
+
+    # ETL dependencies only — no PhysicsNeMo, no PyTorch, no vtk/pyvista
+    pip install --no-cache-dir \
+        --cert /etc/ssl/certs/ca-bundle.pem \
+        "numpy>=1.26.4" \
+        "scipy" \
+        "netCDF4" \
+        "zarr>=3.1.2" \
+        "numcodecs>=0.13.1" \
+        "hydra-core>=1.3" \
+        "omegaconf>=2.3" \
+        "tqdm>=4.67.1" \
+        "pytest>=9.0"
+
+    # physicsnemo-curator with --no-deps to skip heavy optional deps
+    pip install --no-cache-dir \
+        --cert /etc/ssl/certs/ca-bundle.pem \
+        --no-deps \
+        -e /workspace/physicsnemo-curator
+
+%runscript
+    exec bash "$@"

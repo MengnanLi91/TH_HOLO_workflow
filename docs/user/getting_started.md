@@ -1,6 +1,7 @@
 # Getting Started
 
-This guide covers day-to-day usage with Docker Compose:
+This guide covers day-to-day usage with Docker Compose or Apptainer (for HPC
+systems where Docker is unavailable):
 
 - setting up and running the ETL
 - choosing the right container image
@@ -9,24 +10,48 @@ This guide covers day-to-day usage with Docker Compose:
 
 ## Prerequisites
 
-- Docker Desktop (or Docker Engine + Compose v2)
+- Docker Desktop (or Docker Engine + Compose v2) **or** Apptainer (HPC)
 - Git submodules initialized:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-## Choose a Docker service
+## Environment variables
 
-| Service | Dockerfile | Base | Approx. size | Best for |
-|---|---|---|---|---|
-| `etl-dev` | `docker/Dockerfile.dev` | `python:3.11-slim` | ~300 MB | Fast ETL iteration (no PhysicsNeMo/PyTorch) |
-| `etl` | `docker/Dockerfile.physicsnemo-cpu` | `python:3.11-slim` | ~1 GB | Full CPU stack from PyPI |
-| `etl-ngc` | `docker/Dockerfile.ngc` | `nvcr.io/nvidia/physicsnemo/physicsnemo:25.11` | ~13 GB | NVIDIA pre-tested stack |
+Copy `.env.example` to `.env` and fill in values for your environment:
 
-All services run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
+```bash
+cp .env.example .env
+```
 
-## Build and run
+Key variables:
+
+| Variable | Used by | Description |
+|---|---|---|
+| `APPTAINER_BIND` | Apptainer | Default bind mounts (e.g. `/path/to/project:/path/to/project`) |
+| `DOCKER_PLATFORM` | Docker Compose | Force `linux/amd64` on Apple Silicon |
+| `CA_CERT_DIR` | Docker Compose | Path to directory with custom CA certs |
+| `EXTRA_CA_CERT_B64` | Docker Compose | Base64-encoded CA cert (alternative to `CA_CERT_DIR`) |
+| `INSTALL_PHYSICSNEMO` | Docker Compose (`etl`) | Set to `0` to skip PhysicsNeMo install |
+| `UV_ALLOW_INSECURE_HOST_FLAGS` | Docker Compose (`etl`) | TLS bypass for uv |
+| `PIP_TRUSTED_HOST_FLAGS` | Docker Compose (`etl-dev`, `etl-ngc`) | TLS bypass for pip |
+| `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` | Both | Corporate proxy settings |
+
+Docker Compose reads `.env` automatically. For Apptainer, see the source step
+in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
+
+## Choose a container image
+
+| Service | Dockerfile | Apptainer def | Base | Approx. size | Best for |
+|---|---|---|---|---|---|
+| `etl-dev` | `docker/Dockerfile.dev` | `docker/dev.def` | `python:3.11-slim` | ~300 MB | Fast ETL iteration (no PhysicsNeMo/PyTorch) |
+| `etl` | `docker/Dockerfile.physicsnemo-cpu` | `docker/physicsnemo-cpu.def` | `python:3.11-slim` | ~1 GB | Full CPU stack from PyPI |
+| `etl-ngc` | `docker/Dockerfile.ngc` | `docker/ngc.def` | `nvcr.io/nvidia/physicsnemo/physicsnemo:25.11` | ~13 GB | NVIDIA pre-tested stack |
+
+All images run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
+
+## Build and run with Docker Compose
 
 ### Option A: direct run from host terminal
 
@@ -36,6 +61,70 @@ docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-n
 ```
 
 Replace `etl-dev` with `etl` or `etl-ngc` if needed.
+
+## Build and run with Apptainer (HPC)
+
+Use Apptainer on HPC systems where Docker is not available (e.g., INL ROD).
+
+### Step 1: Source environment variables
+
+Apptainer does not read `.env` automatically. Source it before every session:
+
+```bash
+set -a && source .env && set +a
+```
+
+This loads `APPTAINER_BIND` and any proxy settings into your shell so subsequent
+`apptainer` commands pick them up without needing `--bind` flags.
+
+### Step 2: Build a SIF image
+
+```bash
+# Minimal dev image (ETL only, ~300 MB)
+apptainer build th-holo-dev.sif docker/dev.def
+
+# Full CPU image with PhysicsNeMo (~1 GB)
+apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
+
+# NGC image with GPU support (~13 GB)
+apptainer build th-holo-ngc.sif docker/ngc.def
+```
+
+### Step 3: Run with project folder bound
+
+Bind your project directory so the container can read inputs and write outputs:
+
+```bash
+apptainer run \
+  --bind /path/to/project:/path/to/project \
+  th-holo-cpu.sif
+```
+
+Your `$HOME` directory is auto-bound by Apptainer, so files under `$HOME` are
+always accessible without an explicit `--bind`.
+
+### Run a script directly
+
+```bash
+apptainer exec \
+  --bind /path/to/project:/path/to/project \
+  th-holo-cpu.sif \
+  bash -c 'cd /path/to/src && python run_etl.py --config-name lid_driven'
+```
+
+### Set a default bind (optional)
+
+To avoid typing `--bind` every time, export it in your shell profile:
+
+```bash
+export APPTAINER_BIND="/path/to/project:/path/to/project"
+```
+
+Then run without `--bind`:
+
+```bash
+apptainer run th-holo-cpu.sif
+```
 
 The `lid_driven` config is defined in `src/moose_etl/config/lid_driven.yaml`:
 
