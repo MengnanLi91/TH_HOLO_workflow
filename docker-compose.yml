@@ -47,10 +47,43 @@ services:
     tty: true
     command: bash
 
+  # PhysicsNeMo with PyTorch CUDA 12.4 wheels on python:3.11-slim (~4 GB).
+  # PyTorch wheels bundle CUDA/cuDNN runtime — no CUDA base image needed.
+  # Runs CPU-only without --gpus; add --gpus all for GPU.
+  # Requires NVIDIA Container Toolkit on the Docker host.
+  etl-gpu:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+      additional_contexts:
+        certs: ${CA_CERT_DIR:-./docker/certs}
+      args:
+        UV_ALLOW_INSECURE_HOST_FLAGS: ${UV_ALLOW_INSECURE_HOST_FLAGS:-}
+        EXTRA_CA_CERT_B64: ${EXTRA_CA_CERT_B64:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    image: th-holo-physicsnemo:gpu
+    platform: linux/amd64
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    shm_size: "4gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    command: bash
+
   # NGC-based image (nvcr.io/nvidia/physicsnemo/physicsnemo:25.11).
   # ~13 GB but ships a pre-tested PhysicsNeMo + PyTorch + CUDA stack.
-  # Runs CPU-only on macOS (no --gpus needed).
   # Requires a free NGC account: https://ngc.nvidia.com
+  # NGC only publishes amd64 images; platform is fixed to linux/amd64.
   etl-ngc:
     build:
       context: .
@@ -64,11 +97,18 @@ services:
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
     image: th-holo-physicsnemo:ngc
-    platform: ${DOCKER_PLATFORM:-linux/arm64}
+    platform: linux/amd64
     working_dir: /workspace
     volumes:
       - ./:/workspace
-    shm_size: "1gb"
+    shm_size: "4gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     stdin_open: true
     tty: true
     command: bash

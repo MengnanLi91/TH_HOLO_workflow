@@ -47,9 +47,11 @@ in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
 |---|---|---|---|---|---|
 | `etl-dev` | `docker/Dockerfile.dev` | `docker/dev.def` | `python:3.11-slim` | ~300 MB | Fast ETL iteration (no PhysicsNeMo/PyTorch) |
 | `etl` | `docker/Dockerfile.physicsnemo-cpu` | `docker/physicsnemo-cpu.def` | `python:3.11-slim` | ~1 GB | Full CPU stack from PyPI |
-| `etl-ngc` | `docker/Dockerfile.ngc` | `docker/ngc.def` | `nvcr.io/nvidia/physicsnemo/physicsnemo:25.11` | ~13 GB | NVIDIA pre-tested stack |
+| `etl-gpu` | `docker/Dockerfile.gpu` | `docker/gpu.def` | `python:3.11-slim` + PyTorch cu124 wheels | ~4 GB | CPU + NVIDIA GPU (CUDA 12.4, amd64 only) |
+| `etl-ngc` | `docker/Dockerfile.ngc` | `docker/ngc.def` | `nvcr.io/nvidia/physicsnemo/physicsnemo:25.11` | ~13 GB | NVIDIA pre-tested stack (amd64 only) |
 
-All images run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
+`etl-dev` and `etl` run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
+`etl-gpu` and `etl-ngc` are `amd64`-only and support NVIDIA GPUs.
 
 ## Build and run with Docker Compose
 
@@ -86,7 +88,10 @@ apptainer build th-holo-dev.sif docker/dev.def
 # Full CPU image with PhysicsNeMo (~1 GB)
 apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
 
-# NGC image with GPU support (~13 GB)
+# CUDA 12.4 GPU image — CPU-only without --nv, GPU with --nv (~5 GB)
+apptainer build th-holo-gpu.sif docker/gpu.def
+
+# NGC image — CPU-only without --nv, GPU with --nv (~13 GB)
 apptainer build th-holo-ngc.sif docker/ngc.def
 ```
 
@@ -95,9 +100,15 @@ apptainer build th-holo-ngc.sif docker/ngc.def
 Bind your project directory so the container can read inputs and write outputs:
 
 ```bash
+# CPU-only
 apptainer run \
   --bind /path/to/project:/path/to/project \
   th-holo-cpu.sif
+
+# GPU (--nv exposes host NVIDIA drivers to the container)
+apptainer run --nv \
+  --bind /path/to/project:/path/to/project \
+  th-holo-gpu.sif
 ```
 
 Your `$HOME` directory is auto-bound by Apptainer, so files under `$HOME` are
@@ -106,10 +117,24 @@ always accessible without an explicit `--bind`.
 ### Run a script directly
 
 ```bash
+# CPU
 apptainer exec \
   --bind /path/to/project:/path/to/project \
   th-holo-cpu.sif \
   bash -c 'cd /path/to/src && python run_etl.py --config-name lid_driven'
+
+# GPU
+apptainer exec --nv \
+  --bind /path/to/project:/path/to/project \
+  th-holo-gpu.sif \
+  bash -c 'cd /path/to/src && python train.py --config-name fno'
+```
+
+### Verify GPU access inside the container
+
+```bash
+apptainer exec --nv th-holo-gpu.sif python -c \
+  "import torch; print(torch.cuda.get_device_name(0))"
 ```
 
 ### Set a default bind (optional)
@@ -337,6 +362,7 @@ packages to Dockerfiles, then rebuild.
 |---|---|---|
 | `etl-dev` | `docker/Dockerfile.dev` | `pip install ...` |
 | `etl` | `docker/Dockerfile.physicsnemo-cpu` | `uv ... pip install --system ...` |
+| `etl-gpu` | `docker/Dockerfile.gpu` | `uv ... pip install --system ...` |
 | `etl-ngc` | `docker/Dockerfile.ngc` | `pip install ...` |
 
 3. Rebuild and rerun:
