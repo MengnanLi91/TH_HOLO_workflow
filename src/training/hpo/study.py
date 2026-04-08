@@ -125,6 +125,16 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
             f"available with val_ratio={val_ratio}. Provide more data."
         )
 
+    # Fit tabular normalization only on inner-train cases (prevents val/test leakage).
+    if prepared["adapter_name"] == "pointwise" and bool(data_cfg.get("normalize", False)):
+        normalized_data_cfg = dict(data_cfg)
+        normalized_data_cfg["norm_from_case_indices"] = train_inner_idx
+        normalized_dataset = prepared["adapter"].build_dataset(normalized_data_cfg)
+        prepared = dict(prepared)
+        prepared["dataset"] = normalized_dataset
+        prepared["dataset_info"] = prepared["adapter"].dataset_info(normalized_dataset)
+        dataset = normalized_dataset
+
     val_sims = [dataset.sim_names[i] for i in val_idx]
     train_inner_sims = [dataset.sim_names[i] for i in train_inner_idx]
 

@@ -106,6 +106,38 @@ class TestTabularPairDataset:
         assert ds.in_features == len(FEATURE_NAMES)
         assert ds.out_features == len(TARGET_NAMES)
 
+    def test_norm_stats_fit_on_selected_cases(self, synthetic_zarr_dir: Path) -> None:
+        from training.datasets_tabular import TabularPairDataset
+
+        raw = TabularPairDataset(zarr_dir=synthetic_zarr_dir, normalize=False)
+        case0_mask = raw._row_case_idx == 0
+        expected_mean = raw._x[case0_mask].mean(dim=0)
+        expected_std = raw._x[case0_mask].std(dim=0).clamp(min=1e-8)
+
+        ds = TabularPairDataset(
+            zarr_dir=synthetic_zarr_dir,
+            normalize=True,
+            norm_from_case_indices=[0],
+        )
+        assert torch.allclose(ds.norm_stats["x_mean"], expected_mean)
+        assert torch.allclose(ds.norm_stats["x_std"], expected_std)
+
+    def test_norm_stats_accepts_json_lists(self, synthetic_zarr_dir: Path) -> None:
+        from training.datasets_tabular import TabularPairDataset
+
+        ref = TabularPairDataset(zarr_dir=synthetic_zarr_dir, normalize=False)
+        x_mean = ref._x.mean(dim=0).tolist()
+        x_std = ref._x.std(dim=0).tolist()
+
+        ds = TabularPairDataset(
+            zarr_dir=synthetic_zarr_dir,
+            normalize=True,
+            norm_stats={"x_mean": x_mean, "x_std": x_std},
+        )
+        assert torch.is_tensor(ds.norm_stats["x_mean"])
+        assert torch.is_tensor(ds.norm_stats["x_std"])
+        assert ds.norm_stats["x_mean"].shape[0] == len(FEATURE_NAMES)
+
 
 # ---------------------------------------------------------------------------
 # PointwiseAdapter tests
@@ -145,6 +177,25 @@ class TestPointwiseAdapter:
         prepared = adapter.build_batch(raw_batch, device)
         assert prepared[0].shape == (4, len(FEATURE_NAMES))
         assert prepared[1].shape == (4, len(TARGET_NAMES))
+
+    def test_build_dataset_with_norm_stats(self, synthetic_zarr_dir: Path) -> None:
+        from training.adapters import PointwiseAdapter
+
+        adapter = PointwiseAdapter()
+        ref = adapter.build_dataset({"zarr_dir": str(synthetic_zarr_dir), "normalize": False})
+        stats = {
+            "x_mean": ref._x.mean(dim=0).tolist(),
+            "x_std": ref._x.std(dim=0).tolist(),
+        }
+        ds = adapter.build_dataset(
+            {
+                "zarr_dir": str(synthetic_zarr_dir),
+                "normalize": True,
+                "norm_stats": stats,
+            }
+        )
+        assert ds.normalize is True
+        assert torch.is_tensor(ds.norm_stats["x_mean"])
 
 
 # ---------------------------------------------------------------------------

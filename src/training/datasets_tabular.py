@@ -46,6 +46,7 @@ class TabularPairDataset(Dataset):
         output_columns: list[str] | None = None,
         normalize: bool = False,
         norm_stats: dict | None = None,
+        norm_from_case_indices: list[int] | None = None,
     ):
         import json
 
@@ -117,9 +118,26 @@ class TabularPairDataset(Dataset):
         # Feature normalization
         self.normalize = normalize
         if norm_stats is not None:
-            self.norm_stats = norm_stats
+            self.norm_stats = self._coerce_norm_stats(norm_stats, dtype=self._x.dtype)
         elif normalize:
-            self.norm_stats = self._compute_norm_stats(self._x)
+            stats_source = self._x
+            if norm_from_case_indices is not None:
+                keep = sorted({int(i) for i in norm_from_case_indices})
+                if not keep:
+                    raise ValueError("norm_from_case_indices must not be empty.")
+                invalid = [i for i in keep if i < 0 or i >= len(self._case_ids_unique)]
+                if invalid:
+                    raise ValueError(
+                        "norm_from_case_indices contains out-of-range case index(es): "
+                        f"{invalid}"
+                    )
+                mask = np.isin(self._row_case_idx, keep)
+                if not np.any(mask):
+                    raise ValueError(
+                        "norm_from_case_indices selected zero rows; cannot compute normalization stats."
+                    )
+                stats_source = self._x[mask]
+            self.norm_stats = self._compute_norm_stats(stats_source)
         else:
             self.norm_stats = None
 
@@ -136,6 +154,25 @@ class TabularPairDataset(Dataset):
         mean = x.mean(dim=0)
         std = x.std(dim=0).clamp(min=1e-8)
         return {"x_mean": mean, "x_std": std}
+
+    @staticmethod
+    def _coerce_norm_stats(
+        norm_stats: dict,
+        *,
+        dtype: torch.dtype,
+    ) -> dict[str, torch.Tensor]:
+        if "x_mean" not in norm_stats or "x_std" not in norm_stats:
+            raise ValueError("norm_stats must contain both 'x_mean' and 'x_std'.")
+
+        x_mean = torch.as_tensor(norm_stats["x_mean"], dtype=dtype)
+        x_std = torch.as_tensor(norm_stats["x_std"], dtype=dtype).clamp(min=1e-8)
+        if x_mean.ndim != 1 or x_std.ndim != 1:
+            raise ValueError("norm_stats['x_mean'] and norm_stats['x_std'] must be 1D.")
+        if x_mean.shape != x_std.shape:
+            raise ValueError(
+                "norm_stats['x_mean'] and norm_stats['x_std'] must have matching shapes."
+            )
+        return {"x_mean": x_mean, "x_std": x_std}
 
     # ------------------------------------------------------------------
     # Public properties

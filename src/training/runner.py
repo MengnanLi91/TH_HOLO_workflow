@@ -161,6 +161,15 @@ def _collect_resolved_model_params(
     return resolved
 
 
+def _serialize_norm_stats(norm_stats: dict[str, torch.Tensor] | None) -> dict[str, list[float]] | None:
+    if not norm_stats:
+        return None
+    return {
+        "x_mean": norm_stats["x_mean"].detach().cpu().tolist(),
+        "x_std": norm_stats["x_std"].detach().cpu().tolist(),
+    }
+
+
 def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     """Fill in default values for a split config dict."""
     normalized = dict(split_cfg)
@@ -296,18 +305,12 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         sim_names=dataset.sim_names,
     )
 
-    if hasattr(dataset, "subset_by_case_indices"):
-        train_dataset = dataset.subset_by_case_indices(train_idx)
-    else:
-        train_dataset = Subset(dataset, train_idx)
-
     # Early stopping: carve a validation split from the training cases.
     early_stop_cfg = dict(training_cfg.get("early_stopping") or {})
     patience = int(early_stop_cfg.get("patience", 0))
     use_early_stopping = patience > 0
-    val_dataset = None
+    train_case_idx = list(train_idx)
     val_case_idx: list = []
-
     if use_early_stopping:
         val_ratio = float(early_stop_cfg.get("val_ratio", 0.15))
         rng_es = random.Random(seed + 1)
@@ -316,12 +319,21 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         n_val_cases = max(1, round(len(shuffled_train) * val_ratio))
         val_case_idx = shuffled_train[:n_val_cases]
         train_case_idx = shuffled_train[n_val_cases:]
-        if hasattr(dataset, "subset_by_case_indices"):
-            train_dataset = dataset.subset_by_case_indices(train_case_idx)
-            val_dataset = dataset.subset_by_case_indices(val_case_idx)
-        else:
-            train_dataset = Subset(dataset, train_case_idx)
-            val_dataset = Subset(dataset, val_case_idx)
+    if not train_case_idx:
+        raise ValueError("Training split is empty after validation split. Reduce val_ratio.")
+
+    # Pointwise normalization must be fit on training cases only.
+    if adapter_name == "pointwise" and bool(data_cfg.get("normalize", False)):
+        normalized_data_cfg = dict(data_cfg)
+        normalized_data_cfg["norm_from_case_indices"] = train_case_idx
+        dataset = adapter.build_dataset(normalized_data_cfg)
+
+    if hasattr(dataset, "subset_by_case_indices"):
+        train_dataset = dataset.subset_by_case_indices(train_case_idx)
+        val_dataset = dataset.subset_by_case_indices(val_case_idx) if use_early_stopping else None
+    else:
+        train_dataset = Subset(dataset, train_case_idx)
+        val_dataset = Subset(dataset, val_case_idx) if use_early_stopping else None
 
     epochs = int(training_cfg.get("epochs", 20))
     batch_size = int(training_cfg.get("batch_size", 4))
@@ -363,10 +375,17 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         )
 
     model_name = str(model_cfg.get("name", "custom"))
-    print(
-        f"Training model='{model_name}' adapter='{adapter_name}' on {len(train_dataset)} "
-        f"train case(s), {len(test_idx)} test case(s), device={device}."
-    )
+    if adapter_name == "pointwise":
+        print(
+            f"Training model='{model_name}' adapter='{adapter_name}' on "
+            f"{len(train_case_idx)} train case(s) ({len(train_dataset)} samples), "
+            f"{len(test_idx)} test case(s), device={device}."
+        )
+    else:
+        print(
+            f"Training model='{model_name}' adapter='{adapter_name}' on {len(train_dataset)} "
+            f"train case(s), {len(test_idx)} test case(s), device={device}."
+        )
     if use_early_stopping:
         print(f"Early stopping enabled (patience={patience}, val_cases={len(val_case_idx)}).")
 
@@ -455,6 +474,9 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
             "input_columns": list(dataset.input_columns),
             "output_columns": list(dataset.output_columns),
+            "normalize": bool(getattr(dataset, "normalize", False)),
+            "norm_stats": _serialize_norm_stats(getattr(dataset, "norm_stats", None)),
+            "norm_fit_train_sims": [dataset.sim_names[i] for i in train_case_idx],
             "adapter": adapter_name,
         }
     else:
@@ -498,7 +520,8 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         "checkpoint": str(checkpoint_path),
         "run_meta": str(run_meta_path),
         "final_train_loss": float(last_avg_loss),
-        "train_cases": len(train_dataset),
+        "train_cases": len(train_case_idx),
+        "train_samples": len(train_dataset),
         "test_cases": len(test_idx),
     }
 
@@ -571,6 +594,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             "zarr_dir": data_meta["zarr_dir"],
             "input_columns": data_meta.get("input_columns"),
             "output_columns": data_meta.get("output_columns"),
+            "normalize": bool(data_meta.get("normalize", False)),
+            "norm_stats": data_meta.get("norm_stats"),
         }
     else:
         data_cfg = {
@@ -678,7 +703,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         "checkpoint": str(checkpoint_path),
         "run_meta": str(run_meta_path),
         "adapter": adapter.family,
-        "num_cases": len(eval_dataset),
+        "num_cases": len(test_idx),
+        "num_samples": total_samples,
         "train_cases": len(train_sims),
         "test_cases": len(test_idx),
         "overall": {
@@ -711,7 +737,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     }
 
     print(
-        f"Evaluated adapter='{adapter.family}' on {len(eval_dataset)} test case(s), "
+        f"Evaluated adapter='{adapter.family}' on {len(test_idx)} test case(s) "
+        f"({total_samples} sample(s)), "
         f"overall mse={overall_mse:.6e}, rmse={overall_rmse:.6e}."
     )
     for row in payload["per_field"]:

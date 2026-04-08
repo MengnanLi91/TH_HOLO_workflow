@@ -195,11 +195,17 @@ class PointwiseAdapter(ModelAdapter):
     def build_dataset(self, data_cfg: dict):
         from training.datasets_tabular import TabularPairDataset
 
+        norm_from_case_indices = data_cfg.get("norm_from_case_indices")
+        if norm_from_case_indices is not None:
+            norm_from_case_indices = [int(i) for i in norm_from_case_indices]
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=parse_field_list(data_cfg.get("input_columns")),
             output_columns=parse_field_list(data_cfg.get("output_columns")),
             normalize=bool(data_cfg.get("normalize", False)),
+            norm_stats=data_cfg.get("norm_stats"),
+            norm_from_case_indices=norm_from_case_indices,
         )
 
     def dataset_info(self, dataset) -> dict:
