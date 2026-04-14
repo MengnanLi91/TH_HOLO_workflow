@@ -9,7 +9,10 @@ import optuna
 # Dot-path prefixes that must never be overridden during HPO because they
 # change the dataset or model identity rather than tuning hyperparameters.
 UNSAFE_PREFIXES = (
-    "data",
+    "data.zarr_dir",
+    "data.input_columns",
+    "data.output_columns",
+    "data.split",
     "model.name",
     "model.entrypoint",
     "model.adapter",

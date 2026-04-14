@@ -212,7 +212,7 @@ class AlphaDTransformation(DataTransformation):
         # --- Total pressure drop across ROI ---
         delta_p_case = float(p_avg[0] - p_avg[-1])
 
-        # --- Build feature vectors for ALL stations first ---
+        # --- Build feature vectors for ALL stations ---
         z_hat = (station_z - z_roi_start) / (z_roi_end - z_roi_start)
         d_local_over_D = D_local / D_big
         A_local_over_A = (D_local / D_big) ** 2  # area ratio
@@ -222,23 +222,15 @@ class AlphaDTransformation(DataTransformation):
             (z_throat_end - z_roi_start) / (z_roi_end - z_roi_start),
         )
 
-        # --- Filter out non-physical stations ---
-        # Keep only stations where alpha_D > 0 (adverse pressure gradient = resistance).
-        # Stations with alpha_D <= 0 indicate favorable pressure gradient or
-        # numerical noise -- not meaningful for a resistance coefficient.
-        physical_mask = alpha_D > 0
-        n_physical = physical_mask.sum()
-        if n_physical < 5:
-            logger.warning(
-                "Skipping %s: only %d physical stations (alpha_D > 0).",
-                case_name, n_physical,
-            )
-            return None
-
-        log_alpha_D = np.log(alpha_D[physical_mask])
-        weights = _sample_weights(
-            {k: v[physical_mask] for k, v in regions.items()}
-        )
+        # --- Clamp alpha_D to a positive floor ---
+        # Stations with alpha_D <= 0 (favorable pressure gradient near
+        # contraction/expansion boundaries) are clamped rather than
+        # discarded so that every case has a full, continuous z_hat
+        # profile of n_stations points.
+        alpha_D_floor = 1e-3
+        alpha_D_clamped = np.maximum(alpha_D, alpha_D_floor)
+        log_alpha_D = np.log(alpha_D_clamped)
+        weights = _sample_weights(regions)
 
         feature_names = [
             "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
@@ -246,25 +238,25 @@ class AlphaDTransformation(DataTransformation):
         ]
         target_names = ["log_alpha_D"]
 
-        n_out = int(n_physical)
+        n_out = self.n_stations
         features = np.column_stack([
             np.full(n_out, math.log10(Re), dtype=np.float32),
             np.full(n_out, Dr, dtype=np.float32),
             np.full(n_out, Lr, dtype=np.float32),
-            z_hat[physical_mask].astype(np.float32),
-            d_local_over_D[physical_mask].astype(np.float32),
-            A_local_over_A[physical_mask].astype(np.float32),
-            regions["is_upstream"][physical_mask],
-            regions["is_throat"][physical_mask],
-            regions["is_downstream"][physical_mask],
+            z_hat.astype(np.float32),
+            d_local_over_D.astype(np.float32),
+            A_local_over_A.astype(np.float32),
+            regions["is_upstream"],
+            regions["is_throat"],
+            regions["is_downstream"],
         ])  # [n_out, 9]
 
         targets = log_alpha_D.astype(np.float32).reshape(-1, 1)
 
         self.logger.info(
-            "  %s: %d/%d physical stations, delta_p=%.4f Pa, "
+            "  %s: %d stations, delta_p=%.4f Pa, "
             "log_alpha_D range=[%.2f, %.2f]",
-            case_name, n_out, self.n_stations, delta_p_case,
+            case_name, n_out, delta_p_case,
             float(log_alpha_D.min()), float(log_alpha_D.max()),
         )
 

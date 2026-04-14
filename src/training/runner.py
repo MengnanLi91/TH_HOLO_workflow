@@ -105,8 +105,14 @@ def build_experiment(
     loss_fn,
     adapter,
     device: torch.device,
+    **kwargs,
 ) -> Experiment:
-    """Instantiate an Experiment from an optional entrypoint string."""
+    """Instantiate an Experiment from an optional entrypoint string.
+
+    Extra *kwargs* are forwarded to the experiment constructor, allowing
+    custom experiments to accept domain-specific arguments such as
+    ``consistency_weight`` or ``norm_stats``.
+    """
     if experiment_entrypoint:
         experiment_cls = _load_object(experiment_entrypoint)
     else:
@@ -118,6 +124,7 @@ def build_experiment(
         loss_fn=loss_fn,
         adapter=adapter,
         device=device,
+        **kwargs,
     )
 
     if not hasattr(experiment, "training_step") or not hasattr(experiment, "eval_step"):
@@ -161,6 +168,157 @@ def _collect_resolved_model_params(
     return resolved
 
 
+def _compute_pointwise_extended_metrics(
+    preds: torch.Tensor,
+    targets: torch.Tensor,
+    dataset,
+    output_fields: list[str],
+) -> dict[str, Any]:
+    """Compute R², physical-space, per-region, and per-case metrics.
+
+    Only meaningful for the pointwise adapter with ``TabularPairDataset``.
+    """
+    metrics: dict[str, Any] = {}
+
+    # ------------------------------------------------------------------
+    # Overall R², MAE per output field
+    # ------------------------------------------------------------------
+    per_field_extended = []
+    for i, name in enumerate(output_fields):
+        p, t = preds[:, i], targets[:, i]
+        ss_res = float(((p - t) ** 2).sum())
+        ss_tot = float(((t - t.mean()) ** 2).sum())
+        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+        mae = float((p - t).abs().mean())
+        entry: dict[str, Any] = {"name": name, "r2": r2, "mae": mae}
+
+        # Physical-space relative error for log-transformed outputs
+        if name.startswith("log_") or name.startswith("log10_"):
+            base_exp = torch.exp if name.startswith("log_") else lambda x: 10.0 ** x
+            p_phys = base_exp(p)
+            t_phys = base_exp(t)
+            rel_err = ((p_phys - t_phys) / t_phys.clamp(min=1e-8)).abs()
+            entry["physical_median_relative_error"] = float(rel_err.median())
+            entry["physical_mean_relative_error"] = float(rel_err.mean())
+            entry["physical_p90_relative_error"] = float(rel_err.quantile(0.9))
+
+        per_field_extended.append(entry)
+    metrics["per_field"] = per_field_extended
+
+    # ------------------------------------------------------------------
+    # Per-region metrics (upstream / throat / downstream)
+    # ------------------------------------------------------------------
+    input_columns = getattr(dataset, "input_columns", [])
+    region_col_indices: dict[str, int] = {}
+    for col_name in ("is_upstream", "is_throat", "is_downstream"):
+        if col_name in input_columns:
+            region_col_indices[col_name] = input_columns.index(col_name)
+
+    if region_col_indices:
+        # Recover raw binary indicators from normalized inputs.
+        raw_x = dataset._x.clone().cpu()
+        norm_stats = getattr(dataset, "norm_stats", None)
+        if getattr(dataset, "normalize", False) and norm_stats is not None:
+            raw_x = raw_x * norm_stats["x_std"].cpu() + norm_stats["x_mean"].cpu()
+
+        per_region: dict[str, Any] = {}
+        for region_name, col_idx in region_col_indices.items():
+            mask = raw_x[:, col_idx] > 0.5
+            n_region = int(mask.sum())
+            if n_region == 0:
+                continue
+            region_entry: dict[str, Any] = {"n_samples": n_region}
+            for i, field_name in enumerate(output_fields):
+                p, t = preds[mask, i], targets[mask, i]
+                ss_res = float(((p - t) ** 2).sum())
+                ss_tot = float(((t - t.mean()) ** 2).sum())
+                r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+                rmse = float(((p - t) ** 2).mean().sqrt())
+                field_metrics: dict[str, Any] = {"r2": r2, "rmse": rmse}
+                if field_name.startswith("log_") or field_name.startswith("log10_"):
+                    base_exp = torch.exp if field_name.startswith("log_") else lambda x: 10.0 ** x
+                    rel_err = (
+                        (base_exp(p) - base_exp(t)) / base_exp(t).clamp(min=1e-8)
+                    ).abs()
+                    field_metrics["median_relative_error"] = float(rel_err.median())
+                region_entry[field_name] = field_metrics
+            per_region[region_name] = region_entry
+        metrics["per_region"] = per_region
+
+    # ------------------------------------------------------------------
+    # Per-case metrics (sorted worst-to-best by RMSE)
+    # ------------------------------------------------------------------
+    case_idx_arr = getattr(dataset, "_row_case_idx", None)
+    case_names = getattr(dataset, "_case_ids_unique", None)
+    if case_idx_arr is not None and case_names is not None:
+        per_case: list[dict[str, Any]] = []
+        case_idx_t = torch.from_numpy(case_idx_arr)
+        for ci, case_name in enumerate(case_names):
+            mask = case_idx_t == ci
+            if mask.sum() == 0:
+                continue
+            for i, field_name in enumerate(output_fields):
+                p, t = preds[mask, i], targets[mask, i]
+                case_rmse = float(((p - t) ** 2).mean().sqrt())
+                entry = {"case": case_name, "field": field_name, "rmse": case_rmse}
+                if field_name.startswith("log_") or field_name.startswith("log10_"):
+                    base_exp = torch.exp if field_name.startswith("log_") else lambda x: 10.0 ** x
+                    rel_err = (
+                        (base_exp(p) - base_exp(t)) / base_exp(t).clamp(min=1e-8)
+                    ).abs()
+                    entry["median_relative_error"] = float(rel_err.median())
+                per_case.append(entry)
+        per_case.sort(key=lambda x: x["rmse"], reverse=True)
+        metrics["worst_cases"] = per_case[:10]
+        metrics["best_cases"] = list(reversed(per_case[-10:]))
+
+    return metrics
+
+
+def _print_extended_metrics(metrics: dict[str, Any]) -> None:
+    """Print a human-readable summary of extended metrics."""
+    for entry in metrics.get("per_field", []):
+        parts = [f"  {entry['name']}: R²={entry['r2']:.4f}, MAE={entry['mae']:.4e}"]
+        if "physical_median_relative_error" in entry:
+            parts.append(
+                f"    alpha_D relative error: "
+                f"median={entry['physical_median_relative_error']:.1%}, "
+                f"mean={entry['physical_mean_relative_error']:.1%}, "
+                f"p90={entry['physical_p90_relative_error']:.1%}"
+            )
+        print("\n".join(parts))
+
+    per_region = metrics.get("per_region", {})
+    if per_region:
+        print("Per-region breakdown:")
+        for region_name, region_data in per_region.items():
+            n = region_data.get("n_samples", "?")
+            for field_name, fm in region_data.items():
+                if field_name == "n_samples":
+                    continue
+                line = f"  {region_name} ({n} pts): R²={fm['r2']:.4f}, RMSE={fm['rmse']:.4e}"
+                if "median_relative_error" in fm:
+                    line += f", median_rel_err={fm['median_relative_error']:.1%}"
+                print(line)
+
+    worst = metrics.get("worst_cases", [])
+    best = metrics.get("best_cases", [])
+    if worst:
+        print("Worst 5 cases:")
+        for c in worst[:5]:
+            line = f"  {c['case']}: RMSE={c['rmse']:.4e}"
+            if "median_relative_error" in c:
+                line += f", median_rel_err={c['median_relative_error']:.1%}"
+            print(line)
+    if best:
+        print("Best 5 cases:")
+        for c in best[:5]:
+            line = f"  {c['case']}: RMSE={c['rmse']:.4e}"
+            if "median_relative_error" in c:
+                line += f", median_rel_err={c['median_relative_error']:.1%}"
+            print(line)
+
+
 def _serialize_norm_stats(norm_stats: dict[str, torch.Tensor] | None) -> dict[str, list[float]] | None:
     if not norm_stats:
         return None
@@ -174,9 +332,9 @@ def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     """Fill in default values for a split config dict."""
     normalized = dict(split_cfg)
     normalized.setdefault("strategy", "sequential")
-    if normalized["strategy"] in {"sequential", "random"}:
+    if normalized["strategy"] in {"sequential", "random", "stratified"}:
         normalized.setdefault("train_ratio", 0.8)
-    if normalized["strategy"] == "random":
+    if normalized["strategy"] in {"random", "stratified"}:
         normalized.setdefault("seed", default_seed)
     return normalized
 
@@ -288,6 +446,10 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     experiment_entrypoint = training_cfg.get("experiment")
+    experiment_kwargs: dict[str, Any] = {}
+    consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
+    if consistency_weight > 0:
+        experiment_kwargs["consistency_weight"] = consistency_weight
     experiment = _build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
@@ -295,6 +457,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         loss_fn=loss_fn,
         adapter=adapter,
         device=device,
+        **experiment_kwargs,
     )
 
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
@@ -327,6 +490,15 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         normalized_data_cfg = dict(data_cfg)
         normalized_data_cfg["norm_from_case_indices"] = train_case_idx
         dataset = adapter.build_dataset(normalized_data_cfg)
+
+    # Inject norm_stats into the experiment for denormalisation (e.g. consistency loss)
+    if consistency_weight > 0 and hasattr(dataset, "norm_stats") and dataset.norm_stats:
+        norm_stats_for_exp = {
+            k: v.to(device) if hasattr(v, "to") else v
+            for k, v in dataset.norm_stats.items()
+        }
+        experiment.y_mean = norm_stats_for_exp.get("y_mean")
+        experiment.y_std = norm_stats_for_exp.get("y_std")
 
     if hasattr(dataset, "subset_by_case_indices"):
         train_dataset = dataset.subset_by_case_indices(train_case_idx)
@@ -654,6 +826,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         output_fields = list(dataset.output_fields)
     total_se_per_field = torch.zeros(len(output_fields), dtype=torch.float64)
     total_samples = 0
+    all_preds: list[torch.Tensor] = []
+    all_targets: list[torch.Tensor] = []
 
     with torch.no_grad():
         for batch in dataloader:
@@ -661,6 +835,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             field_se, sample_count = adapter.accumulate_metrics(batch, pred, target)
             total_se_per_field += field_se.detach().to(torch.float64).cpu()
             total_samples += int(sample_count)
+            all_preds.append(pred.detach().cpu())
+            all_targets.append(target.detach().cpu())
 
     if total_samples == 0:
         raise RuntimeError("No evaluation samples were processed.")
@@ -669,6 +845,15 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     per_field_rmse = torch.sqrt(per_field_mse)
     overall_mse = float(per_field_mse.mean().item())
     overall_rmse = math.sqrt(overall_mse)
+
+    # Extended metrics for pointwise adapter.
+    extended_metrics: dict[str, Any] = {}
+    if adapter_name == "pointwise" and hasattr(eval_dataset, "_row_case_idx"):
+        cat_preds = torch.cat(all_preds, dim=0)
+        cat_targets = torch.cat(all_targets, dim=0)
+        extended_metrics = _compute_pointwise_extended_metrics(
+            cat_preds, cat_targets, eval_dataset, output_fields,
+        )
 
     plot_files: list[str] = []
     plot_dir_value = output_cfg.get("plot_dir")
@@ -735,6 +920,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             "test_sims": test_sims,
         },
     }
+    if extended_metrics:
+        payload["extended"] = extended_metrics
 
     print(
         f"Evaluated adapter='{adapter.family}' on {len(test_idx)} test case(s) "
@@ -743,6 +930,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     )
     for row in payload["per_field"]:
         print(f"{row['name']}: mse={row['mse']:.6e}, rmse={row['rmse']:.6e}")
+    if extended_metrics:
+        _print_extended_metrics(extended_metrics)
 
     metrics_out_value = output_cfg.get("metrics_out")
     if metrics_out_value is not None:

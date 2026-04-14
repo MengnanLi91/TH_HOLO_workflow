@@ -8,16 +8,37 @@ import torch
 LossFn = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 
-def mse_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return torch.mean((pred - target) ** 2)
+def mse_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    weight: torch.Tensor | None = None,
+) -> torch.Tensor:
+    se = (pred - target) ** 2
+    if weight is not None:
+        se = se * weight
+    return se.mean()
 
 
-def l1_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return torch.mean(torch.abs(pred - target))
+def l1_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    weight: torch.Tensor | None = None,
+) -> torch.Tensor:
+    ae = torch.abs(pred - target)
+    if weight is not None:
+        ae = ae * weight
+    return ae.mean()
 
 
-def relative_l2_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    numerator = torch.linalg.norm(pred - target)
+def relative_l2_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    weight: torch.Tensor | None = None,
+) -> torch.Tensor:
+    diff = pred - target
+    if weight is not None:
+        diff = diff * weight.sqrt()
+    numerator = torch.linalg.norm(diff)
     denominator = torch.linalg.norm(target).clamp_min(1e-12)
     return numerator / denominator
 

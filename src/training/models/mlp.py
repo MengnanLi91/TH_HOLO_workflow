@@ -1,7 +1,36 @@
 """Built-in FullyConnected MLP model definition."""
 
+import torch
+
 from training import import_physicsnemo_attr
 from training.models import register_model
+
+
+class _DropoutWrapper(torch.nn.Module):
+    """Training-time dropout wrapper around a PhysicsNeMo model.
+
+    Applies dropout to the model input during training.  The saved
+    checkpoint contains only the inner model so that evaluation works
+    with the standard ``Module.from_checkpoint`` path.
+    """
+
+    def __init__(self, model: torch.nn.Module, dropout: float):
+        super().__init__()
+        self.model = model
+        self.drop = torch.nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.model(self.drop(x))
+
+    # Delegate PhysicsNeMo serialization to the inner model.
+    def save(self, path):  # noqa: D102
+        return self.model.save(path)
+
+    def state_dict(self, *args, **kwargs):  # noqa: D102
+        return self.model.state_dict(*args, **kwargs)
+
+    def load_state_dict(self, *args, **kwargs):  # noqa: D102
+        return self.model.load_state_dict(*args, **kwargs)
 
 
 def build(model_cfg: dict, dataset_info: dict):
@@ -19,6 +48,12 @@ def build(model_cfg: dict, dataset_info: dict):
         "weight_norm": bool(model_cfg.get("weight_norm", False)),
     }
     model = fc_cls(**resolved)
+
+    dropout = float(model_cfg.get("dropout", 0.0))
+    if dropout > 0:
+        model = _DropoutWrapper(model, dropout)
+        resolved["dropout"] = dropout
+
     model._resolved_model_params = dict(resolved)
     return model
 

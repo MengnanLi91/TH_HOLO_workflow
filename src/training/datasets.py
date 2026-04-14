@@ -1,6 +1,8 @@
 """Dataset wrappers and split helpers for training workflows."""
 
+import re as _re
 import random
+from collections import defaultdict
 from pathlib import Path
 
 import torch
@@ -258,6 +260,97 @@ def _read_sim_name_list(path: str | Path) -> list[str]:
     return entries
 
 
+def _parse_case_params(sim_name: str) -> dict[str, float]:
+    """Extract Re, Dr, Lr from a simulation name like ``Re_5000__Dr_0p144__Lr_0p01``.
+
+    Returns a dict with keys ``Re``, ``Dr``, ``Lr``.  Values that cannot be
+    parsed are returned as 0.0 so the case still lands in *some* bin.
+    """
+    params: dict[str, float] = {}
+    for key in ("Re", "Dr", "Lr"):
+        match = _re.search(rf"{key}_([0-9p]+)", sim_name)
+        if match:
+            val_str = match.group(1).replace("p", ".")
+            try:
+                params[key] = float(val_str)
+            except ValueError:
+                params[key] = 0.0
+        else:
+            params[key] = 0.0
+    return params
+
+
+def _stratified_split(
+    sim_names: list[str],
+    train_ratio: float,
+    seed: int,
+    n_bins: int = 3,
+) -> tuple[list[int], list[int]]:
+    """Stratified train/test split ensuring coverage across Re, Dr, Lr bins.
+
+    Each case is assigned to a composite bin based on the quantile of its
+    Re, Dr, and Lr values.  The split samples *train_ratio* from each bin
+    so that every region of parameter space is represented in both train
+    and test sets.
+    """
+    parsed = [_parse_case_params(name) for name in sim_names]
+    re_vals = [p["Re"] for p in parsed]
+    dr_vals = [p["Dr"] for p in parsed]
+    lr_vals = [p["Lr"] for p in parsed]
+
+    def _quantile_bin(values: list[float], n: int) -> list[int]:
+        sorted_unique = sorted(set(values))
+        if len(sorted_unique) <= n:
+            mapping = {v: i for i, v in enumerate(sorted_unique)}
+            return [mapping[v] for v in values]
+        edges = [
+            sorted_unique[int(len(sorted_unique) * i / n)]
+            for i in range(n)
+        ]
+        bins = []
+        for v in values:
+            b = n - 1
+            for j in range(1, n):
+                if v < edges[j]:
+                    b = j - 1
+                    break
+            bins.append(b)
+        return bins
+
+    re_bins = _quantile_bin(re_vals, n_bins)
+    dr_bins = _quantile_bin(dr_vals, n_bins)
+    lr_bins = _quantile_bin(lr_vals, n_bins)
+
+    # Composite bin key per case
+    bin_groups: dict[tuple[int, int, int], list[int]] = defaultdict(list)
+    for idx in range(len(sim_names)):
+        key = (re_bins[idx], dr_bins[idx], lr_bins[idx])
+        bin_groups[key].append(idx)
+
+    rng = random.Random(seed)
+    train_idx: list[int] = []
+    test_idx: list[int] = []
+
+    for _key, indices in sorted(bin_groups.items()):
+        rng.shuffle(indices)
+        n_train = max(1, min(len(indices) - 1, round(len(indices) * train_ratio)))
+        if len(indices) == 1:
+            # Single-case bins go to train
+            train_idx.extend(indices)
+        else:
+            train_idx.extend(indices[:n_train])
+            test_idx.extend(indices[n_train:])
+
+    # Fallback: if test is empty (all bins had 1 case), move some from train
+    if not test_idx:
+        rng.shuffle(train_idx)
+        n_train = max(1, round(len(train_idx) * train_ratio))
+        test_idx = train_idx[n_train:]
+        train_idx = train_idx[:n_train]
+
+    return sorted(train_idx), sorted(test_idx)
+
+
 def split_indices(
     num_cases: int,
     split_cfg: dict,
@@ -294,6 +387,16 @@ def split_indices(
             train_idx = indices[:n_train]
             test_idx = indices[n_train:]
 
+    elif strategy == "stratified":
+        train_ratio = float(split_cfg.get("train_ratio", 0.8))
+        if not 0.0 < train_ratio < 1.0:
+            raise ValueError("train_ratio must be between 0 and 1 (exclusive).")
+        seed = int(split_cfg.get("seed", 42))
+        n_bins = int(split_cfg.get("n_bins", 3))
+        train_idx, test_idx = _stratified_split(
+            sim_names, train_ratio=train_ratio, seed=seed, n_bins=n_bins
+        )
+
     elif strategy == "file":
         train_file = split_cfg.get("train_file")
         test_file = split_cfg.get("test_file")
@@ -329,7 +432,7 @@ def split_indices(
 
     else:
         raise ValueError(
-            "split.strategy must be one of {'sequential', 'random', 'file'}, "
+            "split.strategy must be one of {'sequential', 'random', 'stratified', 'file'}, "
             f"got '{strategy}'."
         )
 

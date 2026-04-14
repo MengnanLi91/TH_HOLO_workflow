@@ -199,6 +199,10 @@ class PointwiseAdapter(ModelAdapter):
         if norm_from_case_indices is not None:
             norm_from_case_indices = [int(i) for i in norm_from_case_indices]
 
+        def _opt_float(key: str) -> float | None:
+            v = data_cfg.get(key)
+            return float(v) if v is not None else None
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=parse_field_list(data_cfg.get("input_columns")),
@@ -206,6 +210,8 @@ class PointwiseAdapter(ModelAdapter):
             normalize=bool(data_cfg.get("normalize", False)),
             norm_stats=data_cfg.get("norm_stats"),
             norm_from_case_indices=norm_from_case_indices,
+            throat_weight=_opt_float("throat_weight"),
+            include_case_idx=bool(data_cfg.get("include_case_idx", False)),
         )
 
     def dataset_info(self, dataset) -> dict:
@@ -216,18 +222,45 @@ class PointwiseAdapter(ModelAdapter):
 
     def build_batch(self, raw_batch, device: torch.device):
         pin_memory = device.type == "cuda"
+        if len(raw_batch) == 4:
+            x, y, w, cidx = raw_batch
+            return (
+                x.to(device, non_blocking=pin_memory),
+                y.to(device, non_blocking=pin_memory),
+                w.to(device, non_blocking=pin_memory),
+                cidx.to(device, non_blocking=pin_memory),
+            )
+        if len(raw_batch) == 3:
+            x, y, w_or_cidx = raw_batch
+            return (
+                x.to(device, non_blocking=pin_memory),
+                y.to(device, non_blocking=pin_memory),
+                w_or_cidx.to(device, non_blocking=pin_memory),
+            )
         x, y = raw_batch
         return (
             x.to(device, non_blocking=pin_memory),
             y.to(device, non_blocking=pin_memory),
         )
 
-    def forward_train(self, model, batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_train(self, model, batch):
+        if len(batch) == 4:
+            x, y, w, cidx = batch
+            pred = model(x)
+            return pred, y, w, cidx
+        if len(batch) == 3:
+            x, y, w = batch
+            pred = model(x)
+            return pred, y, w
         x, y = batch
         pred = model(x)
         return pred, y
 
-    def forward_eval(self, model, batch) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_eval(self, model, batch):
+        if len(batch) >= 3:
+            x, y = batch[0], batch[1]
+            pred = model(x)
+            return pred, y
         x, y = batch
         pred = model(x)
         return pred, y

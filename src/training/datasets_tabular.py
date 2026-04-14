@@ -37,6 +37,12 @@ class TabularPairDataset(Dataset):
     norm_stats : dict or None
         Externally supplied ``{"x_mean": Tensor, "x_std": Tensor}``.
         If *None* and *normalize* is True, computed from the loaded data.
+    throat_weight : float or None
+        Stations where ``is_throat == 1`` receive this weight; others
+        receive weight 1.
+    include_case_idx : bool
+        If *True*, ``__getitem__`` returns a case-index tensor as the last
+        element so that per-case losses can be computed.
     """
 
     def __init__(
@@ -47,6 +53,8 @@ class TabularPairDataset(Dataset):
         normalize: bool = False,
         norm_stats: dict | None = None,
         norm_from_case_indices: list[int] | None = None,
+        throat_weight: float | None = None,
+        include_case_idx: bool = False,
     ):
         import json
 
@@ -59,35 +67,31 @@ class TabularPairDataset(Dataset):
 
         all_x: list[np.ndarray] = []
         all_y: list[np.ndarray] = []
+        all_w: list[np.ndarray] = []
         case_ids: list[str] = []
         rows_per_case: list[int] = []
+        has_weights = False
 
         for sp in sim_paths:
             root = zarr.open(store=str(sp), mode="r")
             features = np.array(root["features"][:], dtype=np.float32)
             targets = np.array(root["targets"][:], dtype=np.float32)
+            if "sample_weight" in root:
+                weights = np.array(root["sample_weight"][:], dtype=np.float32)
+                has_weights = True
+            else:
+                weights = np.ones(features.shape[0], dtype=np.float32)
 
             meta = root["metadata"]
             case_id = str(meta.attrs.get("case_id", sp.stem))
 
-            # On first store, resolve column names and indices
+            # On first store, resolve column names
             if not case_ids:
                 raw_feature_names = json.loads(meta.attrs.get("feature_names", "[]"))
                 raw_target_names = json.loads(meta.attrs.get("target_names", "[]"))
 
                 self._all_feature_names = list(raw_feature_names)
                 self._all_target_names = list(raw_target_names)
-
-                if input_columns is not None:
-                    feat_map = {n: i for i, n in enumerate(raw_feature_names)}
-                    missing = [c for c in input_columns if c not in feat_map]
-                    if missing:
-                        raise ValueError(f"Unknown input columns: {missing}")
-                    self._feat_idx = [feat_map[c] for c in input_columns]
-                    self.input_columns = list(input_columns)
-                else:
-                    self._feat_idx = list(range(features.shape[1]))
-                    self.input_columns = list(raw_feature_names)
 
                 if output_columns is not None:
                     tgt_map = {n: i for i, n in enumerate(raw_target_names)}
@@ -100,13 +104,35 @@ class TabularPairDataset(Dataset):
                     self._tgt_idx = list(range(targets.shape[1]))
                     self.output_columns = list(raw_target_names)
 
-            all_x.append(features[:, self._feat_idx])
+            # Load ALL base features (derived columns need access to
+            # source columns that may not be in input_columns).
+            all_x.append(features)
             all_y.append(targets[:, self._tgt_idx])
+            all_w.append(weights)
             case_ids.append(case_id)
             rows_per_case.append(features.shape[0])
 
-        self._x = torch.from_numpy(np.concatenate(all_x, axis=0))
+        # ----------------------------------------------------------
+        # Concatenate
+        # ----------------------------------------------------------
+        full_x = np.concatenate(all_x, axis=0)  # [N, D_base]
+
+        # Resolve input columns
+        if input_columns is not None:
+            feat_map = {n: i for i, n in enumerate(self._all_feature_names)}
+            missing = [c for c in input_columns if c not in feat_map]
+            if missing:
+                raise ValueError(f"Unknown input columns: {missing}")
+            self._feat_idx = [feat_map[c] for c in input_columns]
+            self.input_columns = list(input_columns)
+        else:
+            self._feat_idx = list(range(len(self._all_feature_names)))
+            self.input_columns = list(self._all_feature_names)
+
+        self._x = torch.from_numpy(full_x[:, self._feat_idx].copy())
         self._y = torch.from_numpy(np.concatenate(all_y, axis=0))
+        raw_w = np.concatenate(all_w, axis=0)
+        self._w = torch.from_numpy(raw_w).unsqueeze(-1) if has_weights else None
         self._case_ids_unique = case_ids
         self._rows_per_case = rows_per_case
 
@@ -115,12 +141,30 @@ class TabularPairDataset(Dataset):
             [np.full(n, i, dtype=np.int32) for i, n in enumerate(rows_per_case)]
         )
 
+        # ----------------------------------------------------------
+        # Region weights (throat)
+        # ----------------------------------------------------------
+        throat_col_full = (
+            self._all_feature_names.index("is_throat")
+            if "is_throat" in self._all_feature_names else None
+        )
+
+        self.throat_weight = throat_weight
+        if throat_weight is not None and throat_weight > 0 and throat_col_full is not None:
+            new_w = torch.ones(len(self._x), dtype=torch.float32)
+            new_w[full_x[:, throat_col_full] > 0.5] = float(throat_weight)
+            self._w = new_w.unsqueeze(-1)
+
+        # Case index tensor for per-case losses
+        self.include_case_idx = include_case_idx
+        self._case_idx_tensor = torch.from_numpy(self._row_case_idx).long()
+
         # Feature normalization
         self.normalize = normalize
         if norm_stats is not None:
             self.norm_stats = self._coerce_norm_stats(norm_stats, dtype=self._x.dtype)
         elif normalize:
-            stats_source = self._x
+            stats_source_x = self._x
             if norm_from_case_indices is not None:
                 keep = sorted({int(i) for i in norm_from_case_indices})
                 if not keep:
@@ -136,8 +180,8 @@ class TabularPairDataset(Dataset):
                     raise ValueError(
                         "norm_from_case_indices selected zero rows; cannot compute normalization stats."
                     )
-                stats_source = self._x[mask]
-            self.norm_stats = self._compute_norm_stats(stats_source)
+                stats_source_x = self._x[mask]
+            self.norm_stats = self._compute_norm_stats(stats_source_x)
         else:
             self.norm_stats = None
 
@@ -150,10 +194,11 @@ class TabularPairDataset(Dataset):
 
     @staticmethod
     def _compute_norm_stats(x: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Compute per-feature mean and std from a data tensor."""
-        mean = x.mean(dim=0)
-        std = x.std(dim=0).clamp(min=1e-8)
-        return {"x_mean": mean, "x_std": std}
+        """Compute per-feature mean and std from input data tensor."""
+        return {
+            "x_mean": x.mean(dim=0),
+            "x_std": x.std(dim=0).clamp(min=1e-8),
+        }
 
     @staticmethod
     def _coerce_norm_stats(
@@ -198,7 +243,13 @@ class TabularPairDataset(Dataset):
     def __len__(self) -> int:
         return len(self._x)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int):
+        if self.include_case_idx:
+            if self._w is not None:
+                return self._x[idx], self._y[idx], self._w[idx], self._case_idx_tensor[idx]
+            return self._x[idx], self._y[idx], self._case_idx_tensor[idx]
+        if self._w is not None:
+            return self._x[idx], self._y[idx], self._w[idx]
         return self._x[idx], self._y[idx]
 
     # ------------------------------------------------------------------
@@ -223,13 +274,17 @@ class TabularPairDataset(Dataset):
         new._tgt_idx = list(self._tgt_idx)
         new._x = self._x[mask]
         new._y = self._y[mask]
+        new._w = self._w[mask] if self._w is not None else None
         new._case_ids_unique = [self._case_ids_unique[i] for i in case_indices]
         new.normalize = self.normalize
         new.norm_stats = self.norm_stats  # share parent's stats (don't recompute)
+        new.throat_weight = self.throat_weight
+        new.include_case_idx = self.include_case_idx
 
         # Rebuild rows_per_case and row_case_idx for the subset
         new._rows_per_case = [self._rows_per_case[i] for i in case_indices]
         new._row_case_idx = np.concatenate(
             [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]
         )
+        new._case_idx_tensor = torch.from_numpy(new._row_case_idx).long()
         return new
