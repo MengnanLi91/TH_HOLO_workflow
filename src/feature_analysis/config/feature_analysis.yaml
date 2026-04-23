@@ -1,0 +1,66 @@
+# Feature analysis + selection for the alpha_D surrogate.
+#
+# Selection semantics
+# -------------------
+# `selected_from_allowlist` *restricts* the built-in safe ALLOWLIST in
+# src/feature_analysis/data_loader.py. It cannot extend the allowlist —
+# unknown names raise ValueError. To add a new candidate feature, edit
+# ALLOWLIST (a code change, reviewable).
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  target: log_alpha_D
+  local_velocity_normalization: true   # must match training config
+  min_Dr: 0.333
+  exclude_cases: []
+  selected_from_allowlist: null        # null = use full ALLOWLIST
+
+output:
+  dir: ../data/feature_analysis
+  plots:
+    enabled: true
+    top_n: 12
+    relationship_top_n: 6
+    sample_max: 5000
+    dpi: 150
+
+# Grouped features — blocks that must be kept or dropped together.
+grouped_features:
+  region_onehot:
+    members: [is_upstream, is_throat, is_downstream]
+    atomicity: all_or_none
+    keep_rule:
+      mode: any                        # any | all
+      block_rank_top_k: 3
+      block_stability_min: 0.6
+
+# Cross-validation (group-wise by case).
+cv:
+  strategy: group_kfold
+  n_splits: 5
+  seed: 42
+
+# Methods to run. Keep commented-out entries for visibility.
+methods:
+  - f_regression
+  - mutual_info
+  - lasso
+  - gbr_permutation
+  - rfecv_ridge
+  - sequential_ridge
+
+# Method-specific knobs.
+mi:
+  n_seeds: 10
+  bootstrap: false
+
+top_k: 6
+
+consensus:
+  method: borda
+  stability_min: 0.6
+
+baseline:
+  enabled: true
+  models: [ridge, gbr]
+  n_splits: 5

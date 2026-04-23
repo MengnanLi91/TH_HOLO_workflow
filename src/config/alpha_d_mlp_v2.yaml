@@ -1,0 +1,10 @@
+defaults:
+  - alpha_d_mlp
+  - _self_
+
+data:
+  # Use the selected v2 feature set directly from feature-analysis output.
+  input_columns_file: ../data/feature_analysis_v2/selected_features.txt
+
+hpo:
+  study_name: alpha_d_mlp_v2_hpo_case_v1

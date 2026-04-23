@@ -71,6 +71,7 @@ RUN if [ "${INSTALL_PHYSICSNEMO}" = "1" ]; then \
     "optuna>=4.0" \
     "netCDF4" \
     "scipy" \
+    "scikit-learn>=1.4" \
     "zarr" \
     "pytest>=9.0" \
     && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system -e /workspace/physicsnemo-curator

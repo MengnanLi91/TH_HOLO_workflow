@@ -170,6 +170,35 @@ docker compose run --rm etl bash -lc 'cd src && python train.py --config-name al
 - Checkpoint: `data/models/alpha_d_mlp.mdlus` (PhysicsNeMo format)
 - Run metadata: `data/models/run_meta.json` (records split, model params, final loss)
 
+### Lock a split for fair model comparisons
+
+If you want future experiments to use exactly the same train/test cases,
+export the split from an existing `run_meta.json` once and then switch
+training to the file-based split strategy.
+
+```bash
+cd src && python export_split.py \
+  --run-meta ../data/models/run_meta.json \
+  --output-dir ../data/splits/alpha_d_locked_v1
+```
+
+This writes:
+
+- `../data/splits/alpha_d_locked_v1/train.txt`
+- `../data/splits/alpha_d_locked_v1/test.txt`
+
+Then train future models against that same split:
+
+```bash
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp_v2 \
+  data.split.strategy=file \
+  data.split.train_file=../data/splits/alpha_d_locked_v1/train.txt \
+  data.split.test_file=../data/splits/alpha_d_locked_v1/test.txt'
+```
+
+This is the easiest way to make evaluation metrics comparable across
+feature sets, HPO versions, and model architectures.
+
 ### Verify training
 
 Check that the loss decreases:
@@ -288,6 +317,10 @@ cd src && python train.py --config-name alpha_d_mlp hpo=null
 
 See [Hyperparameter Optimization Guide](hyperparameter_optimization.md)
 for details on search-space format, study settings, and output artifacts.
+
+After running multiple HPO versions, use the
+[Version Comparison](version_comparison.md) tool to review training
+progress and compare evaluation metrics across versions.
 
 ## Next steps (planned)
 

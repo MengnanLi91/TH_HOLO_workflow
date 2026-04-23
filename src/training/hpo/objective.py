@@ -12,6 +12,7 @@ from training.hpo.search_space import apply_overrides, sample_from_search_space
 from training.losses import get_loss_fn
 from training.models import get_build_fn_and_adapter
 from training.runner import (
+    _build_case_geometry,
     build_experiment,
     compute_val_loss,
     set_seed,
@@ -89,6 +90,13 @@ def make_objective(
         loss_fn = get_loss_fn(str(training_cfg.get("loss", "mse")))
 
         # 4. Build experiment (respects training.experiment entrypoint)
+        experiment_kwargs: dict[str, Any] = {}
+        consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
+        if consistency_weight > 0:
+            experiment_kwargs["consistency_weight"] = consistency_weight
+        delta_p_weight = float(training_cfg.get("delta_p_weight", 0.0))
+        if delta_p_weight > 0:
+            experiment_kwargs["delta_p_weight"] = delta_p_weight
         experiment = build_experiment(
             experiment_entrypoint=training_cfg.get("experiment"),
             model=model,
@@ -96,7 +104,19 @@ def make_objective(
             loss_fn=loss_fn,
             adapter=adapter,
             device=device,
+            **experiment_kwargs,
         )
+        if hasattr(train_ds, "output_columns") and getattr(train_ds, "output_columns", None):
+            experiment.alpha_d_target_name = str(train_ds.output_columns[0])
+
+        # Inject case geometry for delta_p integral loss
+        if delta_p_weight > 0 and hasattr(train_ds, "_case_meta"):
+            experiment.case_geometry = _build_case_geometry(train_ds, device)
+            experiment.local_velocity_normalization = getattr(
+                train_ds, "local_velocity_normalization", False
+            )
+            if hasattr(val_ds, "_case_meta"):
+                experiment.val_case_geometry = _build_case_geometry(val_ds, device)
 
         # 5. Build DataLoaders
         epochs = int(training_cfg.get("epochs", 20))
@@ -120,10 +140,34 @@ def make_objective(
             collate_fn=adapter.collate_fn(),
         )
 
-        # 6. Training loop with pruning
+        # 6. LR scheduler (match retrain behavior)
+        scheduler_name = str(training_cfg.get("lr_scheduler") or "")
+        scheduler = None
+        if scheduler_name == "cosine":
+            warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
+            if warmup_epochs > 0 and warmup_epochs < epochs:
+                warmup_sched = torch.optim.lr_scheduler.LinearLR(
+                    optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
+                )
+                cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=epochs - warmup_epochs, eta_min=1e-7
+                )
+                scheduler = torch.optim.lr_scheduler.SequentialLR(
+                    optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_epochs]
+                )
+            else:
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=epochs, eta_min=1e-7
+                )
+
+        # 7. Training loop with pruning
         val_loss = float("nan")
         for epoch in range(1, epochs + 1):
             train_one_epoch(experiment, train_loader)
+            if hasattr(experiment, "compute_delta_p_loss_step"):
+                experiment.compute_delta_p_loss_step()
+            if scheduler is not None:
+                scheduler.step()
             val_loss = compute_val_loss(experiment, val_loader)
 
             trial.report(val_loss, epoch)

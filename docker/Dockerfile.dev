@@ -74,6 +74,7 @@ RUN set -eux; \
         ${PIP_TRUSTED_HOST_FLAGS} \
         "numpy>=1.26.4" \
         "scipy" \
+        "scikit-learn>=1.4" \
         "netCDF4" \
         "zarr>=3.1.2" \
         "numcodecs>=0.13.1" \
@@ -88,6 +89,7 @@ RUN set -eux; \
         --trusted-host files.pythonhosted.org \
         "numpy>=1.26.4" \
         "scipy" \
+        "scikit-learn>=1.4" \
         "netCDF4" \
         "zarr>=3.1.2" \
         "numcodecs>=0.13.1" \

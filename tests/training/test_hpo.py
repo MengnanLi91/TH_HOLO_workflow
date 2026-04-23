@@ -115,6 +115,31 @@ class TestComputeValLoss:
         with pytest.raises(RuntimeError, match="zero batches"):
             compute_val_loss(exp, empty_loader)
 
+    def test_includes_epoch_level_validation_term(self) -> None:
+        from training.runner import compute_val_loss
+
+        class DummyExperiment:
+            def validation_step(self, batch) -> float:
+                return float(batch)
+
+            def validation_epoch_loss(self, val_loader) -> float:
+                _ = val_loader
+                return 10.0
+
+        loader = torch.utils.data.DataLoader([1.0, 2.0, 3.0], batch_size=1)
+        loss = compute_val_loss(DummyExperiment(), loader)
+        assert loss == pytest.approx(12.0)
+
+
+class TestMetricsOutPath:
+    def test_auto_metrics_path_uses_checkpoint_directory(self) -> None:
+        from training.runner import _resolve_metrics_out_path
+
+        checkpoint = Path("/tmp/example_case/model.mdlus")
+        resolved = _resolve_metrics_out_path({"metrics_out": "auto"}, checkpoint)
+
+        assert resolved == checkpoint.with_name("eval_metrics.json")
+
 
 # ---------------------------------------------------------------------------
 # Objective integration test

@@ -1,6 +1,7 @@
 """Adapter layer to unify grid and graph model families."""
 
 from collections.abc import Callable
+from pathlib import Path
 
 import torch
 
@@ -199,19 +200,43 @@ class PointwiseAdapter(ModelAdapter):
         if norm_from_case_indices is not None:
             norm_from_case_indices = [int(i) for i in norm_from_case_indices]
 
+        input_columns = None
+        if data_cfg.get("input_columns_file") is not None:
+            cols_path = Path(str(data_cfg["input_columns_file"]))
+            if not cols_path.exists():
+                raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
+            input_columns = [
+                line.strip() for line in cols_path.read_text().splitlines()
+                if line.strip()
+            ]
+            if not input_columns:
+                raise ValueError(f"input_columns_file is empty: {cols_path}")
+        else:
+            input_columns = parse_field_list(data_cfg.get("input_columns"))
+
         def _opt_float(key: str) -> float | None:
             v = data_cfg.get(key)
             return float(v) if v is not None else None
 
+        exclude_cases = data_cfg.get("exclude_cases")
+        if exclude_cases is not None:
+            exclude_cases = [str(c) for c in exclude_cases]
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
-            input_columns=parse_field_list(data_cfg.get("input_columns")),
+            input_columns=input_columns,
             output_columns=parse_field_list(data_cfg.get("output_columns")),
             normalize=bool(data_cfg.get("normalize", False)),
             norm_stats=data_cfg.get("norm_stats"),
             norm_from_case_indices=norm_from_case_indices,
             throat_weight=_opt_float("throat_weight"),
+            downstream_weight=_opt_float("downstream_weight"),
             include_case_idx=bool(data_cfg.get("include_case_idx", False)),
+            exclude_cases=exclude_cases,
+            local_velocity_normalization=bool(
+                data_cfg.get("local_velocity_normalization", False)
+            ),
+            min_Dr=_opt_float("min_Dr"),
         )
 
     def dataset_info(self, dataset) -> dict:

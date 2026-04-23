@@ -49,9 +49,6 @@ All commands run from `src/` inside the container.  From the host:
 docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
 ```
 
-The standalone `run_hpo.py` entry point still exists for advanced use
-with `hpo_default.yaml`.
-
 ## Add HPO to a training config
 
 Add an `hpo` section directly to the model's training config.  When the
@@ -322,3 +319,6 @@ path is used.
   that just need more epochs to converge.
 - If you change the search space definition, start a fresh study by
   choosing a new `hpo.study_name` or deleting the old `.db` file.
+- After finishing an HPO run, use the
+  [version comparison tool](version_comparison.md) to review progress
+  and check for regressions across versions.

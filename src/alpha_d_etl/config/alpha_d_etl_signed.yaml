@@ -1,0 +1,13 @@
+# Alpha-D ETL Pipeline with signed target support written to a separate output dir.
+#
+# Usage (from src/ directory):
+#   python run_alpha_d_etl.py --config-name alpha_d_etl_signed
+#   python run_alpha_d_etl.py --config-name alpha_d_etl_signed etl.processing.num_processes=8
+
+defaults:
+  - alpha_d_etl
+  - _self_
+
+etl:
+  sink:
+    output_dir: ../data/flow_contraction_expansion/parametric_study/processed_signed

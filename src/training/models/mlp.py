@@ -1,4 +1,10 @@
-"""Built-in FullyConnected MLP model definition."""
+"""Built-in FullyConnected MLP model definition.
+
+Supports optional inter-layer dropout for improved regularisation in
+deeper networks.  Dropout is applied between hidden layers during
+training and disabled at eval time, so no extra state needs to be
+persisted in the checkpoint.
+"""
 
 import torch
 
@@ -6,21 +12,38 @@ from training import import_physicsnemo_attr
 from training.models import register_model
 
 
-class _DropoutWrapper(torch.nn.Module):
-    """Training-time dropout wrapper around a PhysicsNeMo model.
+class _InterLayerDropout(torch.nn.Module):
+    """Wraps a FullyConnected model, adding dropout between hidden layers.
 
-    Applies dropout to the model input during training.  The saved
-    checkpoint contains only the inner model so that evaluation works
-    with the standard ``Module.from_checkpoint`` path.
+    Unlike the previous input-only ``_DropoutWrapper``, this applies
+    dropout *after each hidden layer's activation*, which is the
+    standard placement for MLP regularisation.
+
+    The saved checkpoint contains only the inner model so that
+    evaluation works with the standard ``Module.from_checkpoint`` path.
     """
 
     def __init__(self, model: torch.nn.Module, dropout: float):
         super().__init__()
         self.model = model
-        self.drop = torch.nn.Dropout(dropout)
+        self.p = dropout
+        n_layers = len(model.layers)
+        self.drops = torch.nn.ModuleList(
+            [torch.nn.Dropout(dropout) for _ in range(n_layers)]
+        )
 
     def forward(self, x):
-        return self.model(self.drop(x))
+        x_skip = None
+        for i, layer in enumerate(self.model.layers):
+            x = layer(x)
+            if self.training:
+                x = self.drops[i](x)
+            if self.model.skip_connections and i % 2 == 0:
+                if x_skip is not None:
+                    x, x_skip = x + x_skip, x
+                else:
+                    x_skip = x
+        return self.model.final_layer(x)
 
     # Delegate PhysicsNeMo serialization to the inner model.
     def save(self, path):  # noqa: D102
@@ -51,7 +74,7 @@ def build(model_cfg: dict, dataset_info: dict):
 
     dropout = float(model_cfg.get("dropout", 0.0))
     if dropout > 0:
-        model = _DropoutWrapper(model, dropout)
+        model = _InterLayerDropout(model, dropout)
         resolved["dropout"] = dropout
 
     model._resolved_model_params = dict(resolved)

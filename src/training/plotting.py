@@ -1,12 +1,15 @@
-"""Plotting helpers for grid-model evaluation."""
+"""Plotting helpers for evaluation outputs."""
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 from torch.utils.data import Subset
 
 from training.datasets import GridPairDataset
+from training.datasets_tabular import TabularPairDataset
+from training.alpha_d_targets import field_values_to_physical, is_alpha_d_target
 
 
 def parse_index_list(raw: str | list[int] | None) -> list[int] | None:
@@ -70,8 +73,180 @@ def _resolve_case_name(dataset, idx: int) -> str:
 
     if isinstance(dataset, GridPairDataset):
         return dataset.sim_names[idx]
+    if isinstance(dataset, TabularPairDataset):
+        return dataset.sim_names[idx]
 
     return f"case_{idx:03d}"
+
+
+def select_best_worst_pointwise_cases(
+    extended_metrics: dict[str, Any],
+    output_fields: list[str],
+) -> list[dict[str, Any]]:
+    """Choose one best and one worst pointwise case for profile plotting."""
+    if not output_fields:
+        return []
+
+    field_name = output_fields[0]
+    selected: list[dict[str, Any]] = []
+    used_cases: set[str] = set()
+
+    for label, key in (("best", "best_cases"), ("worst", "worst_cases")):
+        candidates = [
+            entry
+            for entry in extended_metrics.get(key, [])
+            if entry.get("field") == field_name
+        ]
+        if not candidates:
+            continue
+
+        chosen = None
+        for entry in candidates:
+            case_name = str(entry.get("case"))
+            if case_name not in used_cases:
+                chosen = entry
+                break
+        if chosen is None:
+            chosen = candidates[0]
+
+        selected.append(
+            {
+                "label": label,
+                "case": str(chosen["case"]),
+                "field": field_name,
+                "rmse": float(chosen["rmse"]),
+                "median_relative_error": chosen.get("median_relative_error"),
+            }
+        )
+        used_cases.add(str(chosen["case"]))
+
+    return selected
+
+
+def _to_physical_alpha_profile(
+    values: torch.Tensor,
+    *,
+    field_name: str,
+    d_over_D: torch.Tensor | None,
+    local_velocity_normalization: bool,
+) -> np.ndarray:
+    """Convert model-space output to physical alpha_D for plotting."""
+    profile = field_values_to_physical(
+        values.detach().cpu().clone(),
+        field_name=field_name,
+        d_over_D=d_over_D.detach().cpu() if d_over_D is not None else None,
+        local_velocity_normalization=local_velocity_normalization,
+    )
+    return profile.detach().cpu().numpy()
+
+
+def save_pointwise_profile_plots(
+    model,
+    dataset,
+    output_fields: list[str],
+    device: torch.device,
+    plot_dir: str | Path,
+    case_entries: list[dict[str, Any]],
+    *,
+    plot_dpi: int = 150,
+) -> list[str]:
+    """Save best/worst alpha_D profile plots for pointwise/tabular models."""
+    try:
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError as import_error:
+        raise ModuleNotFoundError(
+            "Plotting requires matplotlib. Install it or omit output.plot_dir."
+        ) from import_error
+
+    if plot_dpi < 1:
+        raise ValueError("plot_dpi must be >= 1.")
+    if not output_fields:
+        raise ValueError("No output fields are available for plotting.")
+    if not hasattr(dataset, "_case_ids_unique"):
+        raise ValueError("Pointwise profile plotting requires a case-indexed tabular dataset.")
+
+    plot_dir_path = Path(plot_dir)
+    plot_dir_path.mkdir(parents=True, exist_ok=True)
+
+    field_name = output_fields[0]
+    case_to_idx = {name: idx for idx, name in enumerate(dataset._case_ids_unique)}
+    output_files: list[str] = []
+
+    with torch.no_grad():
+        for entry in case_entries:
+            case_name = str(entry["case"])
+            case_idx = case_to_idx.get(case_name)
+            if case_idx is None:
+                continue
+
+            mask = dataset._row_case_idx == case_idx
+            if not np.any(mask):
+                continue
+
+            x_case = dataset._x[mask].to(device)
+            pred_case = model(x_case).detach().cpu()[:, 0]
+            target_case = dataset._y[mask].detach().cpu()[:, 0]
+
+            z_hat = (
+                dataset._raw_z_hat[mask].detach().cpu()
+                if dataset._raw_z_hat is not None
+                else torch.arange(len(pred_case), dtype=torch.float32)
+            )
+            d_over_D = (
+                dataset._raw_d_local_over_D[mask].detach().cpu()
+                if dataset._raw_d_local_over_D is not None
+                else None
+            )
+
+            order = torch.argsort(z_hat)
+            z_axis = z_hat[order].numpy()
+            pred_phys = _to_physical_alpha_profile(
+                pred_case[order],
+                field_name=field_name,
+                d_over_D=d_over_D[order] if d_over_D is not None else None,
+                local_velocity_normalization=bool(
+                    getattr(dataset, "local_velocity_normalization", False)
+                ),
+            )
+            target_phys = _to_physical_alpha_profile(
+                target_case[order],
+                field_name=field_name,
+                d_over_D=d_over_D[order] if d_over_D is not None else None,
+                local_velocity_normalization=bool(
+                    getattr(dataset, "local_velocity_normalization", False)
+                ),
+            )
+
+            fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
+            ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
+            ax.plot(z_axis, pred_phys, label="Predicted", linewidth=2.0, linestyle="--")
+            if np.all(target_phys > 0.0) and np.all(pred_phys > 0.0):
+                ax.set_yscale("log")
+            ax.set_xlabel("z_hat")
+            profile_label = "alpha_D" if is_alpha_d_target(field_name) else field_name
+            ax.set_ylabel(profile_label)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+
+            title = f"{entry['label'].title()} {profile_label} Profile | {case_name}"
+            rmse = entry.get("rmse")
+            rel = entry.get("median_relative_error")
+            subtitle_parts: list[str] = []
+            if rmse is not None:
+                subtitle_parts.append(f"RMSE={float(rmse):.3e}")
+            if rel is not None:
+                subtitle_parts.append(f"median_rel_err={float(rel):.1%}")
+            if subtitle_parts:
+                title += "\n" + ", ".join(subtitle_parts)
+            ax.set_title(title)
+
+            safe_label = "alpha_D" if is_alpha_d_target(field_name) else field_name
+            out_path = plot_dir_path / f"{entry['label']}_{case_name}_{safe_label}_profile.png"
+            fig.savefig(out_path, dpi=plot_dpi)
+            plt.close(fig)
+            output_files.append(str(out_path))
+
+    return output_files
 
 
 def save_grid_prediction_plots(

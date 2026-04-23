@@ -14,10 +14,15 @@ model:
 data:
   zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
   input_columns: [log10_Re, Dr, Lr, z_hat, d_local_over_D, A_local_over_A, is_upstream, is_throat, is_downstream]
+  input_columns_file: null
   output_columns: [log_alpha_D]
   normalize: true
   throat_weight: 5.0
+  downstream_weight: 1.0
   include_case_idx: true
+  local_velocity_normalization: true
+  min_Dr: 0.333
+  exclude_cases: []
   split:
     strategy: stratified
     train_ratio: 0.8
@@ -34,28 +39,44 @@ training:
   loss: relative_l2
   weight_decay: 1.0e-5
   lr_scheduler: cosine
+  lr_warmup_epochs: 10
   experiment: training.experiments.alpha_d:AlphaDExperiment
   consistency_weight: 0.0
+  delta_p_weight: 0.0
   early_stopping:
     patience: 30
     val_ratio: 0.15
 
+eval:
+  checkpoint: ${output.checkpoint}
+  run_meta: null
+  batch_size: 4
+  num_workers: 0
+  device: auto
+  experiment: null
+
 output:
-  checkpoint: ../data/models/alpha_d_mlp.mdlus
-  metrics_out: ../data/models/alpha_d_mlp_metrics.json
+  plot_dir: ${output.case_dir}/plots
+  plot_max_cases: 3
+  plot_case_indices: null
+  plot_velocity_x_field: vel_x
+  plot_velocity_y_field: vel_y
+  plot_quiver_step: 4
+  plot_cmap: viridis
+  plot_dpi: 150
 
 # Hyperparameter optimization.  Set hpo=null on the CLI to skip HPO and
 # train directly with the parameters above.
 hpo:
-  study_name: alpha_d_mlp_hpo_v5
+  study_name: alpha_d_mlp_hpo_case_v1
   direction: minimize
   n_trials: 50
   seed: 42
   show_progress_bar: true
-  storage: sqlite:///../data/hpo/${hpo.study_name}.db
+  storage: sqlite:///${hpo.output_dir}/${hpo.study_name}.db
   load_if_exists: true
   retrain_best: true
-  output_dir: ../data/hpo
+  output_dir: ${output.case_dir}/hpo
 
   sampler:
     name: TPESampler
@@ -106,3 +127,11 @@ hpo:
     data.throat_weight:
       type: categorical
       choices: [1.0, 3.0, 5.0, 10.0]
+
+    data.downstream_weight:
+      type: categorical
+      choices: [1.0, 2.0, 3.0, 5.0]
+
+    training.delta_p_weight:
+      type: categorical
+      choices: [0.0, 0.005, 0.01, 0.02, 0.05]

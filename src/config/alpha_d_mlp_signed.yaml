@@ -1,0 +1,10 @@
+defaults:
+  - alpha_d_mlp
+  - _self_
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed_signed
+  output_columns: [signed_log1p_alpha_D]
+
+hpo:
+  study_name: alpha_d_mlp_signed_hpo_case_v1

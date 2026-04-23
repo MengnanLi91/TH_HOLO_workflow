@@ -1,0 +1,71 @@
+# Feature analysis v2
+# - Adds engineered, physics-guided feature candidates
+# - Disables atomic region block to let region flags compete individually
+# - Writes artifacts to a separate output directory
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  target: log_alpha_D
+  local_velocity_normalization: true
+  min_Dr: 0.333
+  exclude_cases: []
+  selected_from_allowlist:
+    - log10_Re
+    - Dr
+    - Lr
+    - z_hat
+    - d_local_over_D
+    - A_local_over_A
+    - is_upstream
+    - is_throat
+    - is_downstream
+    - log10_Re_throat
+    - log10_Re_local
+    - inv_Dr
+    - Dr_times_Lr
+    - z_hat_times_Dr
+    - z_hat_times_Lr
+    - dist_to_throat_start
+    - dist_to_throat_end
+    - dist_to_nearest_step
+
+output:
+  dir: ../data/feature_analysis_v2
+  plots:
+    enabled: true
+    top_n: 12
+    relationship_top_n: 6
+    sample_max: 5000
+    dpi: 150
+
+grouped_features:
+  region_onehot:
+    enabled: false
+
+cv:
+  strategy: group_kfold
+  n_splits: 5
+  seed: 42
+
+methods:
+  - f_regression
+  - mutual_info
+  - lasso
+  - gbr_permutation
+  - rfecv_ridge
+  - sequential_ridge
+
+mi:
+  n_seeds: 10
+  bootstrap: false
+
+top_k: 6
+
+consensus:
+  method: borda
+  stability_min: 0.5
+
+baseline:
+  enabled: true
+  models: [ridge, gbr]
+  n_splits: 5

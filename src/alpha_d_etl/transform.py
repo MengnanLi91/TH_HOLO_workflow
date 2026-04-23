@@ -23,6 +23,7 @@ import numpy as np
 
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from training.alpha_d_targets import encode_alpha_d_target
 
 logger = logging.getLogger(__name__)
 
@@ -222,21 +223,26 @@ class AlphaDTransformation(DataTransformation):
             (z_throat_end - z_roi_start) / (z_roi_end - z_roi_start),
         )
 
-        # --- Clamp alpha_D to a positive floor ---
-        # Stations with alpha_D <= 0 (favorable pressure gradient near
-        # contraction/expansion boundaries) are clamped rather than
-        # discarded so that every case has a full, continuous z_hat
-        # profile of n_stations points.
+        # --- Encode targets ---
+        # Keep the historical positive-only log target for backward
+        # compatibility, and add a signed target that preserves favorable
+        # pressure-gradient regions for physics-consistent training.
         alpha_D_floor = 1e-3
-        alpha_D_clamped = np.maximum(alpha_D, alpha_D_floor)
-        log_alpha_D = np.log(alpha_D_clamped)
+        log_alpha_D = encode_alpha_d_target(
+            np.maximum(alpha_D, alpha_D_floor),
+            target_name="log_alpha_D",
+        ).astype(np.float32)
+        signed_log1p_alpha_D = encode_alpha_d_target(
+            alpha_D,
+            target_name="signed_log1p_alpha_D",
+        ).astype(np.float32)
         weights = _sample_weights(regions)
 
         feature_names = [
             "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
             "A_local_over_A", "is_upstream", "is_throat", "is_downstream",
         ]
-        target_names = ["log_alpha_D"]
+        target_names = ["log_alpha_D", "signed_log1p_alpha_D"]
 
         n_out = self.n_stations
         features = np.column_stack([
@@ -251,13 +257,15 @@ class AlphaDTransformation(DataTransformation):
             regions["is_downstream"],
         ])  # [n_out, 9]
 
-        targets = log_alpha_D.astype(np.float32).reshape(-1, 1)
+        targets = np.column_stack([log_alpha_D, signed_log1p_alpha_D]).astype(np.float32)
 
         self.logger.info(
             "  %s: %d stations, delta_p=%.4f Pa, "
-            "log_alpha_D range=[%.2f, %.2f]",
+            "log_alpha_D range=[%.2f, %.2f], "
+            "signed_log1p_alpha_D range=[%.2f, %.2f]",
             case_name, n_out, delta_p_case,
             float(log_alpha_D.min()), float(log_alpha_D.max()),
+            float(signed_log1p_alpha_D.min()), float(signed_log1p_alpha_D.max()),
         )
 
         return {

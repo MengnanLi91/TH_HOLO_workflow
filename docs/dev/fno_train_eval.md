@@ -86,12 +86,11 @@ workflow.
 ## Hyperparameter optimization
 
 All models support Optuna-based hyperparameter optimization via
-`run_hpo.py`.  Create an HPO config that inherits from the model's
-training config and defines a search space over `training.*` and
-`model.params.*` paths.
+`train.py`. Add an `hpo` section to the training config that defines a
+search space over `training.*` and `model.params.*` paths.
 
 ```bash
-cd src && python run_hpo.py --config-name hpo_alpha_d_mlp
+cd src && python train.py --config-name alpha_d_mlp
 ```
 
 See [Hyperparameter Optimization Guide](../user/hyperparameter_optimization.md)

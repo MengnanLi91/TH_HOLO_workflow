@@ -24,6 +24,8 @@ data:
     strategy: sequential
     train_ratio: 0.8
     seed: 42
+    train_file: null
+    test_file: null
 
 training:
   epochs: 20
@@ -45,8 +47,11 @@ eval:
   experiment: null
 
 output:
-  checkpoint: ../data/models/${model.name}_model.mdlus
-  metrics_out: null
+  root_dir: ../data/cases
+  case_name: ${hydra:job.config_name}
+  case_dir: ${output.root_dir}/${output.case_name}
+  checkpoint: ${output.case_dir}/model.mdlus
+  metrics_out: auto
   plot_dir: null
   plot_max_cases: 3
   plot_case_indices: null

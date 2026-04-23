@@ -1,0 +1,12 @@
+# Feature analysis config for the signed alpha_D target.
+
+defaults:
+  - feature_analysis
+  - _self_
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed_signed
+  target: signed_log1p_alpha_D
+
+output:
+  dir: ../data/feature_analysis_signed

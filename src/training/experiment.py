@@ -65,5 +65,15 @@ class Experiment:
         pred, target = result
         return float(self.loss_fn(pred, target).detach().cpu())
 
+    def validation_epoch_loss(self, val_loader) -> float:
+        """Optional validation loss term computed once per epoch.
+
+        Subclasses can override this to add case-level or physics-based
+        penalties that require access to the full validation set rather than
+        individual batches.
+        """
+        _ = val_loader
+        return 0.0
+
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)

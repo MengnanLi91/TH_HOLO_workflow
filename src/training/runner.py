@@ -25,9 +25,19 @@ from training import import_physicsnemo_attr
 from training.adapters import get_adapter
 from training.datasets import split_indices
 from training.experiment import Experiment
+from training.alpha_d_targets import (
+    alpha_d_values_to_bulk,
+    field_values_to_physical,
+    is_alpha_d_target,
+)
 from training.losses import get_loss_fn
 from training.models import get_build_fn_and_adapter, model_entrypoint_string
-from training.plotting import resolve_plot_indices, save_grid_prediction_plots
+from training.plotting import (
+    resolve_plot_indices,
+    save_grid_prediction_plots,
+    save_pointwise_profile_plots,
+    select_best_worst_pointwise_cases,
+)
 
 try:
     from tqdm.auto import tqdm
@@ -82,6 +92,16 @@ _resolve_device = resolve_device
 
 def _resolve_path(raw_path: str | Path) -> Path:
     return Path(raw_path).expanduser().resolve()
+
+
+def _resolve_metrics_out_path(output_cfg: dict[str, Any], checkpoint_path: Path) -> Path | None:
+    """Resolve where evaluation metrics JSON should be written."""
+    metrics_out_value = output_cfg.get("metrics_out")
+    if metrics_out_value is None:
+        return None
+    if str(metrics_out_value).strip().lower() == "auto":
+        return checkpoint_path.with_name("eval_metrics.json")
+    return _resolve_path(str(metrics_out_value))
 
 
 def _load_object(entrypoint: str):
@@ -168,6 +188,105 @@ def _collect_resolved_model_params(
     return resolved
 
 
+def _compute_delta_p_metrics(
+    model: Any,
+    eval_dataset,
+    device: torch.device,
+    *,
+    alpha_d_target_name: str = "log_alpha_D",
+    local_velocity_normalization: bool = False,
+    D_big: float = 0.2,
+    buffer_diams: float = 1.0,
+    rho: float = 1.0,
+    V_bulk: float = 1.0,
+) -> dict[str, Any]:
+    """Compute per-case delta_p prediction error statistics.
+
+    Integrates the predicted alpha_D profile via the trapezoidal rule to
+    obtain ``delta_p_pred``, then compares with the ground-truth
+    ``delta_p_case`` stored in the zarr metadata.
+
+    Returns a dict with overall and per-case statistics.
+    """
+    if not is_alpha_d_target(alpha_d_target_name):
+        return {}
+
+    case_meta = getattr(eval_dataset, "_case_meta", None)
+    case_names = getattr(eval_dataset, "_case_ids_unique", None)
+    row_case_idx = getattr(eval_dataset, "_row_case_idx", None)
+    raw_z_hat = getattr(eval_dataset, "_raw_z_hat", None)
+    raw_d_over_D = getattr(eval_dataset, "_raw_d_local_over_D", None)
+
+    if case_meta is None or case_names is None or row_case_idx is None:
+        return {}
+    if raw_z_hat is None or raw_d_over_D is None:
+        return {}
+
+    per_case: list[dict[str, Any]] = []
+    model.eval()
+
+    with torch.no_grad():
+        for ci, case_name in enumerate(case_names):
+            cm = case_meta[ci]
+            delta_p_gt = cm["delta_p_case"]
+            if delta_p_gt <= 0:
+                continue
+
+            mask = row_case_idx == ci
+            x_full = eval_dataset._x[mask].to(device)
+            z_hat = raw_z_hat[mask].to(device)
+            d_over_D = raw_d_over_D[mask].to(device)
+
+            pred_values = model(x_full).squeeze(-1)  # [n_stations]
+            alpha_D_bulk = alpha_d_values_to_bulk(
+                pred_values,
+                target_name=alpha_d_target_name,
+                d_over_D=d_over_D,
+                local_velocity_normalization=local_velocity_normalization,
+            )
+
+            # dp/dz = alpha_D_bulk * rho * V_bulk^2 / (2 * D_h)
+            D_h = d_over_D * D_big
+            dp_dz = alpha_D_bulk * rho * V_bulk ** 2 / (2.0 * D_h)
+
+            # Trapezoidal integration over physical z
+            L_roi = cm["Lr"] * 1.0 + 2.0 * buffer_diams * D_big
+            z_physical = z_hat * L_roi
+            delta_p_pred = float(torch.trapezoid(dp_dz, z_physical).cpu())
+
+            rel_err = abs(delta_p_pred - delta_p_gt) / abs(delta_p_gt)
+            log_err = abs(math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8)))
+
+            per_case.append({
+                "case": case_name,
+                "delta_p_gt": delta_p_gt,
+                "delta_p_pred": delta_p_pred,
+                "relative_error": rel_err,
+                "log_abs_error": log_err,
+            })
+
+    if not per_case:
+        return {}
+
+    rel_errors = [c["relative_error"] for c in per_case]
+    log_errors = [c["log_abs_error"] for c in per_case]
+
+    # Sort worst-to-best by relative error
+    per_case.sort(key=lambda x: x["relative_error"], reverse=True)
+
+    return {
+        "n_cases": len(per_case),
+        "relative_error_median": float(np.median(rel_errors)),
+        "relative_error_mean": float(np.mean(rel_errors)),
+        "relative_error_p90": float(np.quantile(rel_errors, 0.9)),
+        "relative_error_max": float(max(rel_errors)),
+        "log_abs_error_mean": float(np.mean(log_errors)),
+        "log_abs_error_median": float(np.median(log_errors)),
+        "worst_cases": per_case[:10],
+        "best_cases": list(reversed(per_case[-10:])),
+    }
+
+
 def _compute_pointwise_extended_metrics(
     preds: torch.Tensor,
     targets: torch.Tensor,
@@ -179,6 +298,8 @@ def _compute_pointwise_extended_metrics(
     Only meaningful for the pointwise adapter with ``TabularPairDataset``.
     """
     metrics: dict[str, Any] = {}
+    raw_d_over_D = getattr(dataset, "_raw_d_local_over_D", None)
+    local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
 
     # ------------------------------------------------------------------
     # Overall R², MAE per output field
@@ -194,10 +315,20 @@ def _compute_pointwise_extended_metrics(
 
         # Physical-space relative error for log-transformed outputs
         if name.startswith("log_") or name.startswith("log10_"):
-            base_exp = torch.exp if name.startswith("log_") else lambda x: 10.0 ** x
-            p_phys = base_exp(p)
-            t_phys = base_exp(t)
-            rel_err = ((p_phys - t_phys) / t_phys.clamp(min=1e-8)).abs()
+            d_over_D = raw_d_over_D if is_alpha_d_target(name) else None
+            p_phys = field_values_to_physical(
+                p,
+                field_name=name,
+                d_over_D=d_over_D,
+                local_velocity_normalization=local_vel_norm,
+            )
+            t_phys = field_values_to_physical(
+                t,
+                field_name=name,
+                d_over_D=d_over_D,
+                local_velocity_normalization=local_vel_norm,
+            )
+            rel_err = ((p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)).abs()
             entry["physical_median_relative_error"] = float(rel_err.median())
             entry["physical_mean_relative_error"] = float(rel_err.mean())
             entry["physical_p90_relative_error"] = float(rel_err.quantile(0.9))
@@ -236,9 +367,23 @@ def _compute_pointwise_extended_metrics(
                 rmse = float(((p - t) ** 2).mean().sqrt())
                 field_metrics: dict[str, Any] = {"r2": r2, "rmse": rmse}
                 if field_name.startswith("log_") or field_name.startswith("log10_"):
-                    base_exp = torch.exp if field_name.startswith("log_") else lambda x: 10.0 ** x
+                    d_over_D = raw_d_over_D[mask] if (
+                        raw_d_over_D is not None and is_alpha_d_target(field_name)
+                    ) else None
+                    p_phys = field_values_to_physical(
+                        p,
+                        field_name=field_name,
+                        d_over_D=d_over_D,
+                        local_velocity_normalization=local_vel_norm,
+                    )
+                    t_phys = field_values_to_physical(
+                        t,
+                        field_name=field_name,
+                        d_over_D=d_over_D,
+                        local_velocity_normalization=local_vel_norm,
+                    )
                     rel_err = (
-                        (base_exp(p) - base_exp(t)) / base_exp(t).clamp(min=1e-8)
+                        (p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)
                     ).abs()
                     field_metrics["median_relative_error"] = float(rel_err.median())
                 region_entry[field_name] = field_metrics
@@ -262,9 +407,23 @@ def _compute_pointwise_extended_metrics(
                 case_rmse = float(((p - t) ** 2).mean().sqrt())
                 entry = {"case": case_name, "field": field_name, "rmse": case_rmse}
                 if field_name.startswith("log_") or field_name.startswith("log10_"):
-                    base_exp = torch.exp if field_name.startswith("log_") else lambda x: 10.0 ** x
+                    d_over_D = raw_d_over_D[mask] if (
+                        raw_d_over_D is not None and is_alpha_d_target(field_name)
+                    ) else None
+                    p_phys = field_values_to_physical(
+                        p,
+                        field_name=field_name,
+                        d_over_D=d_over_D,
+                        local_velocity_normalization=local_vel_norm,
+                    )
+                    t_phys = field_values_to_physical(
+                        t,
+                        field_name=field_name,
+                        d_over_D=d_over_D,
+                        local_velocity_normalization=local_vel_norm,
+                    )
                     rel_err = (
-                        (base_exp(p) - base_exp(t)) / base_exp(t).clamp(min=1e-8)
+                        (p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)
                     ).abs()
                     entry["median_relative_error"] = float(rel_err.median())
                 per_case.append(entry)
@@ -281,7 +440,7 @@ def _print_extended_metrics(metrics: dict[str, Any]) -> None:
         parts = [f"  {entry['name']}: R²={entry['r2']:.4f}, MAE={entry['mae']:.4e}"]
         if "physical_median_relative_error" in entry:
             parts.append(
-                f"    alpha_D relative error: "
+                f"    physical relative error: "
                 f"median={entry['physical_median_relative_error']:.1%}, "
                 f"mean={entry['physical_mean_relative_error']:.1%}, "
                 f"p90={entry['physical_p90_relative_error']:.1%}"
@@ -317,6 +476,26 @@ def _print_extended_metrics(metrics: dict[str, Any]) -> None:
             if "median_relative_error" in c:
                 line += f", median_rel_err={c['median_relative_error']:.1%}"
             print(line)
+
+    dp = metrics.get("delta_p", {})
+    if dp:
+        print(
+            f"Delta-p prediction ({dp['n_cases']} cases): "
+            f"median_rel_err={dp['relative_error_median']:.1%}, "
+            f"mean_rel_err={dp['relative_error_mean']:.1%}, "
+            f"p90_rel_err={dp['relative_error_p90']:.1%}, "
+            f"max_rel_err={dp['relative_error_max']:.1%}"
+        )
+        dp_worst = dp.get("worst_cases", [])
+        if dp_worst:
+            print("  Worst 5 delta-p cases:")
+            for c in dp_worst[:5]:
+                print(
+                    f"    {c['case']}: "
+                    f"gt={c['delta_p_gt']:.2f} Pa, "
+                    f"pred={c['delta_p_pred']:.2f} Pa, "
+                    f"rel_err={c['relative_error']:.1%}"
+                )
 
 
 def _serialize_norm_stats(norm_stats: dict[str, torch.Tensor] | None) -> dict[str, list[float]] | None:
@@ -413,7 +592,47 @@ def compute_val_loss(experiment: Experiment, val_loader: DataLoader) -> float:
             n += 1
     if n == 0:
         raise RuntimeError("Validation loader produced zero batches.")
-    return total / n
+    return total / n + float(experiment.validation_epoch_loss(val_loader))
+
+
+def _build_case_geometry(
+    ds,
+    device: torch.device,
+    *,
+    D_big: float = 0.2,
+    buffer_diams: float = 1.0,
+    rho: float = 1.0,
+    V_bulk: float = 1.0,
+) -> dict[int, dict[str, Any]]:
+    """Build per-case geometry dicts for the delta_p integral loss.
+
+    Returns a dict keyed by case index (in ``ds``) whose values contain
+    the normalised model input (``x_full``), raw geometry arrays, and
+    physical constants needed for trapezoidal integration of dp/dz.
+    """
+    case_geometry: dict[int, dict[str, Any]] = {}
+    for ci in range(len(ds._case_ids_unique)):
+        mask = ds._row_case_idx == ci
+        cm = ds._case_meta[ci]
+
+        # L_roi = throat_length + 2 * buffer (outer_height_m = 1.0)
+        L_roi = cm["Lr"] * 1.0 + 2.0 * buffer_diams * D_big
+
+        case_geometry[ci] = {
+            "x_full": ds._x[mask].to(device),
+            "z_hat": ds._raw_z_hat[mask].to(device) if ds._raw_z_hat is not None else None,
+            "d_local_over_D": (
+                ds._raw_d_local_over_D[mask].to(device)
+                if ds._raw_d_local_over_D is not None else None
+            ),
+            "n_stations": int(mask.sum()),
+            "L_roi": L_roi,
+            "D_big": D_big,
+            "delta_p_case": cm["delta_p_case"],
+            "rho": rho,
+            "V_bulk": V_bulk,
+        }
+    return case_geometry
 
 
 def train(cfg: dict | Any) -> dict[str, Any]:
@@ -450,6 +669,9 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
     if consistency_weight > 0:
         experiment_kwargs["consistency_weight"] = consistency_weight
+    delta_p_weight = float(training_cfg.get("delta_p_weight", 0.0))
+    if delta_p_weight > 0:
+        experiment_kwargs["delta_p_weight"] = delta_p_weight
     experiment = _build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
@@ -459,6 +681,8 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         device=device,
         **experiment_kwargs,
     )
+    if hasattr(dataset, "output_columns") and getattr(dataset, "output_columns", None):
+        experiment.alpha_d_target_name = str(dataset.output_columns[0])
 
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
     num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
@@ -507,6 +731,16 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         train_dataset = Subset(dataset, train_case_idx)
         val_dataset = Subset(dataset, val_case_idx) if use_early_stopping else None
 
+    # Build case geometry for the delta_p pressure-drop integral loss
+    if delta_p_weight > 0 and hasattr(train_dataset, "_case_meta"):
+        case_geometry = _build_case_geometry(train_dataset, device)
+        experiment.case_geometry = case_geometry
+        experiment.local_velocity_normalization = getattr(
+            train_dataset, "local_velocity_normalization", False
+        )
+        if val_dataset is not None and hasattr(val_dataset, "_case_meta"):
+            experiment.val_case_geometry = _build_case_geometry(val_dataset, device)
+
     epochs = int(training_cfg.get("epochs", 20))
     batch_size = int(training_cfg.get("batch_size", 4))
     num_workers = int(training_cfg.get("num_workers", 0))
@@ -542,9 +776,21 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     scheduler_name = str(training_cfg.get("lr_scheduler") or "")
     scheduler = None
     if scheduler_name == "cosine":
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=epochs, eta_min=1e-7
-        )
+        warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
+        if warmup_epochs > 0 and warmup_epochs < epochs:
+            warmup_sched = torch.optim.lr_scheduler.LinearLR(
+                optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
+            )
+            cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs - warmup_epochs, eta_min=1e-7
+            )
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_epochs]
+            )
+        else:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs, eta_min=1e-7
+            )
 
     model_name = str(model_cfg.get("name", "custom"))
     if adapter_name == "pointwise":
@@ -586,6 +832,10 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         avg_loss = running_loss / num_batches
         last_avg_loss = avg_loss
         experiment.on_epoch_end(int(epoch), avg_loss)
+
+        # Per-epoch pressure-drop integral loss step (separate gradient update)
+        if hasattr(experiment, "compute_delta_p_loss_step"):
+            experiment.compute_delta_p_loss_step()
 
         if scheduler is not None:
             scheduler.step()
@@ -650,6 +900,11 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "norm_stats": _serialize_norm_stats(getattr(dataset, "norm_stats", None)),
             "norm_fit_train_sims": [dataset.sim_names[i] for i in train_case_idx],
             "adapter": adapter_name,
+            "local_velocity_normalization": bool(
+                getattr(dataset, "local_velocity_normalization", False)
+            ),
+            "exclude_cases": getattr(dataset, "exclude_cases", []) or [],
+            "min_Dr": float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None,
         }
     else:
         data_meta = {
@@ -674,6 +929,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "loss": loss_name,
             "lr": lr,
             "lr_scheduler": scheduler_name or None,
+            "lr_warmup_epochs": int(training_cfg.get("lr_warmup_epochs", 0)),
             "seed": seed,
             "final_train_loss": float(last_avg_loss),
             "best_val_loss": float(best_val_loss) if use_early_stopping else None,
@@ -768,6 +1024,11 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             "output_columns": data_meta.get("output_columns"),
             "normalize": bool(data_meta.get("normalize", False)),
             "norm_stats": data_meta.get("norm_stats"),
+            "local_velocity_normalization": bool(
+                data_meta.get("local_velocity_normalization", False)
+            ),
+            "exclude_cases": data_meta.get("exclude_cases", []),
+            "min_Dr": data_meta.get("min_Dr"),
         }
     else:
         data_cfg = {
@@ -855,33 +1116,57 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             cat_preds, cat_targets, eval_dataset, output_fields,
         )
 
+        # Delta_p prediction error (integrated pressure drop)
+        local_vel_norm = bool(data_meta.get("local_velocity_normalization", False))
+        dp_metrics = _compute_delta_p_metrics(
+            model, eval_dataset, device,
+            alpha_d_target_name=str(output_fields[0]) if output_fields else "log_alpha_D",
+            local_velocity_normalization=local_vel_norm,
+        )
+        if dp_metrics:
+            extended_metrics["delta_p"] = dp_metrics
+
     plot_files: list[str] = []
     plot_dir_value = output_cfg.get("plot_dir")
     if plot_dir_value is not None:
-        if adapter.family != "grid":
-            raise ValueError(
-                "Plotting currently supports only grid adapters. "
-                f"Received adapter='{adapter.family}'."
-            )
-
-        plot_indices = resolve_plot_indices(
-            num_cases=len(eval_dataset),
-            raw_indices=output_cfg.get("plot_case_indices"),
-            max_cases=int(output_cfg.get("plot_max_cases", 3)),
-        )
-        plot_files = save_grid_prediction_plots(
-            model=model,
-            dataset=eval_dataset,
-            output_fields=output_fields,
-            device=device,
-            plot_dir=plot_dir_value,
-            plot_indices=plot_indices,
-            plot_cmap=str(output_cfg.get("plot_cmap", "viridis")),
-            plot_dpi=int(output_cfg.get("plot_dpi", 150)),
-            quiver_step=int(output_cfg.get("plot_quiver_step", 4)),
-            vel_x_field=str(output_cfg.get("plot_velocity_x_field", "vel_x")),
-            vel_y_field=str(output_cfg.get("plot_velocity_y_field", "vel_y")),
-        )
+        try:
+            if adapter.family == "grid":
+                plot_indices = resolve_plot_indices(
+                    num_cases=len(eval_dataset),
+                    raw_indices=output_cfg.get("plot_case_indices"),
+                    max_cases=int(output_cfg.get("plot_max_cases", 3)),
+                )
+                plot_files = save_grid_prediction_plots(
+                    model=model,
+                    dataset=eval_dataset,
+                    output_fields=output_fields,
+                    device=device,
+                    plot_dir=plot_dir_value,
+                    plot_indices=plot_indices,
+                    plot_cmap=str(output_cfg.get("plot_cmap", "viridis")),
+                    plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                    quiver_step=int(output_cfg.get("plot_quiver_step", 4)),
+                    vel_x_field=str(output_cfg.get("plot_velocity_x_field", "vel_x")),
+                    vel_y_field=str(output_cfg.get("plot_velocity_y_field", "vel_y")),
+                )
+            elif adapter.family == "pointwise":
+                plot_cases = select_best_worst_pointwise_cases(extended_metrics, output_fields)
+                plot_files = save_pointwise_profile_plots(
+                    model=model,
+                    dataset=eval_dataset,
+                    output_fields=output_fields,
+                    device=device,
+                    plot_dir=plot_dir_value,
+                    case_entries=plot_cases,
+                    plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                )
+            else:
+                raise ValueError(
+                    "Plotting currently supports only grid and pointwise adapters. "
+                    f"Received adapter='{adapter.family}'."
+                )
+        except ModuleNotFoundError as exc:
+            print(f"Skipping plot generation: {exc}")
 
     payload = {
         "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
@@ -933,9 +1218,8 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     if extended_metrics:
         _print_extended_metrics(extended_metrics)
 
-    metrics_out_value = output_cfg.get("metrics_out")
-    if metrics_out_value is not None:
-        metrics_out_path = _resolve_path(str(metrics_out_value))
+    metrics_out_path = _resolve_metrics_out_path(output_cfg, checkpoint_path)
+    if metrics_out_path is not None:
         metrics_out_path.parent.mkdir(parents=True, exist_ok=True)
         metrics_out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"Saved metrics JSON to {metrics_out_path}")

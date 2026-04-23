@@ -91,6 +91,24 @@ class TestTabularPairDataset:
         x, _ = ds[0]
         assert x.shape == (2,)
 
+    def test_engineered_log10_re_local_feature(self, synthetic_zarr_dir: Path) -> None:
+        from training.datasets_tabular import TabularPairDataset
+
+        ds = TabularPairDataset(
+            zarr_dir=synthetic_zarr_dir,
+            input_columns=["log10_Re_local"],
+        )
+
+        raw = TabularPairDataset(zarr_dir=synthetic_zarr_dir, normalize=False)
+        log10_re_idx = raw._all_feature_names.index("log10_Re")
+        d_over_d_idx = raw._all_feature_names.index("d_local_over_D")
+        expected = raw._x[0, log10_re_idx] - torch.log10(raw._x[0, d_over_d_idx])
+
+        assert ds.in_features == 1
+        x, _ = ds[0]
+        assert x.shape == (1,)
+        assert torch.allclose(x[0], expected)
+
     def test_subset_by_case_indices(self, synthetic_zarr_dir: Path) -> None:
         from training.datasets_tabular import TabularPairDataset
 
@@ -196,6 +214,47 @@ class TestPointwiseAdapter:
         )
         assert ds.normalize is True
         assert torch.is_tensor(ds.norm_stats["x_mean"])
+
+    def test_build_dataset_prefers_input_columns_file(self, synthetic_zarr_dir: Path, tmp_path: Path) -> None:
+        from training.adapters import PointwiseAdapter
+
+        cols_path = tmp_path / "selected_features.txt"
+        cols_path.write_text("Dr\nlog10_Re\n", encoding="utf-8")
+
+        adapter = PointwiseAdapter()
+        ds = adapter.build_dataset(
+            {
+                "zarr_dir": str(synthetic_zarr_dir),
+                "input_columns": ["log10_Re", "Dr", "Lr"],
+                "input_columns_file": str(cols_path),
+            }
+        )
+
+        assert ds.input_columns == ["Dr", "log10_Re"]
+        assert ds.in_features == 2
+
+
+class TestPointwisePlotSelection:
+    def test_select_best_worst_pointwise_cases(self) -> None:
+        from training.plotting import select_best_worst_pointwise_cases
+
+        extended = {
+            "best_cases": [
+                {"case": "case_best", "field": "log_alpha_D", "rmse": 0.1},
+                {"case": "case_best_other", "field": "other", "rmse": 0.2},
+            ],
+            "worst_cases": [
+                {"case": "case_worst", "field": "log_alpha_D", "rmse": 1.5},
+                {"case": "case_worst_other", "field": "other", "rmse": 2.0},
+            ],
+        }
+
+        selected = select_best_worst_pointwise_cases(extended, ["log_alpha_D"])
+
+        assert selected == [
+            {"label": "best", "case": "case_best", "field": "log_alpha_D", "rmse": 0.1, "median_relative_error": None},
+            {"label": "worst", "case": "case_worst", "field": "log_alpha_D", "rmse": 1.5, "median_relative_error": None},
+        ]
 
 
 # ---------------------------------------------------------------------------
