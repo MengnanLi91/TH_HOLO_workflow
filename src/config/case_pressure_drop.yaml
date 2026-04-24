@@ -1,0 +1,89 @@
+defaults:
+  - _self_
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  # Drop Dr=0.05 cases (only 2 exist, insufficient support for training/testing).
+  # Next discrete Dr value in the campaign is 0.144, so 0.1 is a safe cutoff.
+  min_Dr: 0.1
+  exclude_cases: []
+  split:
+    strategy: stratified
+    train_ratio: 0.8
+    seed: 42
+    n_bins: 3
+
+feature_selection:
+  enabled: true
+  candidate_features:
+    - Re
+    - log10_Re
+    - Dr
+    - Lr
+    - inv_Dr
+    - inv_Lr
+    - Re_times_Dr
+    - Re_times_Lr
+    - Dr_times_Lr
+  methods:
+    - f_regression
+    - mutual_info
+    - lasso
+    - random_forest_permutation
+    - rfecv_ridge
+    - sequential_ridge
+  top_k: 3
+  n_splits: 5
+  seed: 42
+  stability_min: 0.5
+  mutual_info_n_seeds: 10
+  # Skip a top-ranked feature if it can be predicted (CV R²) from the
+  # already-selected features at or above this threshold.  Uses KNN on
+  # rank-transformed features, so it catches both pairwise monotonic
+  # redundancy (Dr vs 1/Dr, Re vs log10_Re) and multivariate compositions
+  # (e.g. inv_Lr = Dr / Dr_times_Lr).  Set to 1.0 or null to disable.
+  redundancy_threshold: 0.95
+
+models:
+  cv:
+    n_splits: 5
+    seed: 42
+  linear_regression: {}
+  random_forest:
+    n_estimators: 400
+    max_depth: null
+    min_samples_leaf: 1
+    n_jobs: -1
+  mlp:
+    hidden_layer_sizes: [64, 64]
+    activation: relu
+    alpha: 1.0e-4
+    learning_rate_init: 1.0e-3
+    max_iter: 2000
+    early_stopping: true
+    validation_fraction: 0.15
+    n_iter_no_change: 30
+
+output:
+  # Resolve relative to src/ (the working directory for run/evaluate scripts)
+  # so artifacts land in the repo-level data/models/, matching data.zarr_dir.
+  root_dir: ../data/models
+  case_name: case_pressure_drop
+  case_dir: ${output.root_dir}/${output.case_name}
+  feature_selection_dir: ${output.case_dir}/feature_selection
+  model_dir: ${output.case_dir}/models
+  run_meta: ${output.case_dir}/run_meta.json
+  metrics_out: auto
+  table_out: auto
+  plot_dir: ${output.case_dir}/plots
+
+eval:
+  run_dir: null
+  run_meta: null
+  plot_dir: null
+  save_plots: true
+  save_table: true
+
+hydra:
+  job:
+    chdir: false

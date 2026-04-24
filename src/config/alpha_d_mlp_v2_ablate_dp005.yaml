@@ -1,8 +1,0 @@
-defaults:
-  - alpha_d_mlp_v2
-  - _self_
-
-training:
-  delta_p_weight: 0.05
-
-hpo: null

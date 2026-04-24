@@ -318,6 +318,11 @@ cd src && python train.py --config-name alpha_d_mlp hpo=null
 See [Hyperparameter Optimization Guide](hyperparameter_optimization.md)
 for details on search-space format, study settings, and output artifacts.
 
+Before training, use the
+[Case Distribution Analysis](case_distribution_analysis.md) tool to
+preview how much data you have in each ``Dr`` / ``Re`` / ``Lr`` bin --
+especially after applying ``min_Dr`` or ``exclude_cases`` filters.
+
 After running multiple HPO versions, use the
 [Version Comparison](version_comparison.md) tool to review training
 progress and compare evaluation metrics across versions.

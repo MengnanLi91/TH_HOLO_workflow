@@ -322,3 +322,7 @@ path is used.
 - After finishing an HPO run, use the
   [version comparison tool](version_comparison.md) to review progress
   and check for regressions across versions.
+- Before tuning ``data.min_Dr`` or ``data.exclude_cases``, preview the
+  resulting distribution with
+  [`analyze_case_distribution.py`](case_distribution_analysis.md) so
+  you don't accidentally drop bins below ``⚠ low`` support.

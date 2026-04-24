@@ -1,5 +1,0 @@
-defaults:
-  - alpha_d_mlp_signed
-  - _self_
-
-hpo: null
