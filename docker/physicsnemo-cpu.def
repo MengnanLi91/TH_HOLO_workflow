@@ -23,6 +23,7 @@ From: python:3.11-slim
         build-essential \
         libgl1 \
         libglib2.0-0 \
+        libgomp1 \
         && rm -rf /var/lib/apt/lists/*
 
     # Install uv
@@ -60,8 +61,10 @@ From: python:3.11-slim
         "optuna>=4.0" \
         "netCDF4" \
         "scipy" \
+        "scikit-learn>=1.4,<1.5" \
         "zarr" \
-        "pytest>=9.0"
+        "pytest>=9.0" \
+        "pycaret>=3.3"
     uv --native-tls pip install --system -e /workspace/physicsnemo-curator
 
 %runscript

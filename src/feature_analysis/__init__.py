@@ -13,6 +13,13 @@ from feature_analysis.data_loader import (
     load_feature_matrix,
 )
 from feature_analysis.manifest import build_manifest, write_manifest
+from feature_analysis.pycaret_selection import (
+    build_dataframe,
+    case_level_split,
+    enforce_allowlist,
+    run_pycaret_selection,
+    write_selected_features,
+)
 
 __all__ = [
     "ALLOWLIST",
@@ -21,4 +28,9 @@ __all__ = [
     "load_feature_matrix",
     "build_manifest",
     "write_manifest",
+    "build_dataframe",
+    "case_level_split",
+    "enforce_allowlist",
+    "run_pycaret_selection",
+    "write_selected_features",
 ]

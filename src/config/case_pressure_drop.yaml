@@ -15,6 +15,13 @@ data:
 
 feature_selection:
   enabled: true
+  # Selection backend.  "borda" runs the existing six-method sklearn
+  # ensemble with stability + multivariate-redundancy filtering.
+  # "pycaret" runs PyCaret regression setup() with the v1 lockdown
+  # (no polynomial_features / pca / group_features) and uses
+  # n_features_to_select=top_k.  Override via:
+  #   python run_case_pressure_drop.py feature_selection.method=pycaret
+  method: borda
   candidate_features:
     - Re
     - log10_Re
@@ -43,6 +50,17 @@ feature_selection:
   # redundancy (Dr vs 1/Dr, Re vs log10_Re) and multivariate compositions
   # (e.g. inv_Lr = Dr / Dr_times_Lr).  Set to 1.0 or null to disable.
   redundancy_threshold: 0.95
+  # PyCaret-specific settings (only consulted when method == "pycaret").
+  pycaret:
+    ranker: gbr
+    setup:
+      normalize: true
+      transformation: false
+      remove_multicollinearity: true
+      multicollinearity_threshold: 0.9
+      low_variance_threshold: 0.0
+      feature_selection: true
+      feature_selection_method: classic   # classic | univariate | sequential
 
 models:
   cv:

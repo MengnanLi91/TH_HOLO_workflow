@@ -543,21 +543,40 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
     model_dir.mkdir(parents=True, exist_ok=True)
 
     candidate_features = list(feature_cfg.get("candidate_features") or CANDIDATE_FEATURES)
+    fs_method = str(feature_cfg.get("method", "borda")).lower()
     if bool(feature_cfg.get("enabled", True)):
-        _rt = feature_cfg.get("redundancy_threshold", 0.95)
-        fs_result = run_feature_selection(
-            train_dataset,
-            feature_names=candidate_features,
-            methods=list(feature_cfg.get("methods") or []),
-            top_k=int(feature_cfg.get("top_k", 3)),
-            n_splits=int(feature_cfg.get("n_splits", 5)),
-            seed=int(feature_cfg.get("seed", 42)),
-            stability_min=float(feature_cfg.get("stability_min", 0.5)),
-            mutual_info_n_seeds=int(feature_cfg.get("mutual_info_n_seeds", 10)),
-            output_dir=feature_dir,
-            config=cfg_dict,
-            redundancy_threshold=float(_rt) if _rt is not None else None,
-        )
+        if fs_method == "pycaret":
+            from case_pressure_drop.pycaret_selection import run_pycaret_selection
+
+            fs_result = run_pycaret_selection(
+                train_dataset,
+                feature_names=candidate_features,
+                top_k=int(feature_cfg.get("top_k", 3)),
+                seed=int(feature_cfg.get("seed", 42)),
+                output_dir=feature_dir,
+                config=cfg_dict,
+                pycaret_cfg=feature_cfg.get("pycaret") or {},
+            )
+        elif fs_method == "borda":
+            _rt = feature_cfg.get("redundancy_threshold", 0.95)
+            fs_result = run_feature_selection(
+                train_dataset,
+                feature_names=candidate_features,
+                methods=list(feature_cfg.get("methods") or []),
+                top_k=int(feature_cfg.get("top_k", 3)),
+                n_splits=int(feature_cfg.get("n_splits", 5)),
+                seed=int(feature_cfg.get("seed", 42)),
+                stability_min=float(feature_cfg.get("stability_min", 0.5)),
+                mutual_info_n_seeds=int(feature_cfg.get("mutual_info_n_seeds", 10)),
+                output_dir=feature_dir,
+                config=cfg_dict,
+                redundancy_threshold=float(_rt) if _rt is not None else None,
+            )
+        else:
+            raise ValueError(
+                f"feature_selection.method={fs_method!r} not supported. "
+                "Use 'borda' or 'pycaret'."
+            )
         selected_features = list(fs_result.selected_features)
     else:
         selected_features = list(candidate_features)
@@ -610,6 +629,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
         },
         "feature_selection": {
             "enabled": bool(feature_cfg.get("enabled", True)),
+            "method": fs_method,
             "methods": list(feature_cfg.get("methods") or []),
             "top_k": int(feature_cfg.get("top_k", 3)),
             "n_splits": int(feature_cfg.get("n_splits", 5)),

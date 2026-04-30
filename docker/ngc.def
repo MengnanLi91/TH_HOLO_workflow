@@ -38,7 +38,9 @@ From: nvcr.io/nvidia/physicsnemo/physicsnemo:25.11
         --cert /etc/ssl/certs/ca-bundle.pem \
         netCDF4 \
         "optuna>=4.0" \
-        "pytest>=9.0"
+        "pytest>=9.0" \
+        "scikit-learn>=1.4,<1.5" \
+        "pycaret>=3.3"
 
     pip install --no-cache-dir \
         --cert /etc/ssl/certs/ca-bundle.pem \

@@ -1,0 +1,46 @@
+# PyCaret-based feature selection (v1, tabular / alpha_D only).
+#
+# Parallel to feature_analysis.yaml — PyCaret is an optional low-code
+# selection front-end; the sklearn path in run_feature_analysis.py remains
+# the rigorous baseline. The output selected_features.txt is drop-in
+# compatible with data.input_columns_file in src/config/alpha_d_mlp.yaml.
+#
+# Allowlist guard
+# ---------------
+# Features are loaded via feature_analysis.data_loader.load_feature_matrix,
+# which enforces the shared ALLOWLIST. The v1 runner also locks
+# polynomial_features / feature_interaction / pca / group_features off so
+# PyCaret cannot synthesize columns TabularPairDataset cannot reproduce.
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  target: log_alpha_D
+  local_velocity_normalization: true   # must match training config
+  min_Dr: 0.333
+  exclude_cases: []
+  selected_from_allowlist: null        # null = full ALLOWLIST
+
+output:
+  dir: ../data/feature_analysis/pycaret/default
+
+pycaret:
+  seed: 42
+  test_ratio: 0.2
+
+  # Ranker for feature_ranking.csv. Importance comes from this model's
+  # feature_importances_ (tree) or |coef_| (linear), recorded in
+  # pycaret_setup.json for reproducibility.
+  ranker: gbr
+
+  # Passed through to pycaret.regression.setup(). Locked keys
+  # (polynomial_features, feature_interaction, pca, group_features) will
+  # raise if set here.
+  setup:
+    normalize: true
+    transformation: false
+    remove_multicollinearity: true
+    multicollinearity_threshold: 0.9
+    low_variance_threshold: 0.0
+    feature_selection: true
+    feature_selection_method: classic    # classic | univariate | sequential
+    n_features_to_select: 6
