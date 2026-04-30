@@ -6,8 +6,6 @@ selected_features.txt contract). The full pipeline is covered by the
 smoke test guarded on ``pytest.importorskip("pycaret")``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest
@@ -16,7 +14,7 @@ np = pytest.importorskip("numpy")
 pd = pytest.importorskip("pandas")
 
 from feature_analysis import ALLOWLIST, FeatureAnalysisData
-from feature_analysis.pycaret_selection import (
+from feature_analysis.pycaret_selection import (  # noqa: E402
     build_dataframe,
     case_level_split,
     enforce_allowlist,

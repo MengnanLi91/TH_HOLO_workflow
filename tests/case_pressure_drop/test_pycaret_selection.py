@@ -3,9 +3,6 @@
 PyCaret itself is optional; the bridge tests don't import it. The full
 pipeline test is gated on ``pytest.importorskip('pycaret')``.
 """
-
-from __future__ import annotations
-
 import json
 import math
 from pathlib import Path
