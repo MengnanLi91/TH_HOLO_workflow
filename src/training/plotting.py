@@ -187,6 +187,15 @@ def save_pointwise_profile_plots(
             pred_case = model(x_case).detach().cpu()[:, 0]
             target_case = dataset._y[mask].detach().cpu()[:, 0]
 
+            # Re-add baseline so plots show full encoded-truth-equivalent values.
+            if (
+                getattr(dataset, "target_residual_baseline", False)
+                and getattr(dataset, "_baseline_encoded", None) is not None
+            ):
+                bl = dataset._baseline_encoded[mask][:, 0]
+                pred_case = pred_case + bl
+                target_case = target_case + bl
+
             z_hat = (
                 dataset._raw_z_hat[mask].detach().cpu()
                 if dataset._raw_z_hat is not None
@@ -216,6 +225,7 @@ def save_pointwise_profile_plots(
                     getattr(dataset, "local_velocity_normalization", False)
                 ),
             )
+            rmse_phys = float(np.sqrt(np.mean((pred_phys - target_phys) ** 2)))
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
             ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
@@ -233,7 +243,8 @@ def save_pointwise_profile_plots(
             rel = entry.get("median_relative_error")
             subtitle_parts: list[str] = []
             if rmse is not None:
-                subtitle_parts.append(f"RMSE={float(rmse):.3e}")
+                subtitle_parts.append(f"RMSE_encoded={float(rmse):.3e}")
+            subtitle_parts.append(f"RMSE_α_D={rmse_phys:.3e}")
             if rel is not None:
                 subtitle_parts.append(f"median_rel_err={float(rel):.1%}")
             if subtitle_parts:

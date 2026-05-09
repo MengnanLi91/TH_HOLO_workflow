@@ -109,14 +109,21 @@ def make_objective(
         if hasattr(train_ds, "output_columns") and getattr(train_ds, "output_columns", None):
             experiment.alpha_d_target_name = str(train_ds.output_columns[0])
 
-        # Inject case geometry for delta_p integral loss
+        # Inject case geometry for delta_p integral loss (training side)
         if delta_p_weight > 0 and hasattr(train_ds, "_case_meta"):
             experiment.case_geometry = _build_case_geometry(train_ds, device)
             experiment.local_velocity_normalization = getattr(
                 train_ds, "local_velocity_normalization", False
             )
-            if hasattr(val_ds, "_case_meta"):
-                experiment.val_case_geometry = _build_case_geometry(val_ds, device)
+
+        # Val-side Δp geometry: needed for the HPO objective's Δp term
+        # so a delta_p_weight=0 trial is still penalised for poor Δp.
+        delta_p_obj_weight = float(hpo_cfg["delta_p_objective_weight"])
+        if hasattr(experiment, "val_case_geometry") and hasattr(val_ds, "_case_meta"):
+            experiment.val_case_geometry = _build_case_geometry(val_ds, device)
+            experiment.local_velocity_normalization = getattr(
+                train_ds, "local_velocity_normalization", False
+            )
 
         # 5. Build DataLoaders
         epochs = int(training_cfg.get("epochs", 20))
@@ -174,6 +181,13 @@ def make_objective(
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-        return val_loss
+        # Combined HPO objective: encoded val loss + λ · val Δp metric.
+        # The Δp metric is mean squared log-Δp error on the val set,
+        # independent of training.delta_p_weight so trials at
+        # delta_p_weight=0 are still penalised for poor Δp.
+        val_dp_term = experiment.compute_val_delta_p_metric()
+        trial.set_user_attr("val_loss", float(val_loss))
+        trial.set_user_attr("val_delta_p_metric", float(val_dp_term))
+        return float(val_loss) + delta_p_obj_weight * val_dp_term
 
     return objective

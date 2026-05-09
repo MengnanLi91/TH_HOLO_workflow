@@ -286,17 +286,18 @@ def _stratified_split(
     seed: int,
     n_bins: int = 3,
 ) -> tuple[list[int], list[int]]:
-    """Stratified train/test split ensuring coverage across Re, Dr, Lr bins.
+    """Stratified train/test split over (Dr, Re) bins.
 
-    Each case is assigned to a composite bin based on the quantile of its
-    Re, Dr, and Lr values.  The split samples *train_ratio* from each bin
-    so that every region of parameter space is represented in both train
-    and test sets.
+    Each case is assigned to a composite bin from its quantile-binned Dr
+    and Re values, and *train_ratio* is sampled from each bin.  Stratifying
+    on (Dr, Re) ensures parameter-space corners (e.g. extreme Dr at low
+    Re) appear in both train and test.  Lr is intentionally not included
+    in the stratum key — adding it over-fragments small bins and weakens
+    coverage of the corners that actually drive prediction error.
     """
     parsed = [_parse_case_params(name) for name in sim_names]
     re_vals = [p["Re"] for p in parsed]
     dr_vals = [p["Dr"] for p in parsed]
-    lr_vals = [p["Lr"] for p in parsed]
 
     def _quantile_bin(values: list[float], n: int) -> list[int]:
         sorted_unique = sorted(set(values))
@@ -319,12 +320,11 @@ def _stratified_split(
 
     re_bins = _quantile_bin(re_vals, n_bins)
     dr_bins = _quantile_bin(dr_vals, n_bins)
-    lr_bins = _quantile_bin(lr_vals, n_bins)
 
-    # Composite bin key per case
-    bin_groups: dict[tuple[int, int, int], list[int]] = defaultdict(list)
+    # Composite bin key per case: (Dr, Re)
+    bin_groups: dict[tuple[int, int], list[int]] = defaultdict(list)
     for idx in range(len(sim_names)):
-        key = (re_bins[idx], dr_bins[idx], lr_bins[idx])
+        key = (dr_bins[idx], re_bins[idx])
         bin_groups[key].append(idx)
 
     rng = random.Random(seed)

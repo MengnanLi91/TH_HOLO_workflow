@@ -23,8 +23,13 @@ from feature_analysis.data_loader import (
     build_engineered_feature_map,
 )
 from training.alpha_d_targets import (
+    alpha_d_bulk_to_values,
     convert_alpha_d_values_between_bases,
     is_alpha_d_target,
+)
+from training.alpha_d_baseline import (
+    BaselineGeometry,
+    alpha_d_baseline_profile,
 )
 
 
@@ -74,6 +79,7 @@ class TabularPairDataset(Dataset):
         exclude_cases: list[str] | None = None,
         local_velocity_normalization: bool = False,
         min_Dr: float | None = None,
+        target_residual_baseline: bool = False,
     ):
         import json
 
@@ -137,11 +143,21 @@ class TabularPairDataset(Dataset):
                     self._tgt_idx = list(range(targets.shape[1]))
                     self.output_columns = list(raw_target_names)
 
-            # Per-case metadata for physics-informed losses
+            # Per-case metadata for physics-informed losses.  Geometry
+            # constants are written by the AlphaD ETL sink; older zarrs
+            # produced before that change fall back to the historical
+            # defaults (pipe_radius=0.1, outer_height=1.0, buffer=1.0,
+            # rho=1.0, V_bulk=1.0).
             case_meta_list.append({
                 "delta_p_case": float(meta.attrs.get("delta_p_case", 0.0)),
+                "Re": float(meta.attrs.get("Re", 0.0)),
                 "Lr": float(meta.attrs.get("Lr", 0.0)),
                 "Dr": float(meta.attrs.get("Dr", 0.0)),
+                "D_big": float(meta.attrs.get("D_big", 0.2)),
+                "outer_height_m": float(meta.attrs.get("outer_height_m", 1.0)),
+                "buffer_diams": float(meta.attrs.get("buffer_diams", 1.0)),
+                "rho": float(meta.attrs.get("rho", 1.0)),
+                "V_bulk": float(meta.attrs.get("V_bulk", 1.0)),
             })
 
             # Load ALL base features (derived columns need access to
@@ -202,6 +218,55 @@ class TabularPairDataset(Dataset):
                     ).astype(np.float32)
                     transformed_any = True
             self.local_velocity_normalization = transformed_any
+
+        # ----------------------------------------------------------
+        # Closed-form alpha_D residual target.  When enabled, replace
+        # the encoded target with (encoded_truth − encoded_baseline)
+        # and stash the per-row encoded baseline so callers can
+        # reconstruct the full encoded prediction at decode time.
+        # ----------------------------------------------------------
+        self._baseline_encoded: torch.Tensor | None = None
+        self.target_residual_baseline = False
+        if (
+            target_residual_baseline
+            and z_hat_col is not None
+            and d_over_D_col is not None
+            and any(is_alpha_d_target(c) for c in self.output_columns)
+        ):
+            d_over_D = full_x[:, d_over_D_col].astype(np.float64)
+            z_hat_all = full_x[:, z_hat_col].astype(np.float64)
+            baseline_encoded = np.zeros_like(full_y, dtype=np.float64)
+            row_offset = 0
+            for case_idx, n_rows in enumerate(rows_per_case):
+                cm = case_meta_list[case_idx]
+                geom = BaselineGeometry(
+                    Re=cm["Re"],
+                    Dr=cm["Dr"],
+                    Lr=cm["Lr"],
+                    D_big=cm["D_big"],
+                    outer_height_m=cm["outer_height_m"],
+                    buffer_diams=cm["buffer_diams"],
+                    rho=cm["rho"],
+                    V_bulk=cm["V_bulk"],
+                    n_stations=int(n_rows),
+                )
+                end = row_offset + n_rows
+                baseline_bulk = alpha_d_baseline_profile(z_hat_all[row_offset:end], geom)
+                d_local = d_over_D[row_offset:end]
+                for j, tgt_name in enumerate(self.output_columns):
+                    if is_alpha_d_target(tgt_name):
+                        baseline_encoded[row_offset:end, j] = alpha_d_bulk_to_values(
+                            baseline_bulk,
+                            target_name=tgt_name,
+                            d_over_D=d_local,
+                            local_velocity_normalization=self.local_velocity_normalization,
+                        )
+                row_offset = end
+            full_y = (full_y.astype(np.float64) - baseline_encoded).astype(np.float32)
+            self._baseline_encoded = torch.from_numpy(
+                baseline_encoded.astype(np.float32)
+            )
+            self.target_residual_baseline = True
 
         # Resolve input columns
         if input_columns is not None:
@@ -414,4 +479,34 @@ class TabularPairDataset(Dataset):
             [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]
         )
         new._case_idx_tensor = torch.from_numpy(new._row_case_idx).long()
+        new.target_residual_baseline = self.target_residual_baseline
+        new._baseline_encoded = (
+            self._baseline_encoded[mask] if self._baseline_encoded is not None else None
+        )
         return new
+
+    # ------------------------------------------------------------------
+    # Residual-target helpers
+    # ------------------------------------------------------------------
+
+    def add_baseline_to_encoded(
+        self,
+        encoded: torch.Tensor,
+        row_mask: np.ndarray | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Re-add the per-row encoded baseline to a residual-mode tensor.
+
+        When ``target_residual_baseline`` is False this is a no-op so
+        callers can use it unconditionally at decode boundaries.
+        """
+        if not self.target_residual_baseline or self._baseline_encoded is None:
+            return encoded
+        bl = self._baseline_encoded
+        if row_mask is not None:
+            if isinstance(row_mask, np.ndarray):
+                row_mask = torch.as_tensor(row_mask)
+            bl = bl[row_mask]
+        # Allow callers to pass a 1-D field-slice; broadcast accordingly.
+        if encoded.dim() == 1 and bl.dim() == 2 and bl.shape[1] == 1:
+            bl = bl.squeeze(-1)
+        return encoded + bl.to(encoded.dtype).to(encoded.device)

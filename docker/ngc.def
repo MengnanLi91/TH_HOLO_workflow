@@ -33,18 +33,24 @@ From: nvcr.io/nvidia/physicsnemo/physicsnemo:25.11
     export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.pem
     export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-bundle.pem
 
-    # PhysicsNeMo, PyTorch, hydra-core, omegaconf, zarr, scipy are pre-installed
+    # PhysicsNeMo, PyTorch, hydra-core, omegaconf, zarr, scipy are pre-installed.
+    # Install physicsnemo-curator first; one of its deps (lasso-python) pulls
+    # pandas to >=2.2, which breaks pycaret's pandas<2.2 pin. Installing pycaret
+    # last lets its constraint downgrade pandas to a compatible version.
     pip install --no-cache-dir \
         --cert /etc/ssl/certs/ca-bundle.pem \
         netCDF4 \
         "optuna>=4.0" \
         "pytest>=9.0" \
-        "scikit-learn>=1.4,<1.5" \
-        "pycaret>=3.3"
+        "scikit-learn>=1.4,<1.5"
 
     pip install --no-cache-dir \
         --cert /etc/ssl/certs/ca-bundle.pem \
         -e /workspace/physicsnemo-curator
+
+    pip install --no-cache-dir \
+        --cert /etc/ssl/certs/ca-bundle.pem \
+        "pycaret>=3.3"
 
 %runscript
     exec bash "$@"

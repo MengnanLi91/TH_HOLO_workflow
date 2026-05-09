@@ -260,6 +260,23 @@ class AlphaDExperiment(Experiment):
             return 0.0
         return float((self.delta_p_weight * mean_loss).detach().cpu())
 
+    def compute_val_delta_p_metric(self) -> float:
+        """Mean squared log-Δp error on the validation set.
+
+        Independent of ``delta_p_weight`` so HPO can use it as an
+        objective-side metric (compare a ``delta_p_weight=0`` trial
+        fairly against a non-zero one).  Returns 0.0 if no validation
+        geometry has been registered.
+        """
+        if not self.val_case_geometry:
+            return 0.0
+        self.model.eval()
+        with torch.no_grad():
+            mean_loss = self._mean_delta_p_loss(self.val_case_geometry)
+        if mean_loss is None:
+            return 0.0
+        return float(mean_loss.detach().cpu())
+
     def _single_case_dp_loss(
         self,
         pred_case: torch.Tensor,
@@ -283,6 +300,11 @@ class AlphaDExperiment(Experiment):
 
         d_over_D = geo["d_local_over_D"]  # [n_stations], already on device
         D_big = geo["D_big"]
+
+        baseline_encoded = geo.get("baseline_encoded")
+        if baseline_encoded is not None:
+            bl = baseline_encoded[:, 0] if baseline_encoded.dim() == 2 else baseline_encoded
+            pred_values = pred_values + bl.to(pred_values.dtype).to(pred_values.device)
 
         alpha_D_bulk = alpha_d_values_to_bulk(
             pred_values,

@@ -90,6 +90,66 @@ For each case:
         attrs: case_id, feature_names, target_names, Re, Dr, Lr, delta_p_case
 ```
 
+### Feature reference
+
+The per-station feature row written by `AlphaDTransformation` and the
+engineered features synthesized at load time by
+`feature_analysis/data_loader.py::build_engineered_feature_map`.
+
+Notation:
+- `Re_global = ρ V_bulk D / μ` is the case-level Reynolds number
+  (`V_bulk = ρ = 1` in the simulation, so `μ = D / Re_global`).
+- `D` is the outer pipe diameter; `d_local(z)` is the local diameter,
+  equal to `D` upstream/downstream and `Dr × D` inside the throat.
+- `D_h_local = d_local` for the axisymmetric circular cross-section.
+- `V_local(z)` is the area-mean axial velocity (`vel_z`) at axial
+  station `z`, area-weighted with `r` over the cross-section to match
+  the pressure averaging.
+
+#### Base features (written by ETL into each case's Zarr)
+
+| Feature | Expression / definition | Per-row varying? | Source |
+|---|---|---|---|
+| `log10_Re` | `log10(Re_global)` | case-level | `case_metadata.txt` |
+| `Dr` | `d_throat / D` | case-level | `case_metadata.txt` |
+| `Lr` | `inner_height / outer_height` | case-level | `case_metadata.txt` |
+| `z_hat` | `(z − z_roi_start) / (z_roi_end − z_roi_start)` | local | Geometry, ∈ [0, 1] across ROI |
+| `d_local_over_D` | `d_local(z) / D` | local | Geometry (abrupt model: `D` outside throat, `Dr·D` inside) |
+| `A_local_over_A` | `(d_local / D)²` | local | Identity for circular cross-section |
+| `V_local_over_V_bulk` | `<vel_z(z)>_A / V_bulk` | local | MOOSE `vel_z` element field, station-binned with `r`-weighted average |
+| `is_upstream` | `1` if `z < z_throat_start` else `0` | local | One-hot region flag |
+| `is_throat` | `1` if `z_throat_start ≤ z ≤ z_throat_end` else `0` | local | One-hot region flag |
+| `is_downstream` | `1` if `z > z_throat_end` else `0` | local | One-hot region flag |
+
+#### Engineered features (synthesized at load time, opt-in)
+
+These are only emitted when the caller passes their names via
+`selected_from_allowlist`. They are pure functions of base features so
+`TabularPairDataset` can reproduce them at training time without any
+extra storage.
+
+| Feature | Expression | Per-row varying? | Notes |
+|---|---|---|---|
+| `log10_Re_throat` | `log10_Re − log10(Dr)` | case-level | Re scaled by throat diameter |
+| `log10_Re_local` | `log10_Re + log10(V_local/V_bulk) + log10(d_local/D)` | local | Local Re using local V, local D, constant ν per case |
+| `inv_Dr` | `1 / Dr` | case-level | |
+| `Dr_times_Lr` | `Dr × Lr` | case-level | |
+| `z_hat_times_Dr` | `z_hat × Dr` | local | |
+| `z_hat_times_Lr` | `z_hat × Lr` | local | |
+| `dist_to_throat_start` | `z_hat − z_throat_start_hat` | local | Signed |
+| `dist_to_throat_end` | `z_hat − z_throat_end_hat` | local | Signed |
+| `dist_to_nearest_step` | `min(\|dist_to_throat_start\|, \|dist_to_throat_end\|)` | local | Unsigned |
+
+In ideal incompressible flow `V_local/V_bulk` equals `1/A_local_over_A`
+exactly, so `log10_Re_local` would algebraically reduce to
+`log10_Re − log10(d_local/D)`. The simulation-derived `V_local` lets
+this term carry any deviation between the as-computed velocity and the
+round-pipe identity (e.g., near separation regions).
+
+`delta_p_case` (total ROI pressure drop) is stored in `metadata/` for
+reference but is intentionally **excluded** from the allowlist — it is
+target-adjacent and would leak.
+
 ### Verify extraction
 
 ```bash
@@ -113,11 +173,11 @@ print('target_names:', json.loads(meta.attrs['target_names']))
 Expected output:
 ```
 features shape: (50, 10)
-targets shape: (50, 1)
+targets shape: (50, 2)
 case_id: Re_5000__Dr_0p144__Lr_0p01
 Re: 5000.0
-feature_names: ['log10_Re', 'Dr', 'Lr', 'z_hat', 'd_local_over_D', 'is_upstream', 'is_contraction', 'is_throat', 'is_expansion', 'is_downstream']
-target_names: ['log_alpha_D']
+feature_names: ['log10_Re', 'Dr', 'Lr', 'z_hat', 'd_local_over_D', 'A_local_over_A', 'V_local_over_V_bulk', 'is_upstream', 'is_throat', 'is_downstream']
+target_names: ['log_alpha_D', 'signed_log1p_alpha_D']
 ```
 
 ### ETL configuration reference
@@ -286,6 +346,39 @@ docker compose run --rm etl bash -lc 'cd src && python train.py --config-name al
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
   eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
 ```
+
+### Apptainer (HPC) equivalent
+
+On systems without Docker, use the pre-built `th-holo-gpu.sif` at the repo root
+(or build one yourself per
+[Getting Started → Build a SIF image](getting_started.md#step-2-build-a-sif-image)).
+Add `--nv` for GPU; drop it for CPU-only. Replace `/path/to/project` with the
+absolute path to your repo checkout (or set `APPTAINER_BIND` once and omit
+`--bind`).
+
+```bash
+# 1. Extract alpha_D profiles (CPU is fine for ETL — drop --nv)
+apptainer exec --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+  bash -lc 'cd /path/to/project/src && python run_alpha_d_etl.py'
+
+# 2. Train (HPO + retrain best)
+apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+  bash -lc 'cd /path/to/project/src && python train.py --config-name alpha_d_mlp'
+
+# 2b. Train directly without HPO
+apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+  bash -lc 'cd /path/to/project/src && python train.py --config-name alpha_d_mlp hpo=null'
+
+# 3. Evaluate
+apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+  bash -lc 'cd /path/to/project/src && python evaluate.py --config-name alpha_d_mlp \
+    eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
+```
+
+`th-holo-gpu.sif` (built from `docker/gpu.def`) ships PyTorch CUDA 12.4 wheels +
+PhysicsNeMo and matches the `etl-gpu` Docker service; it runs CPU-only without
+`--nv`. For a smaller CPU-only image, build `th-holo-cpu.sif` from
+`docker/physicsnemo-cpu.def`.
 
 ## Architecture notes
 

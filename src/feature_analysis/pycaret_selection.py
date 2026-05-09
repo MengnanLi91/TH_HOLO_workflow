@@ -155,7 +155,12 @@ def _extract_ranking(exp, ranker_id: str) -> list[dict[str, Any]]:
     ``|coef_|`` for linear models. Falls back to an unranked list if the
     estimator exposes neither.
     """
-    model = exp.create_model(ranker_id, verbose=False)
+    # cross_validation=False fits the ranker once on the full train set
+    # instead of running k-fold CV. We only consume feature_importances_ /
+    # |coef_|, so CV-validated metrics are wasted compute (typically ~10x
+    # slowdown on sklearn GBR with default fold=10). verbose=True surfaces
+    # PyCaret's tqdm progress bar for the single fit.
+    model = exp.create_model(ranker_id, cross_validation=False, verbose=True)
     X_train = exp.get_config("X_train_transformed")
     names = [str(c) for c in X_train.columns if c != _CASE_ID_COL]
 

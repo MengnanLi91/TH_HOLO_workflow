@@ -77,3 +77,11 @@ class Experiment:
 
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)
+
+    def compute_val_delta_p_metric(self) -> float:
+        """HPO-side Δp metric (mean squared log-Δp error on val).
+
+        Default no-op for experiments without a Δp integral.  Override in
+        Δp-aware subclasses (e.g. ``AlphaDExperiment``).
+        """
+        return 0.0

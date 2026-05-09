@@ -237,6 +237,9 @@ class PointwiseAdapter(ModelAdapter):
                 data_cfg.get("local_velocity_normalization", False)
             ),
             min_Dr=_opt_float("min_Dr"),
+            target_residual_baseline=bool(
+                data_cfg.get("target_residual_baseline", False)
+            ),
         )
 
     def dataset_info(self, dataset) -> dict:

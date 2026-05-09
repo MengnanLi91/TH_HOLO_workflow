@@ -92,5 +92,10 @@ class AlphaDZarrSink(DataSource):
         meta.attrs["Dr"] = data.get("Dr", 0.0)
         meta.attrs["Lr"] = data.get("Lr", 0.0)
         meta.attrs["delta_p_case"] = data.get("delta_p_case", 0.0)
+        # Geometry constants used by the delta_p integration in eval.
+        # Older zarrs may lack these; consumers should fall back to defaults.
+        for key in ("D_big", "outer_height_m", "buffer_diams", "rho", "V_bulk"):
+            if key in data:
+                meta.attrs[key] = float(data[key])
 
         self.logger.info("  Wrote %d stations to %s", data["features"].shape[0], output_path)

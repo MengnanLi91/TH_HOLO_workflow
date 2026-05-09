@@ -92,7 +92,9 @@ From: python:3.11-slim
     # Install PhysicsNeMo without overwriting the CUDA PyTorch above.
     uv --native-tls pip install --system --no-deps "nvidia-physicsnemo"
 
-    # Remaining project dependencies.
+    # Remaining project dependencies. s3fs is a PhysicsNeMo runtime dep
+    # imported eagerly in physicsnemo/core/filesystem.py; the --no-deps
+    # install above skips it, so add it explicitly here.
     uv --native-tls pip install --system \
         "hydra-core>=1.3" \
         "omegaconf>=2.3" \
@@ -102,7 +104,8 @@ From: python:3.11-slim
         "scikit-learn>=1.4,<1.5" \
         "zarr" \
         "pytest>=9.0" \
-        "pycaret>=3.3"
+        "pycaret>=3.3" \
+        "s3fs"
 
     uv --native-tls pip install --system -e /workspace/physicsnemo-curator
 

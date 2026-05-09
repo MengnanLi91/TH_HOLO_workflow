@@ -83,6 +83,7 @@ def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
         "z_hat",
         "d_local_over_D",
         "A_local_over_A",
+        "V_local_over_V_bulk",
         "is_upstream",
         "is_throat",
         "is_downstream",
@@ -97,6 +98,7 @@ def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
             z_hat,
             d_over_D,
             d_over_D ** 2,
+            1.0 / (d_over_D ** 2),  # V_local/V_bulk = 1/A_local_over_A
             np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
             np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32),
             np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float32),

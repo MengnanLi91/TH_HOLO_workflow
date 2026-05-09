@@ -12,7 +12,10 @@ torch = pytest.importorskip("torch")
 zarr = pytest.importorskip("zarr")
 optuna = pytest.importorskip("optuna")
 
-FEATURE_NAMES = ["log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D", "is_throat"]
+FEATURE_NAMES = [
+    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
+    "V_local_over_V_bulk", "is_throat",
+]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 10
 ROWS_PER_CASE = 20
@@ -177,7 +180,10 @@ class TestObjective:
         objective = make_objective(
             base_cfg=base_cfg,
             search_space={},  # No search space -- use base config as-is
-            hpo_cfg={"validation": {"split_ratio": 0.25, "seed": 42}},
+            hpo_cfg={
+                "validation": {"split_ratio": 0.25, "seed": 42},
+                "delta_p_objective_weight": 0.0,
+            },
             prepared=prepared,
             train_inner_idx=train_inner,
             val_idx=val_idx,

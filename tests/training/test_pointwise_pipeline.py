@@ -18,7 +18,10 @@ zarr = pytest.importorskip("zarr")
 # Fixture: synthetic Zarr dataset with 10 cases, 20 rows each
 # ---------------------------------------------------------------------------
 
-FEATURE_NAMES = ["log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D", "is_throat"]
+FEATURE_NAMES = [
+    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
+    "V_local_over_V_bulk", "is_throat",
+]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 10
 ROWS_PER_CASE = 20
@@ -99,10 +102,18 @@ class TestTabularPairDataset:
             input_columns=["log10_Re_local"],
         )
 
+        # log10_Re_local = log10_Re + log10(V_local/V_bulk) + log10(d_local/D)
+        # using local V (from the simulation field) and local D, with
+        # nu_molecular constant per case.
         raw = TabularPairDataset(zarr_dir=synthetic_zarr_dir, normalize=False)
         log10_re_idx = raw._all_feature_names.index("log10_Re")
         d_over_d_idx = raw._all_feature_names.index("d_local_over_D")
-        expected = raw._x[0, log10_re_idx] - torch.log10(raw._x[0, d_over_d_idx])
+        v_over_v_idx = raw._all_feature_names.index("V_local_over_V_bulk")
+        expected = (
+            raw._x[0, log10_re_idx]
+            + torch.log10(torch.abs(raw._x[0, v_over_v_idx]).clamp(min=1e-12))
+            + torch.log10(raw._x[0, d_over_d_idx].clamp(min=1e-12))
+        )
 
         assert ds.in_features == 1
         x, _ = ds[0]

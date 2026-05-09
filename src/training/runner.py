@@ -195,18 +195,15 @@ def _compute_delta_p_metrics(
     *,
     alpha_d_target_name: str = "log_alpha_D",
     local_velocity_normalization: bool = False,
-    D_big: float = 0.2,
-    buffer_diams: float = 1.0,
-    rho: float = 1.0,
-    V_bulk: float = 1.0,
 ) -> dict[str, Any]:
     """Compute per-case delta_p prediction error statistics.
 
     Integrates the predicted alpha_D profile via the trapezoidal rule to
     obtain ``delta_p_pred``, then compares with the ground-truth
-    ``delta_p_case`` stored in the zarr metadata.
-
-    Returns a dict with overall and per-case statistics.
+    ``delta_p_case`` stored in the zarr metadata.  Per-case geometry
+    constants (``D_big``, ``outer_height_m``, ``buffer_diams``, ``rho``,
+    ``V_bulk``) are read from each case's metadata and fall back to the
+    historical AlphaD-ETL defaults when missing.
     """
     if not is_alpha_d_target(alpha_d_target_name):
         return {}
@@ -216,6 +213,8 @@ def _compute_delta_p_metrics(
     row_case_idx = getattr(eval_dataset, "_row_case_idx", None)
     raw_z_hat = getattr(eval_dataset, "_raw_z_hat", None)
     raw_d_over_D = getattr(eval_dataset, "_raw_d_local_over_D", None)
+    residual_mode = bool(getattr(eval_dataset, "target_residual_baseline", False))
+    baseline_encoded = getattr(eval_dataset, "_baseline_encoded", None)
 
     if case_meta is None or case_names is None or row_case_idx is None:
         return {}
@@ -232,12 +231,21 @@ def _compute_delta_p_metrics(
             if delta_p_gt <= 0:
                 continue
 
+            D_big = float(cm.get("D_big", 0.2))
+            outer_height_m = float(cm.get("outer_height_m", 1.0))
+            buffer_diams = float(cm.get("buffer_diams", 1.0))
+            rho = float(cm.get("rho", 1.0))
+            V_bulk = float(cm.get("V_bulk", 1.0))
+
             mask = row_case_idx == ci
             x_full = eval_dataset._x[mask].to(device)
             z_hat = raw_z_hat[mask].to(device)
             d_over_D = raw_d_over_D[mask].to(device)
 
             pred_values = model(x_full).squeeze(-1)  # [n_stations]
+            if residual_mode and baseline_encoded is not None:
+                bl = baseline_encoded[mask, 0].to(pred_values.device).to(pred_values.dtype)
+                pred_values = pred_values + bl
             alpha_D_bulk = alpha_d_values_to_bulk(
                 pred_values,
                 target_name=alpha_d_target_name,
@@ -250,7 +258,7 @@ def _compute_delta_p_metrics(
             dp_dz = alpha_D_bulk * rho * V_bulk ** 2 / (2.0 * D_h)
 
             # Trapezoidal integration over physical z
-            L_roi = cm["Lr"] * 1.0 + 2.0 * buffer_diams * D_big
+            L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
             z_physical = z_hat * L_roi
             delta_p_pred = float(torch.trapezoid(dp_dz, z_physical).cpu())
 
@@ -300,6 +308,24 @@ def _compute_pointwise_extended_metrics(
     metrics: dict[str, Any] = {}
     raw_d_over_D = getattr(dataset, "_raw_d_local_over_D", None)
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
+    residual_mode = bool(getattr(dataset, "target_residual_baseline", False))
+    baseline_encoded = getattr(dataset, "_baseline_encoded", None)
+
+    def _has_physical_inverse(name: str) -> bool:
+        return (
+            is_alpha_d_target(name)
+            or name.startswith("log_")
+            or name.startswith("log10_")
+        )
+
+    def _add_baseline(values: torch.Tensor, field_idx: int, mask=None) -> torch.Tensor:
+        """Re-add the encoded baseline so callers see encoded-truth-equivalent values."""
+        if not residual_mode or baseline_encoded is None:
+            return values
+        bl = baseline_encoded[:, field_idx]
+        if mask is not None:
+            bl = bl[mask]
+        return values + bl.to(values.dtype).to(values.device)
 
     # ------------------------------------------------------------------
     # Overall R², MAE per output field
@@ -313,25 +339,35 @@ def _compute_pointwise_extended_metrics(
         mae = float((p - t).abs().mean())
         entry: dict[str, Any] = {"name": name, "r2": r2, "mae": mae}
 
-        # Physical-space relative error for log-transformed outputs
-        if name.startswith("log_") or name.startswith("log10_"):
+        # Physical-space relative error for fields with a known inverse
+        # (alpha_D-family targets, plus generic log_/log10_ prefixed fields).
+        if _has_physical_inverse(name):
             d_over_D = raw_d_over_D if is_alpha_d_target(name) else None
+            p_full = _add_baseline(p, i)
+            t_full = _add_baseline(t, i)
             p_phys = field_values_to_physical(
-                p,
+                p_full,
                 field_name=name,
                 d_over_D=d_over_D,
                 local_velocity_normalization=local_vel_norm,
             )
             t_phys = field_values_to_physical(
-                t,
+                t_full,
                 field_name=name,
                 d_over_D=d_over_D,
                 local_velocity_normalization=local_vel_norm,
             )
             rel_err = ((p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)).abs()
             entry["physical_median_relative_error"] = float(rel_err.median())
-            entry["physical_mean_relative_error"] = float(rel_err.mean())
             entry["physical_p90_relative_error"] = float(rel_err.quantile(0.9))
+            # Log-space magnitude error: robust to near-zero truth, geometric in scale.
+            log_abs_err = (
+                p_phys.abs().clamp(min=1e-8).log()
+                - t_phys.abs().clamp(min=1e-8).log()
+            ).abs()
+            entry["physical_log_abs_error_median"] = float(log_abs_err.median())
+            entry["physical_log_abs_error_mean"] = float(log_abs_err.mean())
+            entry["physical_log_abs_error_p90"] = float(log_abs_err.quantile(0.9))
 
         per_field_extended.append(entry)
     metrics["per_field"] = per_field_extended
@@ -366,18 +402,20 @@ def _compute_pointwise_extended_metrics(
                 r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
                 rmse = float(((p - t) ** 2).mean().sqrt())
                 field_metrics: dict[str, Any] = {"r2": r2, "rmse": rmse}
-                if field_name.startswith("log_") or field_name.startswith("log10_"):
+                if _has_physical_inverse(field_name):
                     d_over_D = raw_d_over_D[mask] if (
                         raw_d_over_D is not None and is_alpha_d_target(field_name)
                     ) else None
+                    p_full = _add_baseline(p, i, mask=mask)
+                    t_full = _add_baseline(t, i, mask=mask)
                     p_phys = field_values_to_physical(
-                        p,
+                        p_full,
                         field_name=field_name,
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
                     )
                     t_phys = field_values_to_physical(
-                        t,
+                        t_full,
                         field_name=field_name,
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
@@ -406,18 +444,20 @@ def _compute_pointwise_extended_metrics(
                 p, t = preds[mask, i], targets[mask, i]
                 case_rmse = float(((p - t) ** 2).mean().sqrt())
                 entry = {"case": case_name, "field": field_name, "rmse": case_rmse}
-                if field_name.startswith("log_") or field_name.startswith("log10_"):
+                if _has_physical_inverse(field_name):
                     d_over_D = raw_d_over_D[mask] if (
                         raw_d_over_D is not None and is_alpha_d_target(field_name)
                     ) else None
+                    p_full = _add_baseline(p, i, mask=mask)
+                    t_full = _add_baseline(t, i, mask=mask)
                     p_phys = field_values_to_physical(
-                        p,
+                        p_full,
                         field_name=field_name,
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
                     )
                     t_phys = field_values_to_physical(
-                        t,
+                        t_full,
                         field_name=field_name,
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
@@ -438,11 +478,18 @@ def _print_extended_metrics(metrics: dict[str, Any]) -> None:
     """Print a human-readable summary of extended metrics."""
     for entry in metrics.get("per_field", []):
         parts = [f"  {entry['name']}: R²={entry['r2']:.4f}, MAE={entry['mae']:.4e}"]
+        if "physical_log_abs_error_median" in entry:
+            line = (
+                f"  {entry['name']} log_abs_err: "
+                f"median={entry['physical_log_abs_error_median']:.3f}, "
+                f"mean={entry['physical_log_abs_error_mean']:.3f}, "
+                f"p90={entry['physical_log_abs_error_p90']:.3f}"
+            )
+            print(line)
         if "physical_median_relative_error" in entry:
             parts.append(
                 f"    physical relative error: "
                 f"median={entry['physical_median_relative_error']:.1%}, "
-                f"mean={entry['physical_mean_relative_error']:.1%}, "
                 f"p90={entry['physical_p90_relative_error']:.1%}"
             )
         print("\n".join(parts))
@@ -598,26 +645,30 @@ def compute_val_loss(experiment: Experiment, val_loader: DataLoader) -> float:
 def _build_case_geometry(
     ds,
     device: torch.device,
-    *,
-    D_big: float = 0.2,
-    buffer_diams: float = 1.0,
-    rho: float = 1.0,
-    V_bulk: float = 1.0,
 ) -> dict[int, dict[str, Any]]:
     """Build per-case geometry dicts for the delta_p integral loss.
 
     Returns a dict keyed by case index (in ``ds``) whose values contain
     the normalised model input (``x_full``), raw geometry arrays, and
     physical constants needed for trapezoidal integration of dp/dz.
+
+    Geometry constants come from each case's metadata; older zarrs
+    without them fall back to the historical AlphaD-ETL defaults.
     """
     case_geometry: dict[int, dict[str, Any]] = {}
     for ci in range(len(ds._case_ids_unique)):
         mask = ds._row_case_idx == ci
         cm = ds._case_meta[ci]
 
-        # L_roi = throat_length + 2 * buffer (outer_height_m = 1.0)
-        L_roi = cm["Lr"] * 1.0 + 2.0 * buffer_diams * D_big
+        D_big = float(cm.get("D_big", 0.2))
+        outer_height_m = float(cm.get("outer_height_m", 1.0))
+        buffer_diams = float(cm.get("buffer_diams", 1.0))
+        rho = float(cm.get("rho", 1.0))
+        V_bulk = float(cm.get("V_bulk", 1.0))
 
+        L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
+
+        baseline_encoded = getattr(ds, "_baseline_encoded", None)
         case_geometry[ci] = {
             "x_full": ds._x[mask].to(device),
             "z_hat": ds._raw_z_hat[mask].to(device) if ds._raw_z_hat is not None else None,
@@ -631,6 +682,10 @@ def _build_case_geometry(
             "delta_p_case": cm["delta_p_case"],
             "rho": rho,
             "V_bulk": V_bulk,
+            "baseline_encoded": (
+                baseline_encoded[mask].to(device)
+                if baseline_encoded is not None else None
+            ),
         }
     return case_geometry
 
@@ -903,6 +958,9 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "local_velocity_normalization": bool(
                 getattr(dataset, "local_velocity_normalization", False)
             ),
+            "target_residual_baseline": bool(
+                getattr(dataset, "target_residual_baseline", False)
+            ),
             "exclude_cases": getattr(dataset, "exclude_cases", []) or [],
             "min_Dr": float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None,
         }
@@ -1065,7 +1123,10 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         collate_fn=adapter.collate_fn(),
     )
 
-    module_cls = import_physicsnemo_attr("physicsnemo.core.module", "Module")
+    # PhysicsNeMo re-exports Module at the top level. NGC physicsnemo:25.11
+    # dropped the legacy `physicsnemo.core.module` path; the top-level export
+    # works in both NGC and the vendored submodule.
+    module_cls = import_physicsnemo_attr("physicsnemo", "Module")
     model = module_cls.from_checkpoint(str(checkpoint_path)).to(device)
 
     loss_name = str(run_meta.get("training", {}).get("loss", "mse"))

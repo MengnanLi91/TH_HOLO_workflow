@@ -30,7 +30,6 @@ from training.alpha_d_targets import (
     is_alpha_d_target,
 )
 
-
 BASE_ALLOWLIST: tuple[str, ...] = (
     "log10_Re",
     "Dr",
@@ -38,9 +37,7 @@ BASE_ALLOWLIST: tuple[str, ...] = (
     "z_hat",
     "d_local_over_D",
     "A_local_over_A",
-    "is_upstream",
-    "is_throat",
-    "is_downstream",
+    "V_local_over_V_bulk",
 )
 
 ENGINEERED_FEATURES: tuple[str, ...] = (
@@ -65,12 +62,12 @@ GROUPED_FEATURES: dict[str, tuple[str, ...]] = {
 
 @dataclass
 class FeatureAnalysisData:
-    X: np.ndarray            # [N, D] float32
-    y: np.ndarray            # [N] float32
-    groups: np.ndarray       # [N] int32, case index
+    X: np.ndarray  # [N, D] float32
+    y: np.ndarray  # [N] float32
+    groups: np.ndarray  # [N] int32, case index
     feature_names: list[str]
     target_name: str
-    case_ids: list[str]      # len == n_cases
+    case_ids: list[str]  # len == n_cases
     rows_per_case: list[int]
     local_velocity_normalization: bool
 
@@ -129,6 +126,10 @@ def build_engineered_feature_map(
         features[:, feat_map["d_local_over_D"]].astype(np.float64),
         1e-12,
     )
+    V_local_over_V_bulk = np.maximum(
+        np.abs(features[:, feat_map["V_local_over_V_bulk"]].astype(np.float64)),
+        1e-12,
+    )
 
     # Locate throat interfaces from one-hot region flags directly.
     throat_mask = features[:, feat_map["is_throat"]].astype(np.float64) > 0.5
@@ -147,9 +148,16 @@ def build_engineered_feature_map(
         np.abs(dist_to_throat_end),
     )
 
+    # Re_local = V_local * D_h_local / nu_molecular, with D_h_local = d_local
+    # for circular cross-section and nu_molecular = D / Re_global per case
+    # (V_bulk = rho = 1 in the simulation). This evaluates to
+    #   Re_global * (V_local / V_bulk) * (d_local / D)
+    # so log10 Re_local = log10_Re + log10(V_local/V_bulk) + log10(d_local/D).
     return {
         "log10_Re_throat": (log10_Re - np.log10(Dr)).astype(np.float32),
-        "log10_Re_local": (log10_Re - np.log10(d_local_over_D)).astype(np.float32),
+        "log10_Re_local": (
+            log10_Re + np.log10(V_local_over_V_bulk) + np.log10(d_local_over_D)
+        ).astype(np.float32),
         "inv_Dr": (1.0 / Dr).astype(np.float32),
         "Dr_times_Lr": (Dr * Lr).astype(np.float32),
         "z_hat_times_Dr": (z_hat * Dr).astype(np.float32),
@@ -251,7 +259,9 @@ def load_feature_matrix(
         row_cols: list[np.ndarray] = []
         for name in feat_cols:
             if name in raw_feature_names:
-                row_cols.append(features[:, raw_feature_names.index(name)].astype(np.float32))
+                row_cols.append(
+                    features[:, raw_feature_names.index(name)].astype(np.float32)
+                )
             else:
                 row_cols.append(engineered[name])
         x_chunks.append(np.column_stack(row_cols).astype(np.float32))

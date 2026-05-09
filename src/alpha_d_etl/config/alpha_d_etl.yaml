@@ -18,6 +18,10 @@ etl:
     mesh_scale: 1.0
     exodus_filename: simulation_out.e
 
+  data:
+    input_columns: null            # ignored when input_columns_file is set
+    input_columns_file: ../data/feature_analysis/pycaret/default/selected_features.txt
+
   transformations:
     alpha_d_transform:
       _target_: alpha_d_etl.transform.AlphaDTransformation

@@ -143,8 +143,15 @@ class AlphaDTransformation(DataTransformation):
             return None
         p_idx = field_names.index("pressure")
 
+        # --- Identify axial velocity field (vel_z is the streamwise component) ---
+        if "vel_z" not in field_names:
+            logger.warning("Skipping %s: no 'vel_z' field found.", case_name)
+            return None
+        vz_idx = field_names.index("vel_z")
+
         # Use last time step (converged steady state)
         pressure = fields[-1, :, p_idx]  # [E]
+        vel_z = fields[-1, :, vz_idx]    # [E]
 
         # --- Select ROI elements ---
         roi_mask = (elem_z >= z_roi_start) & (elem_z <= z_roi_end)
@@ -168,6 +175,7 @@ class AlphaDTransformation(DataTransformation):
         elem_r = np.sqrt(elem_centroids[:, 0]**2 + elem_centroids[:, 1]**2)
 
         p_avg = np.zeros(self.n_stations, dtype=np.float64)
+        vz_avg = np.zeros(self.n_stations, dtype=np.float64)
         counts = np.zeros(self.n_stations, dtype=np.int32)
 
         for s in range(self.n_stations):
@@ -178,11 +186,13 @@ class AlphaDTransformation(DataTransformation):
             r_weights = elem_r[mask]
             r_weights = np.maximum(r_weights, 1e-12)  # avoid zero
             p_avg[s] = np.average(pressure[mask], weights=r_weights)
+            vz_avg[s] = np.average(vel_z[mask], weights=r_weights)
             counts[s] = mask.sum()
 
         # Handle last bin edge
         if counts[-1] == 0 and counts[-2] > 0:
             p_avg[-1] = p_avg[-2]
+            vz_avg[-1] = vz_avg[-2]
             counts[-1] = 1
 
         # Skip if too many empty stations
@@ -194,6 +204,7 @@ class AlphaDTransformation(DataTransformation):
         # Interpolate missing stations
         if not valid.all():
             p_avg[~valid] = np.interp(station_z[~valid], station_z[valid], p_avg[valid])
+            vz_avg[~valid] = np.interp(station_z[~valid], station_z[valid], vz_avg[valid])
 
         # --- Compute pressure gradient dP/dz ---
         dz = station_z[1] - station_z[0]
@@ -217,11 +228,29 @@ class AlphaDTransformation(DataTransformation):
         z_hat = (station_z - z_roi_start) / (z_roi_end - z_roi_start)
         d_local_over_D = D_local / D_big
         A_local_over_A = (D_local / D_big) ** 2  # area ratio
-        regions = _region_flags(
-            z_hat,
-            (z_throat_start - z_roi_start) / (z_roi_end - z_roi_start),
-            (z_throat_end - z_roi_start) / (z_roi_end - z_roi_start),
-        )
+        # Area-mean axial velocity normalized by inlet bulk velocity. In ideal
+        # incompressible flow this equals 1 / A_local_over_A; here we expose
+        # the simulation-derived value so the model gets the as-computed
+        # quantity rather than relying on the round-pipe identity.
+        V_local_over_V_bulk = vz_avg / V_bulk
+
+        z_throat_start_norm = (z_throat_start - z_roi_start) / (z_roi_end - z_roi_start)
+        z_throat_end_norm = (z_throat_end - z_roi_start) / (z_roi_end - z_roi_start)
+        regions = _region_flags(z_hat, z_throat_start_norm, z_throat_end_norm)
+
+        # Neighbour / structural features.  Pointwise MLP can't see the
+        # contraction shape from local features alone; these expose
+        # geometry context so it doesn't have to.
+        #   dD_dz_local: spike at the contraction edges (np.gradient of a
+        #     piecewise-constant signal is non-zero only at the jumps).
+        #   dist_to_throat_*: signed distance to throat entry / exit in
+        #     z_hat units.  Negative upstream of the entry, 0 at the
+        #     boundary, positive on the other side; the model can use
+        #     these to localise its prediction relative to the
+        #     separation / reattachment regions.
+        dD_dz_local = np.gradient(d_local_over_D, z_hat)
+        dist_to_throat_start = z_hat - z_throat_start_norm
+        dist_to_throat_end = z_throat_end_norm - z_hat
 
         # --- Encode targets ---
         # Keep the historical positive-only log target for backward
@@ -240,7 +269,9 @@ class AlphaDTransformation(DataTransformation):
 
         feature_names = [
             "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-            "A_local_over_A", "is_upstream", "is_throat", "is_downstream",
+            "A_local_over_A", "V_local_over_V_bulk",
+            "is_upstream", "is_throat", "is_downstream",
+            "dD_dz_local", "dist_to_throat_start", "dist_to_throat_end",
         ]
         target_names = ["log_alpha_D", "signed_log1p_alpha_D"]
 
@@ -252,10 +283,14 @@ class AlphaDTransformation(DataTransformation):
             z_hat.astype(np.float32),
             d_local_over_D.astype(np.float32),
             A_local_over_A.astype(np.float32),
+            V_local_over_V_bulk.astype(np.float32),
             regions["is_upstream"],
             regions["is_throat"],
             regions["is_downstream"],
-        ])  # [n_out, 9]
+            dD_dz_local.astype(np.float32),
+            dist_to_throat_start.astype(np.float32),
+            dist_to_throat_end.astype(np.float32),
+        ])  # [n_out, 13]
 
         targets = np.column_stack([log_alpha_D, signed_log1p_alpha_D]).astype(np.float32)
 
@@ -279,4 +314,10 @@ class AlphaDTransformation(DataTransformation):
             "Re": Re,
             "Dr": Dr,
             "Lr": Lr,
+            # Geometry constants needed to reconstruct the ROI in eval.
+            "D_big": D_big,
+            "outer_height_m": outer_height_m,
+            "buffer_diams": float(self.buffer_diams),
+            "rho": float(self.rho),
+            "V_bulk": V_bulk,
         }
