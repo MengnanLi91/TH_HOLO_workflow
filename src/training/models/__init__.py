@@ -15,9 +15,14 @@ class ModelEntry:
 MODEL_REGISTRY: dict[str, ModelEntry] = {}
 
 
+_VALID_ADAPTERS = ("grid", "graph", "pointwise", "profile")
+
+
 def register_model(name: str, build_fn: Callable, adapter: str) -> None:
-    if adapter not in {"grid", "graph", "pointwise"}:
-        raise ValueError(f"adapter must be 'grid', 'graph', or 'pointwise', got '{adapter}'.")
+    if adapter not in _VALID_ADAPTERS:
+        raise ValueError(
+            f"adapter must be one of {_VALID_ADAPTERS}, got '{adapter}'."
+        )
     if name in MODEL_REGISTRY:
         raise ValueError(f"Model '{name}' is already registered.")
     MODEL_REGISTRY[name] = ModelEntry(build_fn=build_fn, adapter=adapter)
@@ -74,11 +79,11 @@ def get_build_fn_and_adapter(model_cfg: dict) -> tuple[Callable, str]:
         if not adapter_name:
             raise ValueError(
                 "model.adapter is required when using model.entrypoint. "
-                "Set model.adapter to 'grid', 'graph', or 'pointwise'."
+                f"Set model.adapter to one of {_VALID_ADAPTERS}."
             )
-        if adapter_name not in {"grid", "graph", "pointwise"}:
+        if adapter_name not in _VALID_ADAPTERS:
             raise ValueError(
-                f"model.adapter must be 'grid', 'graph', or 'pointwise', got '{adapter_name}'."
+                f"model.adapter must be one of {_VALID_ADAPTERS}, got '{adapter_name}'."
             )
         return build_fn, adapter_name
 
@@ -115,6 +120,7 @@ def _load_builtins() -> None:
         "training.models.meshgraphnet",
         "training.models.mlp",
         "training.models.pix2pix",
+        "training.models.conv1d_profile",
     )
     for module_name in builtin_modules:
         importlib.import_module(module_name)

@@ -946,7 +946,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         split_meta["train_file"] = str(_resolve_path(str(split_cfg["train_file"])))
         split_meta["test_file"] = str(_resolve_path(str(split_cfg["test_file"])))
 
-    if adapter_name == "pointwise":
+    if hasattr(dataset, "input_columns"):
         data_meta = {
             "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
             "input_columns": list(dataset.input_columns),
@@ -1075,7 +1075,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     if not data_meta:
         raise ValueError(f"run_meta at {run_meta_path} is missing 'data' section.")
 
-    if adapter_name == "pointwise":
+    if "input_columns" in data_meta:
         data_cfg = {
             "zarr_dir": data_meta["zarr_dir"],
             "input_columns": data_meta.get("input_columns"),

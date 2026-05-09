@@ -310,10 +310,122 @@ class PointwiseAdapter(ModelAdapter):
         return field_se, num_samples
 
 
+class ProfileAdapter(ModelAdapter):
+    """Adapter for per-case profile (1D-conv) models.
+
+    Datasets emit per-case ``(x, y, w, case_idx)`` items shaped
+    ``[C, S]``, ``[O, S]``, ``[1, S]``, scalar. After default collation
+    the batch is ``[B, C, S]``, ``[B, O, S]``, ``[B, 1, S]``, ``[B]``.
+
+    The 4-tuple from :meth:`forward_train` is consumed by
+    :class:`AlphaDExperiment.training_step` exactly as the pointwise
+    adapter's 4-tuple is.
+    """
+
+    family = "profile"
+
+    def build_dataset(self, data_cfg: dict):
+        from training.datasets_profile import AlphaDProfileDataset
+
+        norm_from_case_indices = data_cfg.get("norm_from_case_indices")
+        if norm_from_case_indices is not None:
+            norm_from_case_indices = [int(i) for i in norm_from_case_indices]
+
+        if data_cfg.get("input_columns_file") is not None:
+            cols_path = Path(str(data_cfg["input_columns_file"]))
+            if not cols_path.exists():
+                raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
+            input_columns = [
+                line.strip() for line in cols_path.read_text().splitlines()
+                if line.strip()
+            ]
+            if not input_columns:
+                raise ValueError(f"input_columns_file is empty: {cols_path}")
+        else:
+            input_columns = parse_field_list(data_cfg.get("input_columns"))
+
+        def _opt_float(key: str) -> float | None:
+            v = data_cfg.get(key)
+            return float(v) if v is not None else None
+
+        exclude_cases = data_cfg.get("exclude_cases")
+        if exclude_cases is not None:
+            exclude_cases = [str(c) for c in exclude_cases]
+
+        return AlphaDProfileDataset(
+            zarr_dir=data_cfg["zarr_dir"],
+            input_columns=input_columns,
+            output_columns=parse_field_list(data_cfg.get("output_columns")),
+            normalize=bool(data_cfg.get("normalize", False)),
+            norm_stats=data_cfg.get("norm_stats"),
+            norm_from_case_indices=norm_from_case_indices,
+            throat_weight=_opt_float("throat_weight"),
+            downstream_weight=_opt_float("downstream_weight"),
+            include_case_idx=bool(data_cfg.get("include_case_idx", False)),
+            exclude_cases=exclude_cases,
+            local_velocity_normalization=bool(
+                data_cfg.get("local_velocity_normalization", False)
+            ),
+            min_Dr=_opt_float("min_Dr"),
+            target_residual_baseline=bool(
+                data_cfg.get("target_residual_baseline", False)
+            ),
+        )
+
+    def dataset_info(self, dataset) -> dict:
+        x, _, _, _ = dataset[0]
+        return {
+            "in_channels": dataset.in_features,
+            "out_channels": dataset.out_features,
+            "n_stations": int(x.shape[-1]),
+        }
+
+    def build_batch(self, raw_batch, device: torch.device):
+        pin_memory = device.type == "cuda"
+        x, y, w, cidx = raw_batch
+        return (
+            x.to(device, non_blocking=pin_memory),
+            y.to(device, non_blocking=pin_memory),
+            w.to(device, non_blocking=pin_memory),
+            cidx.to(device, non_blocking=pin_memory),
+        )
+
+    def forward_train(self, model, batch):
+        x, y, w, cidx = batch
+        pred = model(x)
+        return pred, y, w, cidx
+
+    def forward_eval(self, model, batch):
+        x, y = batch[0], batch[1]
+        pred = model(x)
+        return pred, y
+
+    def accumulate_metrics(
+        self,
+        batch,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+    ) -> tuple[torch.Tensor, int]:
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"Prediction shape {tuple(pred.shape)} does not match "
+                f"target shape {tuple(target.shape)}."
+            )
+        if pred.ndim != 3:
+            raise ValueError(
+                f"Profile predictions must have shape [B, O, S], got {tuple(pred.shape)}."
+            )
+        squared = (pred - target) ** 2
+        field_se = squared.sum(dim=(0, 2))
+        num_samples = int(pred.shape[0] * pred.shape[2])
+        return field_se, num_samples
+
+
 ADAPTER_REGISTRY = {
     "grid": GridAdapter,
     "graph": GraphAdapter,
     "pointwise": PointwiseAdapter,
+    "profile": ProfileAdapter,
 }
 
 

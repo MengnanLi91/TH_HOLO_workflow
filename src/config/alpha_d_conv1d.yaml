@@ -1,0 +1,70 @@
+defaults:
+  - default
+  - _self_
+
+model:
+  name: conv1d_profile
+  params:
+    hidden_channels: 64
+    num_blocks: 4
+    kernel_size: 5
+    dilations: [1, 2, 4, 1]
+    dropout: 0.05
+
+data:
+  zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  input_columns:
+    - log10_Re
+    - Dr
+    - Lr
+    - z_hat
+    - d_local_over_D
+    - V_local_over_V_bulk
+    - is_upstream
+    - is_throat
+    - is_downstream
+    - dD_dz_local
+    - dist_to_throat_start
+    - dist_to_throat_end
+  output_columns: [signed_log1p_alpha_D]
+  normalize: true
+  target_residual_baseline: true
+  local_velocity_normalization: true
+  include_case_idx: true
+  throat_weight: 1.0
+  downstream_weight: 1.0
+  min_Dr: 0.333
+  exclude_cases: []
+  split:
+    strategy: stratified
+    train_ratio: 0.8
+    seed: 42
+    n_bins: 3
+
+training:
+  epochs: 500
+  batch_size: 32
+  num_workers: 4
+  lr: 3.0e-4
+  seed: 42
+  device: auto
+  loss: relative_l2
+  weight_decay: 1.0e-5
+  lr_scheduler: cosine
+  lr_warmup_epochs: 10
+  experiment: training.experiments.alpha_d:AlphaDExperiment
+  consistency_weight: 0.0
+  delta_p_weight: 0.0
+  early_stopping:
+    patience: 30
+    val_ratio: 0.15
+
+eval:
+  checkpoint: ${output.checkpoint}
+  run_meta: null
+  batch_size: 8
+  num_workers: 0
+  device: auto
+  experiment: null
+
+hpo: null
