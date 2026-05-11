@@ -10,8 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
-from case_pressure_drop.pycaret_selection import (
+from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
+from cases.case_pressure_drop.pycaret_selection import (
     build_dataframe,
     enforce_candidate_set,
 )
@@ -144,7 +144,7 @@ def test_enforce_candidate_set_rejects_out_of_pool():
 
 def test_workflow_dispatch_rejects_unknown_method(synthetic_case_dataset: Path) -> None:
     """Workflow should raise when feature_selection.method is unknown."""
-    from case_pressure_drop.workflow import train_case_pressure_drop
+    from cases.case_pressure_drop.workflow import train_case_pressure_drop
 
     cfg = {
         "data": {"zarr_dir": str(synthetic_case_dataset)},

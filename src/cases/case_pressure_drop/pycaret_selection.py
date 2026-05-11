@@ -29,8 +29,8 @@ from typing import Any
 
 import numpy as np
 
-from case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
-from case_pressure_drop.feature_selection import SelectionResult
+from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
+from cases.case_pressure_drop.feature_selection import SelectionResult
 from feature_analysis.manifest import build_manifest, write_manifest
 
 

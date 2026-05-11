@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from case_pressure_drop.data import CasePressureDropDataset
+from cases.case_pressure_drop.data import CasePressureDropDataset
 from feature_analysis.manifest import build_manifest, write_manifest
 
 

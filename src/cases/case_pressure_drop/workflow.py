@@ -5,16 +5,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
-from case_pressure_drop.feature_selection import run_feature_selection
-from case_pressure_drop.modeling import (
+from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
+from cases.case_pressure_drop.feature_selection import run_feature_selection
+from cases.case_pressure_drop.modeling import (
     compute_metrics,
     cross_validate_models,
     fit_and_save_models,
     inverse_transform_target,
     load_saved_model,
 )
-from case_pressure_drop.plotting import save_prediction_plots
+from cases.case_pressure_drop.plotting import save_prediction_plots
 
 
 def to_plain_dict(cfg: Any) -> dict[str, Any]:
@@ -546,7 +546,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
     fs_method = str(feature_cfg.get("method", "borda")).lower()
     if bool(feature_cfg.get("enabled", True)):
         if fs_method == "pycaret":
-            from case_pressure_drop.pycaret_selection import run_pycaret_selection
+            from cases.case_pressure_drop.pycaret_selection import run_pycaret_selection
 
             fs_result = run_pycaret_selection(
                 train_dataset,

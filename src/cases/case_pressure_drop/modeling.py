@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from case_pressure_drop.data import CasePressureDropDataset
+from cases.case_pressure_drop.data import CasePressureDropDataset
 
 
 def _require_sklearn() -> None:

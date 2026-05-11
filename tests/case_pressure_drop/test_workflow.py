@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
-from case_pressure_drop.workflow import split_case_indices
+from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
+from cases.case_pressure_drop.workflow import split_case_indices
 
 SKLEARN_AVAILABLE = importlib.util.find_spec("sklearn") is not None
 JOBLIB_AVAILABLE = importlib.util.find_spec("joblib") is not None
@@ -121,7 +121,7 @@ def test_feature_selection_uses_only_train_cases(
     synthetic_case_dataset: Path,
     tmp_path: Path,
 ) -> None:
-    from case_pressure_drop.feature_selection import run_feature_selection
+    from cases.case_pressure_drop.feature_selection import run_feature_selection
 
     dataset = CasePressureDropDataset.from_zarr_dir(synthetic_case_dataset)
     train_idx, test_idx, train_sims, test_sims = split_case_indices(
@@ -156,7 +156,7 @@ def test_training_and_evaluation_smoke(
     synthetic_case_dataset: Path,
     tmp_path: Path,
 ) -> None:
-    from case_pressure_drop.workflow import (
+    from cases.case_pressure_drop.workflow import (
         evaluate_case_pressure_drop,
         train_case_pressure_drop,
     )

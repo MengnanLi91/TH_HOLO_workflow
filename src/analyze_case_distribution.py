@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from case_pressure_drop.distribution import (
+from cases.case_pressure_drop.distribution import (
     AXES,
     load_sim_names_from_zarr,
     load_split_from_run_meta,

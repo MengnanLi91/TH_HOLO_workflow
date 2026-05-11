@@ -6,12 +6,12 @@ import sys
 import hydra
 from omegaconf import DictConfig
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from case_pressure_drop.workflow import evaluate_case_pressure_drop
+from cases.case_pressure_drop.workflow import evaluate_case_pressure_drop
 
 
-@hydra.main(version_base="1.3", config_path="config", config_name="case_pressure_drop")
+@hydra.main(version_base="1.3", config_path="configs", config_name="case_pressure_drop")
 def main(cfg: DictConfig) -> None:
     evaluate_case_pressure_drop(cfg)
 
