@@ -13,7 +13,7 @@ from feature_analysis.manifest import build_manifest, write_manifest
 
 def _require_sklearn() -> None:
     try:
-        import sklearn  # noqa: F401
+        import sklearn
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
             "scikit-learn is required for case-level feature selection."
