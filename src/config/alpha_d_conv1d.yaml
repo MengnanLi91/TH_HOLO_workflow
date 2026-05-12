@@ -13,6 +13,10 @@ model:
 
 data:
   zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  # ProfileAdapter is case-agnostic; the case's build_dataset constructs
+  # AlphaDProfileDataset (which default-injects engineered features and the
+  # residual target_transform).
+  dataset_entrypoint: cases.alpha_d.datasets.profile:build_dataset
   input_columns:
     - log10_Re
     - Dr

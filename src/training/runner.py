@@ -530,6 +530,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
                 getattr(dataset, "local_velocity_normalization", False)
             ),
             "target_transform": data_cfg.get("target_transform"),
+            "dataset_entrypoint": data_cfg.get("dataset_entrypoint"),
             "exclude_cases": getattr(dataset, "exclude_cases", []) or [],
             "min_Dr": float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None,
         }
@@ -655,6 +656,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                 data_meta.get("local_velocity_normalization", False)
             ),
             "target_transform": data_meta.get("target_transform"),
+            "dataset_entrypoint": data_meta.get("dataset_entrypoint"),
             "exclude_cases": data_meta.get("exclude_cases", []),
             "min_Dr": data_meta.get("min_Dr"),
         }
