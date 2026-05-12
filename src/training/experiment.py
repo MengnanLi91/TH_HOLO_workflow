@@ -1,6 +1,7 @@
 """Experiment abstraction for optional custom training/eval steps."""
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 
@@ -85,3 +86,27 @@ class Experiment:
         Δp-aware subclasses (e.g. ``AlphaDExperiment``).
         """
         return 0.0
+
+    def compute_extended_metrics(
+        self,
+        eval_dataset,
+        all_preds: list[torch.Tensor],
+        all_targets: list[torch.Tensor],
+    ) -> dict[str, Any]:
+        """Per-experiment extended evaluation metrics.
+
+        Receives per-batch CPU tensor lists (uncatted because graph adapters
+        have variable shapes) and the eval dataset. Subclasses concatenate
+        as needed and produce a metrics dict the runner merges into the
+        ``extended`` block of the metrics JSON. Default: empty.
+        """
+        _ = (eval_dataset, all_preds, all_targets)
+        return {}
+
+    def print_extended_metrics(self, metrics: dict[str, Any]) -> None:
+        """Pretty-print the dict returned by ``compute_extended_metrics``.
+
+        Default: no-op (the generic runner already prints overall + per-field
+        MSE/RMSE). Subclasses override to format case-specific blocks.
+        """
+        _ = metrics

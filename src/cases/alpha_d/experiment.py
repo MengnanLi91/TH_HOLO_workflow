@@ -16,6 +16,7 @@ Usage -- set in the YAML config::
 """
 
 import math
+from typing import Any
 
 import torch
 
@@ -327,3 +328,55 @@ class AlphaDExperiment(Experiment):
         log_pred = torch.log(delta_p_pred.clamp(min=1e-8))
         log_gt = math.log(max(delta_p_gt, 1e-8))
         return (log_pred - log_gt) ** 2
+
+    # ------------------------------------------------------------------
+    # Phase 2a evaluation hooks
+    # ------------------------------------------------------------------
+
+    def compute_extended_metrics(
+        self,
+        eval_dataset,
+        all_preds: list[torch.Tensor],
+        all_targets: list[torch.Tensor],
+    ) -> dict[str, Any]:
+        """Pointwise + Δp metrics for the alpha-D adapter.
+
+        Requires a TabularPairDataset / AlphaDProfileDataset (gated by
+        ``_row_case_idx``). Other adapters fall through to ``{}``.
+        """
+        from cases.alpha_d.metrics import (
+            compute_delta_p_metrics,
+            compute_pointwise_extended_metrics,
+        )
+
+        if not hasattr(eval_dataset, "_row_case_idx"):
+            return {}
+
+        output_fields = list(getattr(eval_dataset, "output_columns", []))
+        if not output_fields:
+            return {}
+
+        cat_preds = torch.cat(all_preds, dim=0)
+        cat_targets = torch.cat(all_targets, dim=0)
+
+        metrics = compute_pointwise_extended_metrics(
+            cat_preds, cat_targets, eval_dataset, output_fields,
+        )
+
+        local_vel_norm = bool(
+            getattr(eval_dataset, "local_velocity_normalization", False)
+        )
+        dp_metrics = compute_delta_p_metrics(
+            self.model,
+            eval_dataset,
+            self.device,
+            alpha_d_target_name=str(output_fields[0]),
+            local_velocity_normalization=local_vel_norm,
+        )
+        if dp_metrics:
+            metrics["delta_p"] = dp_metrics
+        return metrics
+
+    def print_extended_metrics(self, metrics: dict[str, Any]) -> None:
+        from cases.alpha_d.metrics import print_extended_metrics as _print
+        _print(metrics)
