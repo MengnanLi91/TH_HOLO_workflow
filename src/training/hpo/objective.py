@@ -12,7 +12,6 @@ from training.hpo.search_space import apply_overrides, sample_from_search_space
 from training.losses import get_loss_fn
 from training.models import get_build_fn_and_adapter
 from training.runner import (
-    _build_case_geometry,
     build_experiment,
     compute_val_loss,
     set_seed,
@@ -106,24 +105,11 @@ def make_objective(
             device=device,
             **experiment_kwargs,
         )
-        if hasattr(train_ds, "output_columns") and getattr(train_ds, "output_columns", None):
-            experiment.alpha_d_target_name = str(train_ds.output_columns[0])
+        experiment.prepare_for_training(train_ds, val_ds, device)
 
-        # Inject case geometry for delta_p integral loss (training side)
-        if delta_p_weight > 0 and hasattr(train_ds, "_case_meta"):
-            experiment.case_geometry = _build_case_geometry(train_ds, device)
-            experiment.local_velocity_normalization = getattr(
-                train_ds, "local_velocity_normalization", False
-            )
-
-        # Val-side Δp geometry: needed for the HPO objective's Δp term
-        # so a delta_p_weight=0 trial is still penalised for poor Δp.
+        # Val-side Δp objective weight: still needed for HPO scoring even
+        # when delta_p_weight=0 trains without the Δp gradient step.
         delta_p_obj_weight = float(hpo_cfg["delta_p_objective_weight"])
-        if hasattr(experiment, "val_case_geometry") and hasattr(val_ds, "_case_meta"):
-            experiment.val_case_geometry = _build_case_geometry(val_ds, device)
-            experiment.local_velocity_normalization = getattr(
-                train_ds, "local_velocity_normalization", False
-            )
 
         # 5. Build DataLoaders
         epochs = int(training_cfg.get("epochs", 20))
@@ -171,8 +157,7 @@ def make_objective(
         val_loss = float("nan")
         for epoch in range(1, epochs + 1):
             train_one_epoch(experiment, train_loader)
-            if hasattr(experiment, "compute_delta_p_loss_step"):
-                experiment.compute_delta_p_loss_step()
+            experiment.on_epoch_end_extra_step()
             if scheduler is not None:
                 scheduler.step()
             val_loss = compute_val_loss(experiment, val_loader)

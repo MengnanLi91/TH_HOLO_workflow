@@ -40,3 +40,18 @@ def test_print_extended_metrics_default_is_noop(capsys: pytest.CaptureFixture) -
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+def test_prepare_for_training_default_is_noop() -> None:
+    exp = _make_experiment()
+    result = exp.prepare_for_training(
+        train_dataset=object(),
+        val_dataset=None,
+        device=torch.device("cpu"),
+    )
+    assert result is None
+
+
+def test_on_epoch_end_extra_step_default_is_noop() -> None:
+    exp = _make_experiment()
+    assert exp.on_epoch_end_extra_step() is None

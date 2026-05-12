@@ -127,3 +127,26 @@ class Experiment:
         """
         _ = (values, dataset, field_name, mask)
         return None
+
+    def prepare_for_training(
+        self,
+        train_dataset,
+        val_dataset,
+        device: torch.device,
+    ) -> None:
+        """Bind dataset-derived state onto the experiment before training.
+
+        Called once after datasets are subsetted but before the training loop.
+        Case experiments override to capture per-case geometry, target names,
+        normalisation statistics, etc. that the generic core would otherwise
+        have to read by name. Default: no-op.
+        """
+        _ = (train_dataset, val_dataset, device)
+
+    def on_epoch_end_extra_step(self) -> None:
+        """Optional extra gradient step run once per epoch.
+
+        Case experiments override to apply secondary objectives that aren't
+        well-expressed as per-batch losses (e.g. integral-of-profile losses
+        that need a full case at a time). Default: no-op.
+        """

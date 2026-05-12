@@ -381,6 +381,100 @@ class AlphaDExperiment(Experiment):
         from cases.alpha_d.metrics import print_extended_metrics as _print
         _print(metrics)
 
+    # ------------------------------------------------------------------
+    # Phase 2d training-lifecycle hooks
+    # ------------------------------------------------------------------
+
+    def prepare_for_training(
+        self,
+        train_dataset,
+        val_dataset,
+        device: torch.device,
+    ) -> None:
+        """Bind alpha-D-specific state from the datasets onto the experiment."""
+        if hasattr(train_dataset, "output_columns") and train_dataset.output_columns:
+            self.alpha_d_target_name = str(train_dataset.output_columns[0])
+
+        # y_mean/y_std for consistency-loss denormalisation.
+        if self.consistency_weight > 0:
+            norm_stats = getattr(train_dataset, "norm_stats", None)
+            if norm_stats:
+                y_mean = norm_stats.get("y_mean")
+                y_std = norm_stats.get("y_std")
+                if y_mean is not None:
+                    self.y_mean = y_mean.to(device) if hasattr(y_mean, "to") else y_mean
+                if y_std is not None:
+                    self.y_std = y_std.to(device) if hasattr(y_std, "to") else y_std
+
+        # Per-case geometry for the Δp integral loss step (train side) — only
+        # needed when delta_p_weight > 0 since the gradient step is gated.
+        if self.delta_p_weight > 0 and hasattr(train_dataset, "_case_meta"):
+            self.case_geometry = self._build_case_geometry(train_dataset, device)
+            self.local_velocity_normalization = bool(
+                getattr(train_dataset, "local_velocity_normalization", False)
+            )
+
+        # Val-side geometry is needed by ``compute_val_delta_p_metric`` for
+        # HPO scoring even when delta_p_weight=0, so build whenever val
+        # data is available with the metadata it requires.
+        if val_dataset is not None and hasattr(val_dataset, "_case_meta"):
+            self.val_case_geometry = self._build_case_geometry(val_dataset, device)
+            if not self.local_velocity_normalization:
+                self.local_velocity_normalization = bool(
+                    getattr(val_dataset, "local_velocity_normalization", False)
+                )
+
+    def on_epoch_end_extra_step(self) -> None:
+        """Run the Δp integral loss step when configured (no-op otherwise)."""
+        if self.delta_p_weight > 0:
+            self.compute_delta_p_loss_step()
+
+    @staticmethod
+    def _build_case_geometry(
+        ds,
+        device: torch.device,
+    ) -> dict[int, dict[str, Any]]:
+        """Per-case geometry dicts for the Δp integral loss.
+
+        Returns ``{case_idx: {x_full, z_hat, d_local_over_D, n_stations,
+        L_roi, D_big, delta_p_case, rho, V_bulk, baseline_encoded}}``.
+        Geometry constants come from each case's metadata; older zarrs
+        without them fall back to the historical AlphaD-ETL defaults.
+        """
+        case_geometry: dict[int, dict[str, Any]] = {}
+        for ci in range(len(ds._case_ids_unique)):
+            mask = ds._row_case_idx == ci
+            cm = ds._case_meta[ci]
+
+            D_big = float(cm.get("D_big", 0.2))
+            outer_height_m = float(cm.get("outer_height_m", 1.0))
+            buffer_diams = float(cm.get("buffer_diams", 1.0))
+            rho = float(cm.get("rho", 1.0))
+            V_bulk = float(cm.get("V_bulk", 1.0))
+
+            L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
+
+            baseline_encoded = getattr(ds, "_baseline_encoded", None)
+            case_geometry[ci] = {
+                "x_full": ds._x[mask].to(device),
+                "z_hat": ds._raw_z_hat[mask].to(device) if ds._raw_z_hat is not None else None,
+                "d_local_over_D": (
+                    ds._raw_d_local_over_D[mask].to(device)
+                    if ds._raw_d_local_over_D is not None else None
+                ),
+                "n_stations": int(mask.sum()),
+                "L_roi": L_roi,
+                "D_big": D_big,
+                "delta_p_case": cm["delta_p_case"],
+                "rho": rho,
+                "V_bulk": V_bulk,
+                "baseline_encoded": (
+                    baseline_encoded[mask].to(device)
+                    if baseline_encoded is not None else None
+                ),
+            }
+        return case_geometry
+
     def decode_for_plotting(
         self,
         values: torch.Tensor,

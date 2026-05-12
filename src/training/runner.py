@@ -280,54 +280,6 @@ def compute_val_loss(experiment: Experiment, val_loader: DataLoader) -> float:
     return total / n + float(experiment.validation_epoch_loss(val_loader))
 
 
-def _build_case_geometry(
-    ds,
-    device: torch.device,
-) -> dict[int, dict[str, Any]]:
-    """Build per-case geometry dicts for the delta_p integral loss.
-
-    Returns a dict keyed by case index (in ``ds``) whose values contain
-    the normalised model input (``x_full``), raw geometry arrays, and
-    physical constants needed for trapezoidal integration of dp/dz.
-
-    Geometry constants come from each case's metadata; older zarrs
-    without them fall back to the historical AlphaD-ETL defaults.
-    """
-    case_geometry: dict[int, dict[str, Any]] = {}
-    for ci in range(len(ds._case_ids_unique)):
-        mask = ds._row_case_idx == ci
-        cm = ds._case_meta[ci]
-
-        D_big = float(cm.get("D_big", 0.2))
-        outer_height_m = float(cm.get("outer_height_m", 1.0))
-        buffer_diams = float(cm.get("buffer_diams", 1.0))
-        rho = float(cm.get("rho", 1.0))
-        V_bulk = float(cm.get("V_bulk", 1.0))
-
-        L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
-
-        baseline_encoded = getattr(ds, "_baseline_encoded", None)
-        case_geometry[ci] = {
-            "x_full": ds._x[mask].to(device),
-            "z_hat": ds._raw_z_hat[mask].to(device) if ds._raw_z_hat is not None else None,
-            "d_local_over_D": (
-                ds._raw_d_local_over_D[mask].to(device)
-                if ds._raw_d_local_over_D is not None else None
-            ),
-            "n_stations": int(mask.sum()),
-            "L_roi": L_roi,
-            "D_big": D_big,
-            "delta_p_case": cm["delta_p_case"],
-            "rho": rho,
-            "V_bulk": V_bulk,
-            "baseline_encoded": (
-                baseline_encoded[mask].to(device)
-                if baseline_encoded is not None else None
-            ),
-        }
-    return case_geometry
-
-
 def train(cfg: dict | Any) -> dict[str, Any]:
     """Train a supervised model and save checkpoint + run_meta.json."""
     cfg_dict = to_plain_dict(cfg)
@@ -374,8 +326,6 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         device=device,
         **experiment_kwargs,
     )
-    if hasattr(dataset, "output_columns") and getattr(dataset, "output_columns", None):
-        experiment.alpha_d_target_name = str(dataset.output_columns[0])
 
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
     num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
@@ -408,15 +358,6 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         normalized_data_cfg["norm_from_case_indices"] = train_case_idx
         dataset = adapter.build_dataset(normalized_data_cfg)
 
-    # Inject norm_stats into the experiment for denormalisation (e.g. consistency loss)
-    if consistency_weight > 0 and hasattr(dataset, "norm_stats") and dataset.norm_stats:
-        norm_stats_for_exp = {
-            k: v.to(device) if hasattr(v, "to") else v
-            for k, v in dataset.norm_stats.items()
-        }
-        experiment.y_mean = norm_stats_for_exp.get("y_mean")
-        experiment.y_std = norm_stats_for_exp.get("y_std")
-
     if hasattr(dataset, "subset_by_case_indices"):
         train_dataset = dataset.subset_by_case_indices(train_case_idx)
         val_dataset = dataset.subset_by_case_indices(val_case_idx) if use_early_stopping else None
@@ -424,15 +365,10 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         train_dataset = Subset(dataset, train_case_idx)
         val_dataset = Subset(dataset, val_case_idx) if use_early_stopping else None
 
-    # Build case geometry for the delta_p pressure-drop integral loss
-    if delta_p_weight > 0 and hasattr(train_dataset, "_case_meta"):
-        case_geometry = _build_case_geometry(train_dataset, device)
-        experiment.case_geometry = case_geometry
-        experiment.local_velocity_normalization = getattr(
-            train_dataset, "local_velocity_normalization", False
-        )
-        if val_dataset is not None and hasattr(val_dataset, "_case_meta"):
-            experiment.val_case_geometry = _build_case_geometry(val_dataset, device)
+    # Let the experiment bind any case-specific state derived from the
+    # finalised train/val datasets (target names, per-case geometry,
+    # normalisation stats, etc.). Generic experiments are no-ops.
+    experiment.prepare_for_training(train_dataset, val_dataset, device)
 
     epochs = int(training_cfg.get("epochs", 20))
     batch_size = int(training_cfg.get("batch_size", 4))
@@ -525,10 +461,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         avg_loss = running_loss / num_batches
         last_avg_loss = avg_loss
         experiment.on_epoch_end(int(epoch), avg_loss)
-
-        # Per-epoch pressure-drop integral loss step (separate gradient update)
-        if hasattr(experiment, "compute_delta_p_loss_step"):
-            experiment.compute_delta_p_loss_step()
+        experiment.on_epoch_end_extra_step()
 
         if scheduler is not None:
             scheduler.step()
