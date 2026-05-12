@@ -845,6 +845,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                     plot_dir=plot_dir_value,
                     case_entries=plot_cases,
                     plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                    decode_fn=experiment.decode_for_plotting,
                 )
             else:
                 raise ValueError(

@@ -380,3 +380,43 @@ class AlphaDExperiment(Experiment):
     def print_extended_metrics(self, metrics: dict[str, Any]) -> None:
         from cases.alpha_d.metrics import print_extended_metrics as _print
         _print(metrics)
+
+    def decode_for_plotting(
+        self,
+        values: torch.Tensor,
+        dataset,
+        field_name: str,
+        mask,
+    ):
+        """Re-add encoded baseline, decode to bulk α_D for profile plotting."""
+        from cases.alpha_d.physics.targets import (
+            field_values_to_physical,
+            is_alpha_d_target,
+        )
+
+        values = values.detach().cpu().clone()
+
+        baseline_encoded = getattr(dataset, "_baseline_encoded", None)
+        if (
+            getattr(dataset, "has_target_baseline", False)
+            and baseline_encoded is not None
+        ):
+            bl = baseline_encoded[mask][:, 0].to(values.dtype)
+            values = values + bl
+
+        d_over_D_attr = getattr(dataset, "_raw_d_local_over_D", None)
+        if d_over_D_attr is not None:
+            d_over_D = d_over_D_attr[mask].detach().cpu()
+        else:
+            d_over_D = None
+
+        decoded = field_values_to_physical(
+            values,
+            field_name=field_name,
+            d_over_D=d_over_D,
+            local_velocity_normalization=bool(
+                getattr(dataset, "local_velocity_normalization", False)
+            ),
+        )
+        label = "alpha_D" if is_alpha_d_target(field_name) else field_name
+        return decoded.detach().cpu().numpy(), label

@@ -1,5 +1,6 @@
 """Plotting helpers for evaluation outputs."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,6 @@ from torch.utils.data import Subset
 
 from training.datasets import GridPairDataset
 from training.datasets_tabular import TabularPairDataset
-from training.alpha_d_targets import field_values_to_physical, is_alpha_d_target
 
 
 def parse_index_list(raw: str | list[int] | None) -> list[int] | None:
@@ -123,23 +123,6 @@ def select_best_worst_pointwise_cases(
     return selected
 
 
-def _to_physical_alpha_profile(
-    values: torch.Tensor,
-    *,
-    field_name: str,
-    d_over_D: torch.Tensor | None,
-    local_velocity_normalization: bool,
-) -> np.ndarray:
-    """Convert model-space output to physical alpha_D for plotting."""
-    profile = field_values_to_physical(
-        values.detach().cpu().clone(),
-        field_name=field_name,
-        d_over_D=d_over_D.detach().cpu() if d_over_D is not None else None,
-        local_velocity_normalization=local_velocity_normalization,
-    )
-    return profile.detach().cpu().numpy()
-
-
 def save_pointwise_profile_plots(
     model,
     dataset,
@@ -149,8 +132,17 @@ def save_pointwise_profile_plots(
     case_entries: list[dict[str, Any]],
     *,
     plot_dpi: int = 150,
+    decode_fn: Callable[..., tuple[np.ndarray, str] | None] | None = None,
 ) -> list[str]:
-    """Save best/worst alpha_D profile plots for pointwise/tabular models."""
+    """Save best/worst profile plots for pointwise/tabular models.
+
+    When ``decode_fn`` is supplied (typically
+    ``experiment.decode_for_plotting``), the plotter applies it to both
+    predicted and target tensors before plotting; the function returns the
+    decoded values and the y-axis label. When ``decode_fn`` is ``None`` or
+    returns ``None``, the plotter shows raw encoded values with ``field_name``
+    as the label.
+    """
     try:
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as import_error:
@@ -187,45 +179,39 @@ def save_pointwise_profile_plots(
             pred_case = model(x_case).detach().cpu()[:, 0]
             target_case = dataset._y[mask].detach().cpu()[:, 0]
 
-            # Re-add baseline so plots show full encoded-truth-equivalent values.
-            if (
-                getattr(dataset, "has_target_baseline", False)
-                and getattr(dataset, "_baseline_encoded", None) is not None
-            ):
-                bl = dataset._baseline_encoded[mask][:, 0]
-                pred_case = pred_case + bl
-                target_case = target_case + bl
-
             z_hat = (
                 dataset._raw_z_hat[mask].detach().cpu()
                 if dataset._raw_z_hat is not None
                 else torch.arange(len(pred_case), dtype=torch.float32)
             )
-            d_over_D = (
-                dataset._raw_d_local_over_D[mask].detach().cpu()
-                if dataset._raw_d_local_over_D is not None
-                else None
-            )
 
             order = torch.argsort(z_hat)
             z_axis = z_hat[order].numpy()
-            pred_phys = _to_physical_alpha_profile(
-                pred_case[order],
-                field_name=field_name,
-                d_over_D=d_over_D[order] if d_over_D is not None else None,
-                local_velocity_normalization=bool(
-                    getattr(dataset, "local_velocity_normalization", False)
-                ),
+
+            profile_label = field_name
+            pred_phys: np.ndarray | None = None
+            target_phys: np.ndarray | None = None
+            decoded = False
+            if decode_fn is not None:
+                pred_dec = decode_fn(pred_case, dataset, field_name, mask)
+                target_dec = decode_fn(target_case, dataset, field_name, mask)
+                if pred_dec is not None and target_dec is not None:
+                    pred_unordered, label = pred_dec
+                    target_unordered, _ = target_dec
+                    order_np = order.numpy()
+                    pred_phys = pred_unordered[order_np]
+                    target_phys = target_unordered[order_np]
+                    profile_label = label
+                    decoded = True
+            if not decoded:
+                pred_phys = pred_case[order].numpy()
+                target_phys = target_case[order].numpy()
+
+            rmse_phys = (
+                float(np.sqrt(np.mean((pred_phys - target_phys) ** 2)))
+                if decoded
+                else None
             )
-            target_phys = _to_physical_alpha_profile(
-                target_case[order],
-                field_name=field_name,
-                d_over_D=d_over_D[order] if d_over_D is not None else None,
-                local_velocity_normalization=bool(
-                    getattr(dataset, "local_velocity_normalization", False)
-                ),
-            )
-            rmse_phys = float(np.sqrt(np.mean((pred_phys - target_phys) ** 2)))
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
             ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
@@ -233,7 +219,6 @@ def save_pointwise_profile_plots(
             if np.all(target_phys > 0.0) and np.all(pred_phys > 0.0):
                 ax.set_yscale("log")
             ax.set_xlabel("z_hat")
-            profile_label = "alpha_D" if is_alpha_d_target(field_name) else field_name
             ax.set_ylabel(profile_label)
             ax.grid(True, alpha=0.3)
             ax.legend()
@@ -244,15 +229,15 @@ def save_pointwise_profile_plots(
             subtitle_parts: list[str] = []
             if rmse is not None:
                 subtitle_parts.append(f"RMSE_encoded={float(rmse):.3e}")
-            subtitle_parts.append(f"RMSE_α_D={rmse_phys:.3e}")
+            if rmse_phys is not None:
+                subtitle_parts.append(f"RMSE_{profile_label}={rmse_phys:.3e}")
             if rel is not None:
                 subtitle_parts.append(f"median_rel_err={float(rel):.1%}")
             if subtitle_parts:
                 title += "\n" + ", ".join(subtitle_parts)
             ax.set_title(title)
 
-            safe_label = "alpha_D" if is_alpha_d_target(field_name) else field_name
-            out_path = plot_dir_path / f"{entry['label']}_{case_name}_{safe_label}_profile.png"
+            out_path = plot_dir_path / f"{entry['label']}_{case_name}_{profile_label}_profile.png"
             fig.savefig(out_path, dpi=plot_dpi)
             plt.close(fig)
             output_files.append(str(out_path))

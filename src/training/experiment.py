@@ -110,3 +110,20 @@ class Experiment:
         MSE/RMSE). Subclasses override to format case-specific blocks.
         """
         _ = metrics
+
+    def decode_for_plotting(
+        self,
+        values: torch.Tensor,
+        dataset,
+        field_name: str,
+        mask,
+    ):
+        """Decode encoded model output to physical/labelled space for plotting.
+
+        Returns ``(decoded_ndarray, label)`` or ``None``. When ``None``, the
+        plotter shows raw encoded values with ``field_name`` as the y-axis
+        label and skips the physical-RMSE subtitle. Case experiments override
+        to apply baseline re-add, unit conversion, etc.
+        """
+        _ = (values, dataset, field_name, mask)
+        return None
