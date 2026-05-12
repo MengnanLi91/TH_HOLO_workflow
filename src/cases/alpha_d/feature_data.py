@@ -168,6 +168,15 @@ def build_engineered_feature_map(
     }
 
 
+def engineered_features_spec():
+    """Entrypoint returning ``(names, builder)`` for TabularPairDataset.
+
+    Used by the pointwise adapter via the
+    ``data.engineered_features_entrypoint`` config key.
+    """
+    return list(ENGINEERED_FEATURES), build_engineered_feature_map
+
+
 def load_feature_matrix(
     zarr_dir: str | Path,
     *,

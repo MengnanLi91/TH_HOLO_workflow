@@ -16,6 +16,10 @@ model:
 
 data:
   zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
+  # Synthesize alpha-D-specific engineered columns inside the dataset.
+  # `engineered_features_spec` returns (names, builder); PointwiseAdapter
+  # resolves the entrypoint and threads them into TabularPairDataset.
+  engineered_features_entrypoint: cases.alpha_d.feature_data:engineered_features_spec
   # Selected via PyCaret + region indicators added back so per-region eval metrics fire.
   # The three trailing columns (dD_dz_local + signed throat distances) are
   # neighbour-context features added in v5 to give the pointwise MLP some

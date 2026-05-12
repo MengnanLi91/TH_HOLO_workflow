@@ -12,16 +12,13 @@ All cases are loaded and concatenated row-wise.  Splitting is done at
 the case level via ``subset_by_case_indices``.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from feature_analysis.data_loader import (
-    ENGINEERED_FEATURES,
-    build_engineered_feature_map,
-)
 from training.alpha_d_targets import (
     alpha_d_bulk_to_values,
     convert_alpha_d_values_between_bases,
@@ -63,6 +60,14 @@ class TabularPairDataset(Dataset):
     min_Dr : float or None
         If set, exclude cases whose diameter ratio Dr is below this value.
         Dr is parsed from the case name (``Re_*__Dr_XpXXX__Lr_*``).
+    engineered_feature_names : list[str] or None
+        Names of synthesized columns appended to each row in the order given.
+        If *None*, no engineered columns are synthesized. Caller-supplied
+        because engineered-feature schemas are case-specific.
+    engineered_feature_builder : callable or None
+        ``(features, raw_feature_names) -> dict[name, ndarray[N]]`` mapping
+        each name in ``engineered_feature_names`` to a 1-D column. Required
+        when ``engineered_feature_names`` is set.
     """
 
     def __init__(
@@ -80,6 +85,8 @@ class TabularPairDataset(Dataset):
         local_velocity_normalization: bool = False,
         min_Dr: float | None = None,
         target_residual_baseline: bool = False,
+        engineered_feature_names: list[str] | None = None,
+        engineered_feature_builder: Callable[..., dict] | None = None,
     ):
         import json
 
@@ -106,7 +113,16 @@ class TabularPairDataset(Dataset):
         rows_per_case: list[int] = []
         case_meta_list: list[dict] = []
         has_weights = False
-        engineered_feature_names = list(ENGINEERED_FEATURES)
+        eng_names: list[str] = (
+            list(engineered_feature_names)
+            if engineered_feature_names is not None
+            else []
+        )
+        if eng_names and engineered_feature_builder is None:
+            raise ValueError(
+                "engineered_feature_builder is required when "
+                "engineered_feature_names is set."
+            )
 
         for sp in sim_paths:
             root = zarr.open(store=str(sp), mode="r")
@@ -127,9 +143,7 @@ class TabularPairDataset(Dataset):
                 raw_target_names = json.loads(meta.attrs.get("target_names", "[]"))
 
                 self._base_feature_names = list(raw_feature_names)
-                self._all_feature_names = (
-                    list(raw_feature_names) + engineered_feature_names
-                )
+                self._all_feature_names = list(raw_feature_names) + eng_names
                 self._all_target_names = list(raw_target_names)
 
                 if output_columns is not None:
@@ -162,13 +176,18 @@ class TabularPairDataset(Dataset):
 
             # Load ALL base features (derived columns need access to
             # source columns that may not be in input_columns).
-            engineered = build_engineered_feature_map(features, raw_feature_names)
-            engineered_cols = [
-                engineered[name].reshape(-1, 1) for name in engineered_feature_names
-            ]
-            all_x.append(
-                np.concatenate([features] + engineered_cols, axis=1).astype(np.float32)
-            )
+            if eng_names:
+                engineered = engineered_feature_builder(features, raw_feature_names)
+                engineered_cols = [
+                    engineered[name].reshape(-1, 1) for name in eng_names
+                ]
+                all_x.append(
+                    np.concatenate([features] + engineered_cols, axis=1).astype(
+                        np.float32
+                    )
+                )
+            else:
+                all_x.append(features.astype(np.float32))
             all_y.append(targets[:, self._tgt_idx])
             all_w.append(weights)
             case_ids.append(case_id)

@@ -194,6 +194,8 @@ class PointwiseAdapter(ModelAdapter):
     family = "pointwise"
 
     def build_dataset(self, data_cfg: dict):
+        import importlib
+
         from training.datasets_tabular import TabularPairDataset
 
         norm_from_case_indices = data_cfg.get("norm_from_case_indices")
@@ -222,6 +224,15 @@ class PointwiseAdapter(ModelAdapter):
         if exclude_cases is not None:
             exclude_cases = [str(c) for c in exclude_cases]
 
+        eng_ep = data_cfg.get("engineered_features_entrypoint")
+        eng_names = None
+        eng_builder = None
+        if eng_ep is not None:
+            module_name, fn_name = str(eng_ep).split(":", 1)
+            eng_names, eng_builder = getattr(
+                importlib.import_module(module_name), fn_name
+            )()
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=input_columns,
@@ -240,6 +251,8 @@ class PointwiseAdapter(ModelAdapter):
             target_residual_baseline=bool(
                 data_cfg.get("target_residual_baseline", False)
             ),
+            engineered_feature_names=eng_names,
+            engineered_feature_builder=eng_builder,
         )
 
     def dataset_info(self, dataset) -> dict:

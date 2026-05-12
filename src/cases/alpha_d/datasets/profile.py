@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from cases.alpha_d.feature_data import engineered_features_spec
 from training.datasets_tabular import TabularPairDataset
 
 
@@ -32,6 +33,10 @@ class AlphaDProfileDataset(Dataset):
     """
 
     def __init__(self, **tabular_kwargs):
+        if "engineered_feature_names" not in tabular_kwargs:
+            names, builder = engineered_features_spec()
+            tabular_kwargs["engineered_feature_names"] = names
+            tabular_kwargs["engineered_feature_builder"] = builder
         self._inner = TabularPairDataset(**tabular_kwargs)
         self._case_slices = _build_case_slices(self._inner)
 
