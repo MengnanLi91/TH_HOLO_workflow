@@ -107,7 +107,7 @@ class TestAdapterWhitelist:
 
 class TestProfileDataset:
     def test_per_case_item_shape(self, profile_zarr_dir: Path) -> None:
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -123,7 +123,7 @@ class TestProfileDataset:
         assert int(ci.item()) == 0
 
     def test_stations_sorted_by_z_hat(self, profile_zarr_dir: Path) -> None:
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -141,7 +141,7 @@ class TestProfileDataset:
         the parent's _inner would silently include all cases in the Phase 7
         delta_p loss path, which iterates ds._case_ids_unique.
         """
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -167,7 +167,7 @@ class TestProfileDataset:
         satisfy that capability check so its checkpoints reload through
         evaluate.py.
         """
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -187,7 +187,7 @@ class TestProfileDataset:
     def test_subset_preserves_residual_baseline_alignment(
         self, profile_zarr_dir: Path
     ) -> None:
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -210,7 +210,7 @@ class TestProfileDataset:
 class TestProfileAdapter:
     def test_dataset_info_reports_n_stations(self, profile_zarr_dir: Path) -> None:
         from training.adapters import ProfileAdapter
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -226,7 +226,7 @@ class TestProfileAdapter:
 
     def test_forward_train_emits_4_tuple(self, profile_zarr_dir: Path) -> None:
         from training.adapters import ProfileAdapter
-        from training.datasets_profile import AlphaDProfileDataset
+        from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,

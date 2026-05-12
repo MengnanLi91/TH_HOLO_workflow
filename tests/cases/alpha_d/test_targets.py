@@ -13,7 +13,7 @@ zarr = pytest.importorskip("zarr")
 
 
 def test_signed_log1p_round_trip_numpy() -> None:
-    from training.alpha_d_targets import (
+    from cases.alpha_d.physics.targets import (
         alpha_d_values_to_bulk,
         encode_alpha_d_target,
     )
@@ -32,7 +32,7 @@ def test_signed_log1p_round_trip_numpy() -> None:
 
 
 def test_signed_target_local_velocity_round_trip_torch() -> None:
-    from training.alpha_d_targets import (
+    from cases.alpha_d.physics.targets import (
         alpha_d_bulk_to_values,
         field_values_to_physical,
     )
@@ -59,7 +59,7 @@ def test_signed_target_local_velocity_round_trip_torch() -> None:
 def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
     tmp_path: Path,
 ) -> None:
-    from training.alpha_d_targets import (
+    from cases.alpha_d.physics.targets import (
         encode_alpha_d_target,
         field_values_to_physical,
     )

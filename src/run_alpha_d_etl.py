@@ -1,50 +1,24 @@
-"""Alpha-D ETL pipeline entry point.
+"""Deprecated shim — delegates to ``cases.alpha_d.run_etl``.
 
-Reads MOOSE CFD simulation outputs from the parametric study, extracts
-Darcy resistance coefficient profiles from the contraction region, and
-writes per-case Zarr stores for MLP surrogate training.
-
-Usage (from src/ directory):
-    python run_alpha_d_etl.py \\
-        etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \\
-        etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
+Moved as part of the per-case repo refactor (Phase 1 of
+``docs/dev/repo_layout_refactor_plan.md``). The shim keeps the legacy
+``python run_alpha_d_etl.py`` invocation working with a deprecation
+warning; update docs and tooling to the new path before Phase 4 drops
+the shim.
 """
 
-import os
-import sys
+import warnings
 
-sys.path.insert(0, os.path.dirname(__file__))
+warnings.warn(
+    "src/run_alpha_d_etl.py is deprecated; "
+    "use src/cases/alpha_d/run_etl.py instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-import hydra
-from hydra.utils import instantiate
-from omegaconf import DictConfig
+from cases.alpha_d.run_etl import main  # noqa: E402, F401
 
-from physicsnemo_curator.etl.etl_orchestrator import ETLOrchestrator
-from physicsnemo_curator.etl.processing_config import ProcessingConfig
-from physicsnemo_curator.utils import utils as curator_utils
-
-
-@hydra.main(version_base="1.3", config_path="alpha_d_etl/config", config_name="alpha_d_etl")
-def main(cfg: DictConfig) -> None:
-    """Run the alpha-D extraction ETL pipeline."""
-    curator_utils.setup_multiprocessing()
-
-    processing_config = ProcessingConfig(**cfg.etl.processing)
-
-    source = instantiate(cfg.etl.source, processing_config)
-    sink = instantiate(cfg.etl.sink, processing_config)
-
-    cfgs = {k: {"_args_": [processing_config]} for k in cfg.etl.transformations.keys()}
-    transformations = instantiate(cfg.etl.transformations, **cfgs)
-
-    orchestrator = ETLOrchestrator(
-        source=source,
-        sink=sink,
-        transformations=transformations,
-        processing_config=processing_config,
-        validator=None,
-    )
-    orchestrator.run()
+__all__ = ["main"]
 
 
 if __name__ == "__main__":

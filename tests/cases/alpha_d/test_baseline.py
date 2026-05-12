@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from training.alpha_d_baseline import (
+from cases.alpha_d.physics.baseline import (
     BaselineGeometry,
     alpha_d_baseline_profile,
     integrated_baseline_delta_p,
@@ -122,7 +122,7 @@ def _write_alpha_d_zarr(
 
     import zarr
 
-    from training.alpha_d_targets import encode_alpha_d_target
+    from cases.alpha_d.physics.targets import encode_alpha_d_target
 
     feature_names = [
         "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
