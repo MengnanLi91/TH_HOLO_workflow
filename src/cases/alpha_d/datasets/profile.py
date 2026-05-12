@@ -16,6 +16,7 @@ import torch
 from torch.utils.data import Dataset
 
 from cases.alpha_d.feature_data import engineered_features_spec
+from cases.alpha_d.transforms import alpha_d_residual_transform
 from training.datasets_tabular import TabularPairDataset
 
 
@@ -37,6 +38,7 @@ class AlphaDProfileDataset(Dataset):
             names, builder = engineered_features_spec()
             tabular_kwargs["engineered_feature_names"] = names
             tabular_kwargs["engineered_feature_builder"] = builder
+        tabular_kwargs.setdefault("target_transform", alpha_d_residual_transform)
         self._inner = TabularPairDataset(**tabular_kwargs)
         self._case_slices = _build_case_slices(self._inner)
 
@@ -96,8 +98,8 @@ class AlphaDProfileDataset(Dataset):
         return self._inner.normalize
 
     @property
-    def target_residual_baseline(self):
-        return self._inner.target_residual_baseline
+    def has_target_baseline(self):
+        return self._inner.has_target_baseline
 
     @property
     def local_velocity_normalization(self):

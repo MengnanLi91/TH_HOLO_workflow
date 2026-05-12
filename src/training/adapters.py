@@ -233,6 +233,14 @@ class PointwiseAdapter(ModelAdapter):
                 importlib.import_module(module_name), fn_name
             )()
 
+        tt_ep = data_cfg.get("target_transform")
+        target_transform = None
+        if tt_ep is not None:
+            module_name, fn_name = str(tt_ep).split(":", 1)
+            target_transform = getattr(
+                importlib.import_module(module_name), fn_name
+            )
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=input_columns,
@@ -248,9 +256,7 @@ class PointwiseAdapter(ModelAdapter):
                 data_cfg.get("local_velocity_normalization", False)
             ),
             min_Dr=_opt_float("min_Dr"),
-            target_residual_baseline=bool(
-                data_cfg.get("target_residual_baseline", False)
-            ),
+            target_transform=target_transform,
             engineered_feature_names=eng_names,
             engineered_feature_builder=eng_builder,
         )
@@ -380,9 +386,6 @@ class ProfileAdapter(ModelAdapter):
                 data_cfg.get("local_velocity_normalization", False)
             ),
             min_Dr=_opt_float("min_Dr"),
-            target_residual_baseline=bool(
-                data_cfg.get("target_residual_baseline", False)
-            ),
         )
 
     def dataset_info(self, dataset) -> dict:

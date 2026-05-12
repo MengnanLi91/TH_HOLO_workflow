@@ -20,13 +20,8 @@ import torch
 from torch.utils.data import Dataset
 
 from training.alpha_d_targets import (
-    alpha_d_bulk_to_values,
     convert_alpha_d_values_between_bases,
     is_alpha_d_target,
-)
-from training.alpha_d_baseline import (
-    BaselineGeometry,
-    alpha_d_baseline_profile,
 )
 
 
@@ -68,6 +63,14 @@ class TabularPairDataset(Dataset):
         ``(features, raw_feature_names) -> dict[name, ndarray[N]]`` mapping
         each name in ``engineered_feature_names`` to a 1-D column. Required
         when ``engineered_feature_names`` is set.
+    target_transform : callable or None
+        Case-specific transform applied to ``full_y`` after local-velocity
+        normalisation. Receives ``(full_y, full_x)`` plus keyword context
+        (``target_names``, ``feature_names``, ``case_meta_list``,
+        ``rows_per_case``, ``local_velocity_normalization``) and returns
+        ``(transformed_y, extras)``. When extras contains ``baseline_encoded``,
+        it is stashed as ``self._baseline_encoded`` and ``self.has_target_baseline``
+        is set to True so consumers can re-add the baseline at decode time.
     """
 
     def __init__(
@@ -84,7 +87,7 @@ class TabularPairDataset(Dataset):
         exclude_cases: list[str] | None = None,
         local_velocity_normalization: bool = False,
         min_Dr: float | None = None,
-        target_residual_baseline: bool = False,
+        target_transform: Callable[..., tuple] | None = None,
         engineered_feature_names: list[str] | None = None,
         engineered_feature_builder: Callable[..., dict] | None = None,
     ):
@@ -239,53 +242,29 @@ class TabularPairDataset(Dataset):
             self.local_velocity_normalization = transformed_any
 
         # ----------------------------------------------------------
-        # Closed-form alpha_D residual target.  When enabled, replace
-        # the encoded target with (encoded_truth − encoded_baseline)
-        # and stash the per-row encoded baseline so callers can
-        # reconstruct the full encoded prediction at decode time.
+        # Optional case-supplied target transform. The transform may return
+        # a ``baseline_encoded`` ndarray under extras["baseline_encoded"];
+        # the dataset stashes it so consumers (metrics, plotting, runner
+        # case-geometry) can re-add the baseline at decode boundaries.
         # ----------------------------------------------------------
         self._baseline_encoded: torch.Tensor | None = None
-        self.target_residual_baseline = False
-        if (
-            target_residual_baseline
-            and z_hat_col is not None
-            and d_over_D_col is not None
-            and any(is_alpha_d_target(c) for c in self.output_columns)
-        ):
-            d_over_D = full_x[:, d_over_D_col].astype(np.float64)
-            z_hat_all = full_x[:, z_hat_col].astype(np.float64)
-            baseline_encoded = np.zeros_like(full_y, dtype=np.float64)
-            row_offset = 0
-            for case_idx, n_rows in enumerate(rows_per_case):
-                cm = case_meta_list[case_idx]
-                geom = BaselineGeometry(
-                    Re=cm["Re"],
-                    Dr=cm["Dr"],
-                    Lr=cm["Lr"],
-                    D_big=cm["D_big"],
-                    outer_height_m=cm["outer_height_m"],
-                    buffer_diams=cm["buffer_diams"],
-                    rho=cm["rho"],
-                    V_bulk=cm["V_bulk"],
-                    n_stations=int(n_rows),
-                )
-                end = row_offset + n_rows
-                baseline_bulk = alpha_d_baseline_profile(z_hat_all[row_offset:end], geom)
-                d_local = d_over_D[row_offset:end]
-                for j, tgt_name in enumerate(self.output_columns):
-                    if is_alpha_d_target(tgt_name):
-                        baseline_encoded[row_offset:end, j] = alpha_d_bulk_to_values(
-                            baseline_bulk,
-                            target_name=tgt_name,
-                            d_over_D=d_local,
-                            local_velocity_normalization=self.local_velocity_normalization,
-                        )
-                row_offset = end
-            full_y = (full_y.astype(np.float64) - baseline_encoded).astype(np.float32)
-            self._baseline_encoded = torch.from_numpy(
-                baseline_encoded.astype(np.float32)
+        self.has_target_baseline = False
+        if target_transform is not None:
+            full_y, extras = target_transform(
+                full_y,
+                full_x,
+                target_names=self.output_columns,
+                feature_names=self._all_feature_names,
+                case_meta_list=case_meta_list,
+                rows_per_case=rows_per_case,
+                local_velocity_normalization=self.local_velocity_normalization,
             )
-            self.target_residual_baseline = True
+            baseline = extras.get("baseline_encoded") if extras else None
+            if baseline is not None:
+                self._baseline_encoded = torch.from_numpy(
+                    np.asarray(baseline, dtype=np.float32)
+                )
+                self.has_target_baseline = True
 
         # Resolve input columns
         if input_columns is not None:
@@ -498,7 +477,7 @@ class TabularPairDataset(Dataset):
             [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]
         )
         new._case_idx_tensor = torch.from_numpy(new._row_case_idx).long()
-        new.target_residual_baseline = self.target_residual_baseline
+        new.has_target_baseline = self.has_target_baseline
         new._baseline_encoded = (
             self._baseline_encoded[mask] if self._baseline_encoded is not None else None
         )
@@ -513,12 +492,12 @@ class TabularPairDataset(Dataset):
         encoded: torch.Tensor,
         row_mask: np.ndarray | torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Re-add the per-row encoded baseline to a residual-mode tensor.
+        """Re-add the per-row encoded baseline to an encoded tensor.
 
-        When ``target_residual_baseline`` is False this is a no-op so
-        callers can use it unconditionally at decode boundaries.
+        No-op when no target baseline was attached (``has_target_baseline``
+        is False) so callers can use it unconditionally at decode boundaries.
         """
-        if not self.target_residual_baseline or self._baseline_encoded is None:
+        if not self.has_target_baseline or self._baseline_encoded is None:
             return encoded
         bl = self._baseline_encoded
         if row_mask is not None:

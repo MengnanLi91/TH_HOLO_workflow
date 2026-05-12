@@ -189,7 +189,7 @@ def save_pointwise_profile_plots(
 
             # Re-add baseline so plots show full encoded-truth-equivalent values.
             if (
-                getattr(dataset, "target_residual_baseline", False)
+                getattr(dataset, "has_target_baseline", False)
                 and getattr(dataset, "_baseline_encoded", None) is not None
             ):
                 bl = dataset._baseline_encoded[mask][:, 0]

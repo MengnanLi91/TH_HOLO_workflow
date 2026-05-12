@@ -53,7 +53,7 @@ def compute_delta_p_metrics(
     row_case_idx = getattr(eval_dataset, "_row_case_idx", None)
     raw_z_hat = getattr(eval_dataset, "_raw_z_hat", None)
     raw_d_over_D = getattr(eval_dataset, "_raw_d_local_over_D", None)
-    residual_mode = bool(getattr(eval_dataset, "target_residual_baseline", False))
+    residual_mode = bool(getattr(eval_dataset, "has_target_baseline", False))
     baseline_encoded = getattr(eval_dataset, "_baseline_encoded", None)
 
     if case_meta is None or case_names is None or row_case_idx is None:
@@ -147,7 +147,7 @@ def compute_pointwise_extended_metrics(
     metrics: dict[str, Any] = {}
     raw_d_over_D = getattr(dataset, "_raw_d_local_over_D", None)
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
-    residual_mode = bool(getattr(dataset, "target_residual_baseline", False))
+    residual_mode = bool(getattr(dataset, "has_target_baseline", False))
     baseline_encoded = getattr(dataset, "_baseline_encoded", None)
 
     def _has_physical_inverse(name: str) -> bool:

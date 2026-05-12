@@ -28,7 +28,7 @@ data:
     - dist_to_throat_end
   output_columns: [signed_log1p_alpha_D]
   normalize: true
-  target_residual_baseline: true
+  # AlphaDProfileDataset default-injects target_transform for the conv1d path.
   local_velocity_normalization: true
   include_case_idx: true
   throat_weight: 1.0

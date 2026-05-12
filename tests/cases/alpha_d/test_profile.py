@@ -113,6 +113,7 @@ class TestProfileDataset:
             zarr_dir=profile_zarr_dir,
             input_columns=["log10_Re", "Dr", "z_hat", "is_throat"],
             output_columns=TARGET_NAMES,
+            target_transform=None,
         )
         assert len(ds) == NUM_CASES
         x, y, w, ci = ds[0]
@@ -129,6 +130,7 @@ class TestProfileDataset:
             zarr_dir=profile_zarr_dir,
             input_columns=["z_hat"],
             output_columns=TARGET_NAMES,
+            target_transform=None,
         )
         x, _, _, _ = ds[0]
         z = x[0].numpy()
@@ -147,6 +149,7 @@ class TestProfileDataset:
             zarr_dir=profile_zarr_dir,
             input_columns=["log10_Re", "Dr"],
             output_columns=TARGET_NAMES,
+            target_transform=None,
         )
         sub = ds.subset_by_case_indices([0, 2, 4])
 
@@ -174,13 +177,14 @@ class TestProfileDataset:
             input_columns=["log10_Re", "Dr"],
             output_columns=TARGET_NAMES,
             normalize=True,
+            target_transform=None,
         )
         assert hasattr(ds, "input_columns")
         assert hasattr(ds, "output_columns")
         assert hasattr(ds, "sim_names")
         # These are what the pointwise/profile run_meta branch records.
         assert ds.normalize is True
-        assert ds.target_residual_baseline is False
+        assert ds.has_target_baseline is False
         assert ds.local_velocity_normalization is False
         assert ds.exclude_cases == []
 
@@ -193,7 +197,7 @@ class TestProfileDataset:
             zarr_dir=profile_zarr_dir,
             input_columns=["log10_Re", "Dr"],
             output_columns=TARGET_NAMES,
-            target_residual_baseline=False,
+            target_transform=None,
         )
         sub = ds.subset_by_case_indices([1, 3])
         # _baseline_encoded is None when residual baseline is off; delegation
@@ -216,6 +220,7 @@ class TestProfileAdapter:
             zarr_dir=profile_zarr_dir,
             input_columns=["log10_Re", "Dr", "z_hat"],
             output_columns=TARGET_NAMES,
+            target_transform=None,
         )
         info = ProfileAdapter().dataset_info(ds)
         assert info == {
@@ -232,6 +237,7 @@ class TestProfileAdapter:
             zarr_dir=profile_zarr_dir,
             input_columns=["log10_Re", "Dr"],
             output_columns=TARGET_NAMES,
+            target_transform=None,
         )
         loader = torch.utils.data.DataLoader(ds, batch_size=2)
         adapter = ProfileAdapter()

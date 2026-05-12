@@ -180,6 +180,7 @@ def _write_alpha_d_zarr(
 def test_residual_target_round_trip(tmp_path) -> None:
     """y_residual + baseline_encoded must equal the y produced without residual mode."""
     pytest.importorskip("zarr")
+    from cases.alpha_d.transforms import alpha_d_residual_transform
     from training.datasets_tabular import TabularPairDataset
 
     cases = [
@@ -197,10 +198,10 @@ def test_residual_target_round_trip(tmp_path) -> None:
         output_columns=["signed_log1p_alpha_D"],
         local_velocity_normalization=True,
     )
-    full = TabularPairDataset(**common, target_residual_baseline=False)
-    residual = TabularPairDataset(**common, target_residual_baseline=True)
+    full = TabularPairDataset(**common)
+    residual = TabularPairDataset(**common, target_transform=alpha_d_residual_transform)
 
-    assert residual.target_residual_baseline is True
+    assert residual.has_target_baseline is True
     assert residual._baseline_encoded is not None
     assert residual._baseline_encoded.shape == residual._y.shape
 
@@ -223,7 +224,6 @@ def test_residual_helper_is_identity_when_disabled(tmp_path) -> None:
         zarr_dir=out_dir,
         output_columns=["signed_log1p_alpha_D"],
         local_velocity_normalization=True,
-        target_residual_baseline=False,
     )
     sample = torch.randn(5, 1)
     out = ds.add_baseline_to_encoded(sample)

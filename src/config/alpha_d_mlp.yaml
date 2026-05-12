@@ -37,7 +37,7 @@ data:
   # baseline (K_c, K_e, Blasius throat friction).  The model output is
   # signed_log1p(alpha_D) − signed_log1p(alpha_D_baseline); the baseline is
   # added back at every decode boundary (eval, plotting, delta_p loss).
-  target_residual_baseline: true
+  target_transform: cases.alpha_d.transforms:alpha_d_residual_transform
   min_Dr: 0.333
   exclude_cases: []
   split:
