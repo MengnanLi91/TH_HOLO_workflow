@@ -2,8 +2,10 @@
 
 [![pytest](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml/badge.svg)](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml)
 
-MULTIFID-TH is a PhysicsNeMo-based ETL pipeline that converts MOOSE
-thermal-hydraulics outputs (Exodus + CSV probes) into ML-ready Zarr datasets.
+MULTIFID-TH — **multifidelity surrogates for thermal-hydraulics** — is a
+PhysicsNeMo-based ETL pipeline that converts MOOSE thermal-hydraulics
+outputs (Exodus + CSV probes) into ML-ready Zarr datasets and trains
+low-fidelity ML surrogates against the high-fidelity simulations.
 
 ## Pipeline overview
 

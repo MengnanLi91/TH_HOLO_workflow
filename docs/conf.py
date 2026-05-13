@@ -146,8 +146,9 @@ _BRAND_BORDER = "#1f5478"
 
 html_theme_options = {
     "announcement": (
-        "TH_HOLO_workflow: PhysicsNeMo-based ETL and surrogate-modeling "
-        "pipeline for MOOSE thermal-hydraulics simulations."
+        "MULTIFID-TH — multifidelity surrogates for thermal-hydraulics. "
+        "High-fidelity MOOSE simulations inform low-fidelity ML "
+        "surrogates through a single generic training core."
     ),
     "navigation_with_keys": True,
     "sidebar_hide_name": False,
