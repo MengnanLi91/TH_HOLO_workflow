@@ -118,19 +118,46 @@ The full walkthrough is in the
 
 ## Where do I start?
 
-- **First time using the repo?** Start with the
-  [Getting Started guide](user/getting_started.md) — container setup,
-  bind mounts, troubleshooting, log inspection.
-- **Trying to reproduce the alpha-D surrogate?** Jump to the
-  [Alpha-D Surrogate Tutorial](user/alpha_d_surrogate.md) or the
-  [Alpha-D case page](cases/alpha_d.md).
-- **Wiring up a new model?** Read the
-  [Architecture](architecture.md) page, then the
-  [FNO training and evaluation guide](dev/fno_train_eval.md) and the
-  [Dataset API](dev/dataset.md).
-- **Curious about the layout?** See the
-  [Repo Layout Refactor Plan](archive/repo_layout_refactor_plan.md)
-  (archived — refactor complete) for the design rationale.
+::::{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item-card} {octicon}`rocket` First time
+:link: user/getting_started
+:link-type: doc
+
+Container setup, bind mounts, troubleshooting, and log inspection.
+
+Open the Getting Started guide.
+:::
+
+:::{grid-item-card} {octicon}`play` Alpha-D surrogate
+:link: user/alpha_d_surrogate
+:link-type: doc
+
+Reproduce the Darcy-resistance MLP end-to-end, ETL through evaluation.
+
+Open the Alpha-D Surrogate tutorial.
+:::
+
+:::{grid-item-card} {octicon}`code` New model
+:link: architecture
+:link-type: doc
+
+How adapters, datasets, and the runner fit together when adding a model.
+
+Open the Architecture page.
+:::
+
+:::{grid-item-card} {octicon}`archive` Repo layout
+:link: archive/repo_layout_refactor_plan
+:link-type: doc
+
+Design rationale for the per-case layout (archived; refactor complete).
+
+Open the Repo Layout Refactor Plan.
+:::
+
+::::
 
 ## Site contents
 

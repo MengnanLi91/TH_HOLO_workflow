@@ -1,0 +1,77 @@
+/* TH_HOLO_workflow docs polish. Light-touch overrides on top of Furo. */
+
+/* ---- Inline code: subtle brand tint ---- */
+:root {
+    --th-inline-code-bg: rgba(42, 111, 151, 0.07);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --th-inline-code-bg: rgba(125, 188, 224, 0.10);
+    }
+}
+body:not([data-theme="light"]) {
+    --th-inline-code-bg: rgba(125, 188, 224, 0.10);
+}
+body[data-theme="light"] {
+    --th-inline-code-bg: rgba(42, 111, 151, 0.07);
+}
+
+code.literal,
+.rst-content code:not(.xref):not(.sig-name),
+:not(pre) > code {
+    background: var(--th-inline-code-bg);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+}
+
+/* ---- Code blocks: tighter padding, softer radius ---- */
+.highlight pre {
+    border-radius: 5px;
+    padding: 0.85em 1em;
+}
+
+div[class^="highlight"] {
+    margin: 0.75em 0;
+}
+
+/* ---- Admonitions: tighten title row spacing ---- */
+.admonition > .admonition-title,
+.admonition > p.admonition-title {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+}
+
+.admonition > :last-child {
+    margin-bottom: 0.6rem;
+}
+
+/* ---- sphinx-design cards: subtle hover lift, static (no transform) ---- */
+.sd-card {
+    border-radius: 6px;
+    border: 1px solid var(--color-background-border);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.sd-card:hover {
+    border-color: var(--color-brand-primary);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+}
+
+.sd-card .sd-card-title {
+    font-weight: 600;
+}
+
+/* ---- Tables: restrained zebra striping ---- */
+table.docutils tbody tr:nth-child(even) {
+    background: var(--color-background-secondary);
+}
+
+table.docutils th,
+table.docutils td {
+    border-color: var(--color-background-border);
+}
+
+/* ---- Sidebar: marginally tighter caption spacing ---- */
+.sidebar-tree .caption {
+    margin-top: 1.1em;
+}

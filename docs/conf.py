@@ -131,7 +131,18 @@ intersphinx_disabled_reftypes = ["std:doc"]
 html_theme = "furo"
 html_title = "TH_HOLO_workflow"
 html_short_title = "TH_HOLO"
-html_static_path: list[str] = []
+html_static_path: list[str] = ["_static"]
+html_css_files: list[str] = ["custom.css"]
+html_favicon = "_static/favicon.svg"
+
+# Scientific palette: a muted academic blue, used sparingly for brand and
+# link color. Chosen to sit comfortably alongside NumPy / SciPy / PyTorch
+# docs without competing with code-block syntax highlighting.
+_BRAND_PRIMARY = "#2a6f97"     # academic blue
+_BRAND_CONTENT = "#1f5478"     # slightly darker for link text on light bg
+_BRAND_PRIMARY_DARK = "#7dbce0"  # lifted brand for dark mode contrast
+_BRAND_CONTENT_DARK = "#9ccbe7"
+_BRAND_BORDER = "#1f5478"
 
 html_theme_options = {
     "announcement": (
@@ -139,15 +150,46 @@ html_theme_options = {
         "pipeline for MOOSE thermal-hydraulics simulations."
     ),
     "navigation_with_keys": True,
+    "sidebar_hide_name": False,
+    "top_of_page_buttons": ["view", "edit"],
     "source_repository": "https://github.com/MengnanLi91/TH_HOLO_workflow/",
     "source_branch": "main",
     "source_directory": "docs/",
+    "light_css_variables": {
+        "color-brand-primary": _BRAND_PRIMARY,
+        "color-brand-content": _BRAND_CONTENT,
+        "color-brand-visited": _BRAND_CONTENT,
+    },
+    "dark_css_variables": {
+        "color-brand-primary": _BRAND_PRIMARY_DARK,
+        "color-brand-content": _BRAND_CONTENT_DARK,
+        "color-brand-visited": _BRAND_CONTENT_DARK,
+    },
 }
 
 # -- Mermaid ---------------------------------------------------------------
 # Newer sphinxcontrib-mermaid versions default to "raw" output (inline
 # <pre class="mermaid">) which is the recommended path with the bundled
 # mermaid.js loader; keep the default.
+#
+# Re-skin mermaid to match the site brand. The plugin spreads its own
+# `{theme, darkMode}` over `mermaid_init_config` at runtime, so set the
+# theme via the dedicated *_theme knobs (must be "base" for themeVariables
+# to take effect) and put themeVariables / fontFamily in init_config.
+mermaid_light_theme = "base"
+mermaid_dark_theme = "base"
+mermaid_init_config: dict = {
+    "startOnLoad": True,
+    "themeVariables": {
+        "primaryColor": _BRAND_PRIMARY,
+        "primaryTextColor": "#ffffff",
+        "primaryBorderColor": _BRAND_BORDER,
+        "lineColor": "#475569",
+        "secondaryColor": "#e2e8f0",
+        "tertiaryColor": "#f8fafc",
+        "fontFamily": "system-ui, -apple-system, sans-serif",
+    },
+}
 
 # -- Suppress noisy warnings (do not silence anything load-bearing) ---------
 # Only `misc.highlighting_failure` is suppressed — pygments occasionally
