@@ -59,10 +59,10 @@ in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
 
 ```bash
 docker compose build etl-dev
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name lid_driven'
+docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py'
 ```
 
-Replace `etl-dev` with `etl` or `etl-ngc` if needed.
+`python run_etl.py` defaults to `cases/moose_grid/configs/etl.yaml` (the lid-driven flow). Replace `etl-dev` with `etl` or `etl-ngc` if needed.
 
 ## Build and run with Apptainer (HPC)
 
@@ -121,13 +121,13 @@ always accessible without an explicit `--bind`.
 apptainer exec \
   --bind /path/to/project:/path/to/project \
   th-holo-cpu.sif \
-  bash -c 'cd /path/to/src && python run_etl.py --config-name lid_driven'
+  bash -c 'cd /path/to/src && python run_etl.py'
 
 # GPU
 apptainer exec --nv \
   --bind /path/to/project:/path/to/project \
   th-holo-gpu.sif \
-  bash -c 'cd /path/to/src && python train.py --config-name fno'
+  bash -c 'cd /path/to/src && python train.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 ### Verify GPU access inside the container
@@ -151,11 +151,11 @@ Then run without `--bind`:
 apptainer run th-holo-cpu.sif
 ```
 
-The `lid_driven` config is defined in `src/moose_etl/config/lid_driven.yaml`:
+The lid-driven flow config lives at `src/cases/moose_grid/configs/etl.yaml`:
 
 ```yaml
 defaults:
-  - moose_etl
+  - etl_base
   - _self_
 
 etl:
@@ -180,13 +180,13 @@ docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py \
 
 ### Create your own config
 
-Use `lid_driven.yaml` as a template for a new dataset:
+Use the lid-driven config as a template for a new dataset:
 
 ```bash
-cp src/moose_etl/config/lid_driven.yaml src/moose_etl/config/my_case.yaml
+cp src/cases/moose_grid/configs/etl.yaml src/cases/moose_grid/configs/my_case.yaml
 ```
 
-Edit these keys in `src/moose_etl/config/my_case.yaml`:
+Edit these keys in `src/cases/moose_grid/configs/my_case.yaml`:
 
 - `etl.source.input_dir`
 - `etl.source.data_dir`
@@ -209,7 +209,7 @@ Then inside the container:
 
 ```bash
 cd src
-python run_etl.py --config-name lid_driven
+python run_etl.py
 ```
 
 ## Input and output conventions
@@ -219,7 +219,7 @@ python run_etl.py --config-name lid_driven
 | `{sim_name}.e` | Exodus II mesh + element fields |
 | `{sim_prefix}_out_{probe_name}_{timestep:04d}.csv` | CSV line probes |
 
-- Output directory (with `--config-name lid_driven`): `data/processed/lid-driven/`
+- Output directory (with the default lid-driven config): `data/processed/lid-driven/`
 - Output format: one `{sim_name}.zarr` per simulation
 - Exodus and CSV prefixes do not need to match
 
@@ -228,34 +228,35 @@ python run_etl.py --config-name lid_driven
 Use the `etl` or `etl-ngc` service for PhysicsNeMo + PyTorch scripts.
 Edit this template first:
 
-- `src/config/fno.yaml`
+- `src/cases/moose_grid/configs/train_fno.yaml`
 
-`fno.yaml` is a Hydra config that inherits `src/config/default.yaml` and sets
-an FNO example for train/evaluate.
+`train_fno.yaml` is a Hydra config that inherits `src/training/config/default.yaml`
+(via `hydra.searchpath: pkg://training.config`) and sets an FNO example for
+train/evaluate.
 
 ### Train
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 ### Evaluate
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 Generate velocity-field comparison plots during evaluation:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno \
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/moose_grid/configs --config-name train_fno \
   output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
 CLI flags override YAML values:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno training.epochs=50'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno training.epochs=50'
 ```
 
 ## Logs

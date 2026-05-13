@@ -271,7 +271,7 @@ No code changes are needed.  Add an `hpo` section to the model's
 training config:
 
 ```yaml
-# src/config/fno.yaml  (add this at the end)
+# src/cases/moose_grid/configs/train_fno.yaml  (add this at the end)
 hpo:
   study_name: fno_hpo
   n_trials: 50
@@ -296,8 +296,8 @@ hpo:
 Then run:
 
 ```bash
-cd src && python train.py --config-name fno          # HPO + retrain
-cd src && python train.py --config-name fno hpo=null # direct training
+cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno          # HPO + retrain
+cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno hpo=null # direct training
 ```
 
 ## Custom experiment classes

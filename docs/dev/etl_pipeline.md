@@ -18,11 +18,11 @@ ExodusDataSource ──► MooseDataTransformation ──► MooseZarrSink
 
 | Component | Class | File |
 |---|---|---|
-| Source | `ExodusDataSource` | `src/moose_etl/data_sources/exodus_source.py` |
-| CSV reader | `CSVProbeSource` | `src/moose_etl/data_sources/csv_source.py` |
-| Transform | `MooseDataTransformation` | `src/moose_etl/transformations/moose_transform.py` |
-| Sink | `MooseZarrSink` | `src/moose_etl/data_sources/zarr_sink.py` |
-| Schemas | `MooseRawData`, `MooseProcessedData` | `src/moose_etl/schemas.py` |
+| Source | `ExodusDataSource` | `src/cases/moose_grid/etl/data_sources/exodus_source.py` |
+| CSV reader | `CSVProbeSource` | `src/cases/moose_grid/etl/data_sources/csv_source.py` |
+| Transform | `MooseDataTransformation` | `src/cases/moose_grid/etl/transformations/moose_transform.py` |
+| Sink | `MooseZarrSink` | `src/cases/moose_grid/etl/data_sources/zarr_sink.py` |
+| Schemas | `MooseRawData`, `MooseProcessedData` | `src/cases/moose_grid/etl/schemas.py` |
 
 ## Pipeline stages
 
@@ -112,8 +112,9 @@ shuffle enabled). Chunk sizes target ~1 MB per chunk.
 
 ## Configuration
 
-The pipeline is configured via Hydra. The base config lives at
-`src/moose_etl/config/moose_etl.yaml`. Any key can be overridden on the CLI.
+The pipeline is configured via Hydra. The shared base template lives at
+`src/cases/moose_grid/configs/etl_base.yaml` and the canonical lid-driven
+variant at `src/cases/moose_grid/configs/etl.yaml`. Any key can be overridden on the CLI.
 
 ```bash
 python run_etl.py \
