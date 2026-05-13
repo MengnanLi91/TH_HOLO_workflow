@@ -48,6 +48,49 @@ The whole story in one sentence: **two ETL pipelines feed one trainer
 through four adapters**. The deeper structure is on the
 [Architecture](architecture.md) page.
 
+## Where do I start?
+
+::::{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item-card} {octicon}`rocket` First time
+:link: user/getting_started
+:link-type: doc
+
+Container setup, bind mounts, troubleshooting, and log inspection.
+
+Open the Getting Started guide.
+:::
+
+:::{grid-item-card} {octicon}`play` Alpha-D surrogate
+:link: user/alpha_d_surrogate
+:link-type: doc
+
+Reproduce the Darcy-resistance MLP end-to-end, ETL through evaluation.
+
+Open the Alpha-D Surrogate tutorial.
+:::
+
+:::{grid-item-card} {octicon}`code` New model
+:link: architecture
+:link-type: doc
+
+How adapters, datasets, and the runner fit together when adding a model.
+
+Open the Architecture page.
+:::
+
+:::{grid-item-card} {octicon}`archive` Repo layout
+:link: archive/repo_layout_refactor_plan
+:link-type: doc
+
+Design rationale for the per-case layout (archived; refactor complete).
+
+Open the Repo Layout Refactor Plan.
+:::
+
+::::
+
 ## Quick start
 
 ::::{tab-set}
@@ -115,49 +158,6 @@ docker compose run --rm etl bash -lc \
 
 The full walkthrough is in the
 [Alpha-D Surrogate Tutorial](user/alpha_d_surrogate.md).
-
-## Where do I start?
-
-::::{grid} 1 2 2 2
-:gutter: 3
-
-:::{grid-item-card} {octicon}`rocket` First time
-:link: user/getting_started
-:link-type: doc
-
-Container setup, bind mounts, troubleshooting, and log inspection.
-
-Open the Getting Started guide.
-:::
-
-:::{grid-item-card} {octicon}`play` Alpha-D surrogate
-:link: user/alpha_d_surrogate
-:link-type: doc
-
-Reproduce the Darcy-resistance MLP end-to-end, ETL through evaluation.
-
-Open the Alpha-D Surrogate tutorial.
-:::
-
-:::{grid-item-card} {octicon}`code` New model
-:link: architecture
-:link-type: doc
-
-How adapters, datasets, and the runner fit together when adding a model.
-
-Open the Architecture page.
-:::
-
-:::{grid-item-card} {octicon}`archive` Repo layout
-:link: archive/repo_layout_refactor_plan
-:link-type: doc
-
-Design rationale for the per-case layout (archived; refactor complete).
-
-Open the Repo Layout Refactor Plan.
-:::
-
-::::
 
 ## Site contents
 
