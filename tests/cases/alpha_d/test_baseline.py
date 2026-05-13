@@ -178,8 +178,9 @@ def _write_alpha_d_zarr(
 
 
 def test_residual_target_round_trip(tmp_path) -> None:
-    """y_residual + baseline_encoded must equal the y produced without residual mode."""
+    """y_residual + baseline_encoded must equal the LV-normalised raw target."""
     pytest.importorskip("zarr")
+    from cases.alpha_d.physics.targets import convert_alpha_d_values_between_bases
     from cases.alpha_d.transforms import alpha_d_residual_transform
     from training.datasets_tabular import TabularPairDataset
 
@@ -196,17 +197,34 @@ def test_residual_target_round_trip(tmp_path) -> None:
     common = dict(
         zarr_dir=out_dir,
         output_columns=["signed_log1p_alpha_D"],
-        local_velocity_normalization=True,
     )
+    # Raw encoded targets (no LV-norm, no residual): the dataset's _y is
+    # what the ETL wrote to zarr.
     full = TabularPairDataset(**common)
-    residual = TabularPairDataset(**common, target_transform=alpha_d_residual_transform)
+    # The residual transform owns LV-norm + baseline subtraction. Its _y is
+    # LV_norm(raw) − baseline_encoded.
+    residual = TabularPairDataset(
+        **common,
+        local_velocity_normalization=True,
+        target_transform=alpha_d_residual_transform,
+    )
 
     assert residual.has_target_baseline is True
+    assert residual.local_velocity_normalization is True
     assert residual._baseline_encoded is not None
     assert residual._baseline_encoded.shape == residual._y.shape
 
-    reconstructed = residual._y + residual._baseline_encoded
-    assert torch.allclose(reconstructed, full._y, atol=1e-5, rtol=0)
+    # Apply LV-norm to the raw target by hand and compare against
+    # residual + baseline.
+    lv_normed_raw = convert_alpha_d_values_between_bases(
+        full._y[:, 0].numpy().astype(np.float64),
+        target_name="signed_log1p_alpha_D",
+        d_over_D=full._raw_d_local_over_D.numpy().astype(np.float64),
+        from_local_velocity_normalization=False,
+        to_local_velocity_normalization=True,
+    ).astype(np.float32)
+    reconstructed = (residual._y[:, 0] + residual._baseline_encoded[:, 0]).numpy()
+    assert np.allclose(reconstructed, lv_normed_raw, atol=1e-5, rtol=0)
 
 
 def test_residual_helper_is_identity_when_disabled(tmp_path) -> None:

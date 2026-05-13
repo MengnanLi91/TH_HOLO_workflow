@@ -67,7 +67,7 @@ def compute_delta_p_metrics(
     with torch.no_grad():
         for ci, case_name in enumerate(case_names):
             cm = case_meta[ci]
-            delta_p_gt = cm["delta_p_case"]
+            delta_p_gt = float(cm.get("delta_p_case", 0.0))
             if delta_p_gt <= 0:
                 continue
 

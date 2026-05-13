@@ -19,12 +19,6 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from cases.alpha_d.physics.targets import (
-    convert_alpha_d_values_between_bases,
-    is_alpha_d_target,
-)
-
-
 class TabularPairDataset(Dataset):
     """Reads a directory of ``.zarr`` stores and produces ``(x, y)`` pairs.
 
@@ -160,22 +154,10 @@ class TabularPairDataset(Dataset):
                     self._tgt_idx = list(range(targets.shape[1]))
                     self.output_columns = list(raw_target_names)
 
-            # Per-case metadata for physics-informed losses.  Geometry
-            # constants are written by the AlphaD ETL sink; older zarrs
-            # produced before that change fall back to the historical
-            # defaults (pipe_radius=0.1, outer_height=1.0, buffer=1.0,
-            # rho=1.0, V_bulk=1.0).
-            case_meta_list.append({
-                "delta_p_case": float(meta.attrs.get("delta_p_case", 0.0)),
-                "Re": float(meta.attrs.get("Re", 0.0)),
-                "Lr": float(meta.attrs.get("Lr", 0.0)),
-                "Dr": float(meta.attrs.get("Dr", 0.0)),
-                "D_big": float(meta.attrs.get("D_big", 0.2)),
-                "outer_height_m": float(meta.attrs.get("outer_height_m", 1.0)),
-                "buffer_diams": float(meta.attrs.get("buffer_diams", 1.0)),
-                "rho": float(meta.attrs.get("rho", 1.0)),
-                "V_bulk": float(meta.attrs.get("V_bulk", 1.0)),
-            })
+            # Pass the case's metadata through verbatim. Case code reads
+            # whatever keys it needs (with its own ``.get`` defaults); the
+            # generic dataset doesn't know which keys are physics-relevant.
+            case_meta_list.append(dict(meta.attrs))
 
             # Load ALL base features (derived columns need access to
             # source columns that may not be in input_columns).
@@ -204,7 +186,6 @@ class TabularPairDataset(Dataset):
 
         # Store per-case metadata
         self._case_meta = case_meta_list
-        self.local_velocity_normalization = False
         self.exclude_cases = list(exclude_cases) if exclude_cases else []
 
         # Store raw geometry columns (before normalization) for delta_p loss
@@ -225,30 +206,16 @@ class TabularPairDataset(Dataset):
             if d_over_D_col is not None else None
         )
 
-        # Apply local-velocity normalization to alpha_D-family targets.
-        if local_velocity_normalization and d_over_D_col is not None:
-            d_over_D = full_x[:, d_over_D_col].astype(np.float64)
-            transformed_any = False
-            for j, tgt_name in enumerate(self.output_columns):
-                if is_alpha_d_target(tgt_name):
-                    full_y[:, j] = convert_alpha_d_values_between_bases(
-                        full_y[:, j].astype(np.float64),
-                        target_name=tgt_name,
-                        d_over_D=d_over_D,
-                        from_local_velocity_normalization=False,
-                        to_local_velocity_normalization=True,
-                    ).astype(np.float32)
-                    transformed_any = True
-            self.local_velocity_normalization = transformed_any
-
         # ----------------------------------------------------------
-        # Optional case-supplied target transform. The transform may return
-        # a ``baseline_encoded`` ndarray under extras["baseline_encoded"];
-        # the dataset stashes it so consumers (metrics, plotting, runner
-        # case-geometry) can re-add the baseline at decode boundaries.
+        # Optional case-supplied target transform. Extras keys consumed by
+        # the dataset: ``baseline_encoded`` (stashed on
+        # ``self._baseline_encoded`` for downstream consumers — metrics,
+        # plotting, the Δp integral) and ``local_velocity_normalization``
+        # (propagated onto ``self.local_velocity_normalization``).
         # ----------------------------------------------------------
         self._baseline_encoded: torch.Tensor | None = None
         self.has_target_baseline = False
+        self.local_velocity_normalization = False
         if target_transform is not None:
             full_y, extras = target_transform(
                 full_y,
@@ -257,14 +224,18 @@ class TabularPairDataset(Dataset):
                 feature_names=self._all_feature_names,
                 case_meta_list=case_meta_list,
                 rows_per_case=rows_per_case,
-                local_velocity_normalization=self.local_velocity_normalization,
+                local_velocity_normalization=local_velocity_normalization,
             )
-            baseline = extras.get("baseline_encoded") if extras else None
+            extras = extras or {}
+            baseline = extras.get("baseline_encoded")
             if baseline is not None:
                 self._baseline_encoded = torch.from_numpy(
                     np.asarray(baseline, dtype=np.float32)
                 )
                 self.has_target_baseline = True
+            self.local_velocity_normalization = bool(
+                extras.get("local_velocity_normalization", False)
+            )
 
         # Resolve input columns
         if input_columns is not None:

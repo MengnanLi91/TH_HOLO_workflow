@@ -293,7 +293,7 @@ class AlphaDExperiment(Experiment):
             Per-case geometry with keys ``z_hat``, ``d_local_over_D``,
             ``L_roi``, ``D_big``, ``delta_p_case``, ``rho``, ``V_bulk``.
         """
-        delta_p_gt = geo["delta_p_case"]
+        delta_p_gt = geo.get("delta_p_case", 0.0)
         if delta_p_gt <= 0:
             return None
 
@@ -452,7 +452,7 @@ class AlphaDExperiment(Experiment):
             rho = float(cm.get("rho", 1.0))
             V_bulk = float(cm.get("V_bulk", 1.0))
 
-            L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
+            L_roi = float(cm.get("Lr", 0.0)) * outer_height_m + 2.0 * buffer_diams * D_big
 
             baseline_encoded = getattr(ds, "_baseline_encoded", None)
             case_geometry[ci] = {
@@ -465,7 +465,7 @@ class AlphaDExperiment(Experiment):
                 "n_stations": int(mask.sum()),
                 "L_roi": L_roi,
                 "D_big": D_big,
-                "delta_p_case": cm["delta_p_case"],
+                "delta_p_case": float(cm.get("delta_p_case", 0.0)),
                 "rho": rho,
                 "V_bulk": V_bulk,
                 "baseline_encoded": (

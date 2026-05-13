@@ -127,14 +127,20 @@ def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
     meta.attrs["Dr"] = 0.5
     meta.attrs["Lr"] = 0.1
 
+    from cases.alpha_d.transforms import alpha_d_residual_transform
+
     ds = TabularPairDataset(
         zarr_dir=out_dir,
         output_columns=["signed_log1p_alpha_D"],
         local_velocity_normalization=True,
+        target_transform=alpha_d_residual_transform,
     )
 
+    # The transform now owns LV-norm; it also subtracts the closed-form
+    # baseline, so add it back before decoding to recover alpha_bulk.
+    encoded_lv = ds._y[:, 0] + ds._baseline_encoded[:, 0]
     recovered_alpha = field_values_to_physical(
-        ds._y[:, 0],
+        encoded_lv,
         field_name="signed_log1p_alpha_D",
         d_over_D=ds._raw_d_local_over_D,
         local_velocity_normalization=True,
