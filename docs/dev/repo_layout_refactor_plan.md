@@ -1,5 +1,11 @@
 # Repo Layout Refactor — Per-Case Folders + Model-Agnostic Core
 
+!!! info "Archived — refactor complete"
+    All phases of this plan have landed on `main` (most recent: `da9d9a9`).
+    This page is preserved as a historical design record. For the current
+    per-case layout, see the [Architecture](../architecture.md) page and
+    the [Alpha-D case overview](../cases/alpha_d.md).
+
 Status: planned, not yet implemented.
 Author: design discussion, 2026-05-07.
 Revision history:
