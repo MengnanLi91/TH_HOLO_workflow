@@ -7,9 +7,9 @@ Reuses ``cases.alpha_d.feature_data.load_feature_matrix`` (and its
 ``data.input_columns_file`` in the MLP training config.
 
 Usage (from src/ directory):
-    python run_feature_selection_pycaret.py
-    python run_feature_selection_pycaret.py pycaret.setup.n_features_to_select=8
-    python run_feature_selection_pycaret.py output.dir=../data/feature_analysis/pycaret/run_1
+    python cases/alpha_d/run_feature_selection_pycaret.py
+    python cases/alpha_d/run_feature_selection_pycaret.py pycaret.setup.n_features_to_select=8
+    python cases/alpha_d/run_feature_selection_pycaret.py output.dir=../data/feature_analysis/pycaret/run_1
 """
 
 import json
@@ -21,7 +21,7 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from cases.alpha_d.feature_data import ALLOWLIST, load_feature_matrix
 from feature_selection.manifest import build_manifest, write_manifest
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(
     version_base="1.3",
-    config_path="cases/alpha_d/configs",
+    config_path="configs",
     config_name="pycaret",
 )
 def main(cfg: DictConfig) -> None:

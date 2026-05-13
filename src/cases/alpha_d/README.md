@@ -45,7 +45,7 @@ for the Zarr layout and feature reference.
 ### 2. (Optional) PyCaret feature selection
 
 ```bash
-python run_feature_selection_pycaret.py
+python cases/alpha_d/run_feature_selection_pycaret.py
 ```
 
 Reads the Zarr stores, runs PyCaret regression with the
