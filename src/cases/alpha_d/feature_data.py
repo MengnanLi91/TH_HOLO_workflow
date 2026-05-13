@@ -69,9 +69,12 @@ def _parse_Dr(case_name: str) -> float:
 
 def _resolve_features(selected: list[str] | None) -> list[str]:
     if selected is None:
-        # Preserve historical default behaviour unless explicitly requested:
-        # only base (non-engineered) features are used by default.
-        return list(BASE_ALLOWLIST)
+        # ``selected_from_allowlist: null`` in the config means "evaluate
+        # the full advertised candidate set" — base features + the
+        # engineered names below. The PyCaret selector then prunes down to
+        # ``n_features_to_select``. Restrict to ``BASE_ALLOWLIST`` only by
+        # listing it explicitly in the config.
+        return list(ALLOWLIST)
     allowed = set(ALLOWLIST)
     unknown = [c for c in selected if c not in allowed]
     if unknown:

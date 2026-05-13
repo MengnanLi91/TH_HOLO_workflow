@@ -270,6 +270,14 @@ def run_pycaret_selection(
     enforce_allowlist(selected, allowlist)
     ranking = _extract_ranking(exp, ranker_id)
 
+    # Trim to n_features_to_select by ranker importance. PyCaret's
+    # ``classic`` selection_method can leave extras above the requested
+    # count; honour the cap so the artifact matches the user's request.
+    top_k = user_setup.get("n_features_to_select")
+    if top_k is not None and len(selected) > int(top_k):
+        ranked_names = [r["feature"] for r in ranking if r["feature"] in selected]
+        selected = ranked_names[: int(top_k)]
+
     # --- Artifacts -----------------------------------------------------
     write_selected_features(
         output_dir / "selected_features.txt", selected, allowlist=allowlist,

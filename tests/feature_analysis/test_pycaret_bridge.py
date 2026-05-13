@@ -13,13 +13,18 @@ import pytest
 np = pytest.importorskip("numpy")
 pd = pytest.importorskip("pandas")
 
-from cases.alpha_d.feature_data import ALLOWLIST, FeatureAnalysisData
+from feature_selection.data import FeatureAnalysisData
 from feature_selection.pycaret_selection import (  # noqa: E402
     build_dataframe,
     case_level_split,
     enforce_allowlist,
     write_selected_features,
 )
+
+# ALLOWLIST is case-specific; only the allowlist-enforcement tests need
+# it. Imported lazily so the generic bridge tests don't drag in the
+# alpha-D physics modules.
+from cases.alpha_d.feature_data import ALLOWLIST  # noqa: E402
 
 
 def _make_data(n_cases: int = 5, rows_per_case: int = 10) -> FeatureAnalysisData:
