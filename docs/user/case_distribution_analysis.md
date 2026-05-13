@@ -53,7 +53,7 @@ cd src && python analyze_case_distribution.py \
 From the host with Apptainer:
 
 ```bash
-apptainer exec th-holo-gpu.sif bash -c \
+apptainer exec multifid-th-gpu.sif bash -c \
     'cd src && python analyze_case_distribution.py \
         --run-meta ../data/models/case_pressure_drop/run_meta.json'
 ```

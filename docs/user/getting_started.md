@@ -83,16 +83,16 @@ This loads `APPTAINER_BIND` and any proxy settings into your shell so subsequent
 
 ```bash
 # Minimal dev image (ETL only, ~300 MB)
-apptainer build th-holo-dev.sif docker/dev.def
+apptainer build multifid-th-dev.sif docker/dev.def
 
 # Full CPU image with PhysicsNeMo (~1 GB)
-apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
+apptainer build multifid-th-cpu.sif docker/physicsnemo-cpu.def
 
 # CUDA 12.4 GPU image — CPU-only without --nv, GPU with --nv (~5 GB)
-apptainer build th-holo-gpu.sif docker/gpu.def
+apptainer build multifid-th-gpu.sif docker/gpu.def
 
 # NGC image — CPU-only without --nv, GPU with --nv (~13 GB)
-apptainer build th-holo-ngc.sif docker/ngc.def
+apptainer build multifid-th-ngc.sif docker/ngc.def
 ```
 
 ### Step 3: Run with project folder bound
@@ -103,12 +103,12 @@ Bind your project directory so the container can read inputs and write outputs:
 # CPU-only
 apptainer run \
   --bind /path/to/project:/path/to/project \
-  th-holo-cpu.sif
+  multifid-th-cpu.sif
 
 # GPU (--nv exposes host NVIDIA drivers to the container)
 apptainer run --nv \
   --bind /path/to/project:/path/to/project \
-  th-holo-gpu.sif
+  multifid-th-gpu.sif
 ```
 
 Your `$HOME` directory is auto-bound by Apptainer, so files under `$HOME` are
@@ -120,20 +120,20 @@ always accessible without an explicit `--bind`.
 # CPU
 apptainer exec \
   --bind /path/to/project:/path/to/project \
-  th-holo-cpu.sif \
+  multifid-th-cpu.sif \
   bash -c 'cd /path/to/src && python run_etl.py'
 
 # GPU
 apptainer exec --nv \
   --bind /path/to/project:/path/to/project \
-  th-holo-gpu.sif \
+  multifid-th-gpu.sif \
   bash -c 'cd /path/to/src && python train.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 ### Verify GPU access inside the container
 
 ```bash
-apptainer exec --nv th-holo-gpu.sif python -c \
+apptainer exec --nv multifid-th-gpu.sif python -c \
   "import torch; print(torch.cuda.get_device_name(0))"
 ```
 
@@ -148,7 +148,7 @@ export APPTAINER_BIND="/path/to/project:/path/to/project"
 Then run without `--bind`:
 
 ```bash
-apptainer run th-holo-cpu.sif
+apptainer run multifid-th-cpu.sif
 ```
 
 The lid-driven flow config lives at `src/cases/moose_grid/configs/etl.yaml`:

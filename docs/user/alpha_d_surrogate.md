@@ -349,7 +349,7 @@ docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path
 
 ### Apptainer (HPC) equivalent
 
-On systems without Docker, use the pre-built `th-holo-gpu.sif` at the repo root
+On systems without Docker, use the pre-built `multifid-th-gpu.sif` at the repo root
 (or build one yourself per
 [Getting Started → Build a SIF image](getting_started.md#step-2-build-a-sif-image)).
 Add `--nv` for GPU; drop it for CPU-only. Replace `/path/to/project` with the
@@ -358,25 +358,25 @@ absolute path to your repo checkout (or set `APPTAINER_BIND` once and omit
 
 ```bash
 # 1. Extract alpha_D profiles (CPU is fine for ETL — drop --nv)
-apptainer exec --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+apptainer exec --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python cases/alpha_d/run_etl.py'
 
 # 2. Train (HPO + retrain best)
-apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
 # 2b. Train directly without HPO
-apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
 # 3. Evaluate
-apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
+apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
-`th-holo-gpu.sif` (built from `docker/gpu.def`) ships PyTorch CUDA 12.4 wheels +
+`multifid-th-gpu.sif` (built from `docker/gpu.def`) ships PyTorch CUDA 12.4 wheels +
 PhysicsNeMo and matches the `etl-gpu` Docker service; it runs CPU-only without
-`--nv`. For a smaller CPU-only image, build `th-holo-cpu.sif` from
+`--nv`. For a smaller CPU-only image, build `multifid-th-cpu.sif` from
 `docker/physicsnemo-cpu.def`.
 
 ## Architecture notes
