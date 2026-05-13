@@ -16,8 +16,8 @@ longer depends on the alias.
 
 ```bash
 # Inside the container (e.g. with Apptainer):
-apptainer exec --pwd /data/lim2/projects/TH_HOLO_workflow \
-  /data/lim2/projects/TH_HOLO_workflow/th-holo-gpu.sif \
+apptainer exec --pwd /data/lim2/projects/multifid-th \
+  /data/lim2/projects/multifid-th/multifid-th-gpu.sif \
   python -m training.models._migrate_conv1d_checkpoint path/to/model.mdlus
 ```
 

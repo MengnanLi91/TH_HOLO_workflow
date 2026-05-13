@@ -1,7 +1,7 @@
 # API Reference
 
 Auto-generated documentation for the Python packages that make up
-TH_HOLO_workflow. Signatures, docstrings, and "[source]" links are
+MULTIFID-TH. Signatures, docstrings, and "[source]" links are
 extracted directly from the code in `src/`.
 
 The packages mirror the layout described on the

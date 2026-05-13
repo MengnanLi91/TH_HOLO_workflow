@@ -1,6 +1,6 @@
 # Architecture
 
-TH_HOLO_workflow has two complementary halves: a pair of **ETL
+MULTIFID-TH has two complementary halves: a pair of **ETL
 pipelines** that turn raw MOOSE outputs into ML-ready Zarr, and a
 **generic training framework** that consumes those Zarr stores through a
 small set of adapters. This page wires them together with the diagrams

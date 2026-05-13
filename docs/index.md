@@ -1,6 +1,6 @@
-# TH_HOLO_workflow
+# MULTIFID-TH
 
-TH_HOLO_workflow is a PhysicsNeMo-based pipeline that turns
+MULTIFID-TH is a PhysicsNeMo-based pipeline that turns
 **MOOSE thermal-hydraulics outputs** (Exodus `.e` files plus CSV line
 probes) into ML-ready Zarr datasets, then trains and evaluates a family
 of surrogate models against them through a single generic training core.
@@ -107,9 +107,9 @@ docker compose run --rm etl-dev bash -lc \
 :::{tab-item} Apptainer (HPC)
 ```bash
 git submodule update --init physicsnemo-curator physicsnemo
-apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
+apptainer build multifid-th-cpu.sif docker/physicsnemo-cpu.def
 apptainer exec --bind /path/to/project:/path/to/project \
-  th-holo-cpu.sif bash -lc 'cd /path/to/project/src && python run_etl.py'
+  multifid-th-cpu.sif bash -lc 'cd /path/to/project/src && python run_etl.py'
 ```
 :::
 
