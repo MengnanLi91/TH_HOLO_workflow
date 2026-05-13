@@ -1,11 +1,11 @@
-# TH_HOLO_workflow
+# MULTIFID-TH
 
-[![pytest](https://github.com/MengnanLi91/TH_HOLO_workflow/actions/workflows/pytest.yml/badge.svg)](https://github.com/MengnanLi91/TH_HOLO_workflow/actions/workflows/pytest.yml)
+[![pytest](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml/badge.svg)](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml)
 
-TH_HOLO_workflow is a PhysicsNeMo-based ETL pipeline that converts MOOSE
+MULTIFID-TH is a PhysicsNeMo-based ETL pipeline that converts MOOSE
 thermal-hydraulics outputs (Exodus + CSV probes) into ML-ready Zarr datasets.
 
-## TH_HOLO_workflow Plot
+## Pipeline overview
 
 ```mermaid
 flowchart LR

@@ -1,4 +1,4 @@
-"""Sphinx configuration for the TH_HOLO_workflow documentation site."""
+"""Sphinx configuration for the MULTIFID-TH documentation site."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ if str(_SRC) not in sys.path:
 
 
 # -- Project information ----------------------------------------------------
-project = "TH_HOLO_workflow"
-author = "TH_HOLO_workflow contributors"
-copyright = "2026, TH_HOLO_workflow contributors"  # noqa: A001
+project = "MULTIFID-TH"
+author = "MULTIFID-TH contributors"
+copyright = "2026, MULTIFID-TH contributors"  # noqa: A001
 release = "0.1.0"
 
 
@@ -129,8 +129,8 @@ intersphinx_disabled_reftypes = ["std:doc"]
 
 # -- HTML output ------------------------------------------------------------
 html_theme = "furo"
-html_title = "TH_HOLO_workflow"
-html_short_title = "TH_HOLO"
+html_title = "MULTIFID-TH"
+html_short_title = "MULTIFID-TH"
 html_static_path: list[str] = ["_static"]
 html_css_files: list[str] = ["custom.css"]
 html_favicon = "_static/favicon.svg"
@@ -152,7 +152,7 @@ html_theme_options = {
     "navigation_with_keys": True,
     "sidebar_hide_name": False,
     "top_of_page_buttons": ["view", "edit"],
-    "source_repository": "https://github.com/MengnanLi91/TH_HOLO_workflow/",
+    "source_repository": "https://github.com/MengnanLi91/multifid-th/",
     "source_branch": "main",
     "source_directory": "docs/",
     "light_css_variables": {
