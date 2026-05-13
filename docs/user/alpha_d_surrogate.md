@@ -121,12 +121,12 @@ Notation:
 | `is_throat` | `1` if `z_throat_start ≤ z ≤ z_throat_end` else `0` | local | One-hot region flag |
 | `is_downstream` | `1` if `z > z_throat_end` else `0` | local | One-hot region flag |
 
-#### Engineered features (synthesized at load time, opt-in)
+#### Engineered features (synthesized at load time)
 
-These are only emitted when the caller passes their names via
-`selected_from_allowlist`. They are pure functions of base features so
-`TabularPairDataset` can reproduce them at training time without any
-extra storage.
+These are included in the default `selected_from_allowlist: null`
+candidate set and can be filtered down explicitly by listing the base
+names. They are pure functions of base features so `TabularPairDataset`
+can reproduce them at training time without any extra storage.
 
 | Feature | Expression | Per-row varying? | Notes |
 |---|---|---|---|
