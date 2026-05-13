@@ -23,7 +23,7 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from cases.alpha_d.feature_data import load_feature_matrix
+from cases.alpha_d.feature_data import ALLOWLIST, load_feature_matrix
 from feature_selection.manifest import build_manifest, write_manifest
 from feature_selection.pycaret_selection import run_pycaret_selection
 
@@ -65,6 +65,7 @@ def main(cfg: DictConfig) -> None:
         data,
         pycaret_cfg=pycaret_cfg,
         output_dir=out_dir,
+        allowlist=ALLOWLIST,
     )
     logger.info(
         "Selected %d features: %s",

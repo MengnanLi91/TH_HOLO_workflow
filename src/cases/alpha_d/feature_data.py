@@ -19,7 +19,6 @@ Leakage controls
 """
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +28,7 @@ from cases.alpha_d.physics.targets import (
     convert_alpha_d_values_between_bases,
     is_alpha_d_target,
 )
+from feature_selection.data import FeatureAnalysisData
 
 BASE_ALLOWLIST: tuple[str, ...] = (
     "log10_Re",
@@ -58,29 +58,6 @@ ALLOWLIST: tuple[str, ...] = BASE_ALLOWLIST + ENGINEERED_FEATURES
 GROUPED_FEATURES: dict[str, tuple[str, ...]] = {
     "region_onehot": ("is_upstream", "is_throat", "is_downstream"),
 }
-
-
-@dataclass
-class FeatureAnalysisData:
-    X: np.ndarray  # [N, D] float32
-    y: np.ndarray  # [N] float32
-    groups: np.ndarray  # [N] int32, case index
-    feature_names: list[str]
-    target_name: str
-    case_ids: list[str]  # len == n_cases
-    rows_per_case: list[int]
-    local_velocity_normalization: bool
-
-    @property
-    def n_cases(self) -> int:
-        return len(self.case_ids)
-
-    def feature_block(self, name: str) -> list[int] | None:
-        """Return column indices for a grouped block, or None if not present."""
-        members = GROUPED_FEATURES.get(name)
-        if members is None:
-            return None
-        return [self.feature_names.index(m) for m in members if m in self.feature_names]
 
 
 def _parse_Dr(case_name: str) -> float:

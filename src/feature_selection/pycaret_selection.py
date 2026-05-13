@@ -1,13 +1,15 @@
-"""PyCaret-based feature selection for the alpha_D surrogate.
+"""PyCaret-based feature selection (generic, case-driven).
+
+Callers pass a ``FeatureAnalysisData`` (whose construction stays
+case-side, so the case enforces its own ALLOWLIST upstream) together
+with the post-selection ``allowlist`` to validate against.
 
 V1 contract
 -----------
 - The DataFrame handed to PyCaret is built exclusively from a
-  ``FeatureAnalysisData`` instance. That instance already passed through
-  the shared ``ALLOWLIST`` choke point in
-  ``feature_analysis.data_loader``. PyCaret never reads Zarr directly,
-  so the allowlist remains the single guard against target-adjacent
-  metadata (e.g. ``delta_p_case``) entering as a feature.
+  ``FeatureAnalysisData`` instance. PyCaret never reads Zarr directly,
+  so the caller-supplied allowlist remains the single guard against
+  target-adjacent columns leaking back into the selected feature set.
 
 - ``setup()`` locks ``polynomial_features``, ``feature_interaction``,
   ``pca``, and ``group_features`` off. Those settings would synthesize
@@ -29,12 +31,13 @@ V1 contract
 import csv
 import json
 import logging
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from cases.alpha_d.feature_data import ALLOWLIST, FeatureAnalysisData
+from feature_selection.data import FeatureAnalysisData
 
 
 logger = logging.getLogger(__name__)
@@ -100,17 +103,18 @@ def case_level_split(df, *, case_id_col: str, test_ratio: float, seed: int):
     return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
 
 
-def enforce_allowlist(selected: list[str]) -> None:
-    """Raise if any selected feature is outside the shared ALLOWLIST.
+def enforce_allowlist(selected: list[str], allowlist: Collection[str]) -> None:
+    """Raise if any selected feature is outside the caller's allowlist.
 
     Kept as a top-level function so the v1 contract is unit-testable
-    without importing PyCaret.
+    without importing PyCaret. The caller supplies the allowlist; this
+    keeps the library case-agnostic.
     """
-    allowed = set(ALLOWLIST)
+    allowed = set(allowlist)
     out_of_allowlist = [f for f in selected if f not in allowed]
     if out_of_allowlist:
         raise RuntimeError(
-            f"PyCaret selected features outside ALLOWLIST: {out_of_allowlist}. "
+            f"PyCaret selected features outside allowlist: {out_of_allowlist}. "
             "v1 forbids synthesized columns; check _V1_LOCKED_SETUP_ARGS and "
             "setup() kwargs in your config."
         )
@@ -204,8 +208,14 @@ def run_pycaret_selection(
     *,
     pycaret_cfg: dict[str, Any],
     output_dir: Path,
+    allowlist: Collection[str],
 ) -> dict[str, Any]:
-    """Run the v1 PyCaret selection path and write artifacts."""
+    """Run the v1 PyCaret selection path and write artifacts.
+
+    ``allowlist`` is the set of permitted post-selection feature names;
+    callers supply it (typically the case-side ALLOWLIST constant) so
+    this library stays alpha-D-agnostic.
+    """
     _require_pycaret()
     from pycaret.regression import RegressionExperiment
 
@@ -231,7 +241,7 @@ def run_pycaret_selection(
     if locked_overrides:
         raise ValueError(
             f"setup keys locked in v1: {locked_overrides}. Remove them from the "
-            "config; see feature_analysis.pycaret_selection._V1_LOCKED_SETUP_ARGS."
+            "config; see feature_selection.pycaret_selection._V1_LOCKED_SETUP_ARGS."
         )
     # Defaults when unspecified by the user.
     user_setup.setdefault("normalize", True)
@@ -257,11 +267,13 @@ def run_pycaret_selection(
     exp.setup(**setup_kwargs)
 
     selected = _extract_selected_features(exp, data.target_name)
-    enforce_allowlist(selected)
+    enforce_allowlist(selected, allowlist)
     ranking = _extract_ranking(exp, ranker_id)
 
     # --- Artifacts -----------------------------------------------------
-    write_selected_features(output_dir / "selected_features.txt", selected)
+    write_selected_features(
+        output_dir / "selected_features.txt", selected, allowlist=allowlist,
+    )
 
     with (output_dir / "feature_ranking.csv").open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=["rank", "feature", "importance"])
@@ -303,15 +315,23 @@ def run_pycaret_selection(
     }
 
 
-def write_selected_features(path: Path, selected: list[str]) -> None:
+def write_selected_features(
+    path: Path,
+    selected: list[str],
+    *,
+    allowlist: Collection[str] | None = None,
+) -> None:
     """Write ``selected_features.txt``.
 
     One name per line, no header, no blank lines, trailing newline.
-    Drop-in for ``data.input_columns_file`` in the training config.
+    Drop-in for ``data.input_columns_file`` in the training config. When
+    ``allowlist`` is supplied (typically the case-side ALLOWLIST), the
+    file is rejected if any name falls outside it.
     """
     if any(not s or s != s.strip() for s in selected):
         raise ValueError(
             "selected_features contains empty or whitespace-padded names."
         )
-    enforce_allowlist(selected)
+    if allowlist is not None:
+        enforce_allowlist(selected, allowlist)
     Path(path).write_text("\n".join(selected) + "\n")

@@ -89,11 +89,11 @@ def test_case_level_split_never_crosses_cases():
 
 
 def test_enforce_allowlist_rejects_unknown_names():
-    enforce_allowlist(["log10_Re", "Dr"])  # inside ALLOWLIST, no raise
+    enforce_allowlist(["log10_Re", "Dr"], ALLOWLIST)  # inside ALLOWLIST, no raise
     bad_name = "synth_poly_log10_Re_x_Dr"
     assert bad_name not in ALLOWLIST
-    with pytest.raises(RuntimeError, match="outside ALLOWLIST"):
-        enforce_allowlist([bad_name])
+    with pytest.raises(RuntimeError, match="outside allowlist"):
+        enforce_allowlist([bad_name], ALLOWLIST)
 
 
 def test_selected_features_txt_roundtrips_through_adapter_contract(tmp_path: Path):
@@ -122,8 +122,8 @@ def test_selected_features_txt_roundtrips_through_adapter_contract(tmp_path: Pat
 
 def test_write_selected_features_rejects_non_allowlisted():
     path = Path("/tmp/should_never_be_written.txt")
-    with pytest.raises(RuntimeError, match="outside ALLOWLIST"):
-        write_selected_features(path, ["delta_p_case"])
+    with pytest.raises(RuntimeError, match="outside allowlist"):
+        write_selected_features(path, ["delta_p_case"], allowlist=ALLOWLIST)
 
 
 def test_write_selected_features_rejects_whitespace():
