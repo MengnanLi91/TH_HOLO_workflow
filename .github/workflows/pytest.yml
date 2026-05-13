@@ -23,5 +23,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest
 
+      - name: Install project in editable mode
+        run: pip install --no-deps -e .
+
       - name: Run tests
         run: pytest

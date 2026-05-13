@@ -1,10 +1,6 @@
-"""Pytest configuration for local unit tests."""
+"""Pytest configuration.
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+With the project installed in editable mode (``pip install -e .``), the
+``training``/``cases``/``feature_selection``/``dataset`` packages are
+importable directly. No ``sys.path`` manipulation needed.
+"""

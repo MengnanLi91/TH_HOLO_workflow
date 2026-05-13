@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "th-holo-workflow"
+version = "0.1.0"
+description = "Thermal-hydraulic surrogate workflow on MOOSE outputs"
+requires-python = ">=3.11"
+# Runtime deps (torch, physicsnemo, zarr, hydra-core, …) are pinned in
+# the Dockerfiles in docker/. Keep this list empty so `pip install -e .`
+# inside the existing images is a no-op for dependency resolution.
+dependencies = []
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["read_exdous"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["training*", "feature_selection*", "cases*", "dataset*"]
+namespaces = false

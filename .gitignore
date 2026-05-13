@@ -5,6 +5,11 @@ data/
 src/outputs/
 outputs/
 
+# Python build / packaging artifacts
+*.egg-info/
+build/
+dist/
+
 # Environment files
 .env
 .env.local
