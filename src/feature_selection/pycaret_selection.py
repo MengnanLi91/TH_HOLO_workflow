@@ -35,7 +35,7 @@ from typing import Any
 
 import numpy as np
 
-from feature_analysis.data_loader import ALLOWLIST, FeatureAnalysisData
+from cases.alpha_d.feature_data import ALLOWLIST, FeatureAnalysisData
 
 
 logger = logging.getLogger(__name__)

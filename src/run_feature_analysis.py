@@ -28,15 +28,16 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from feature_analysis import build_manifest, load_feature_matrix, write_manifest
-from feature_analysis.methods import (
+from cases.alpha_d.feature_data import load_feature_matrix
+from feature_selection.manifest import build_manifest, write_manifest
+from feature_selection.methods import (
     borda_consensus,
     build_report,
     collapse_blocks_to_selection,
     run_baseline,
     run_methods,
 )
-from feature_analysis.plotting import save_feature_analysis_plots
+from feature_selection.plotting import save_feature_analysis_plots
 
 logger = logging.getLogger(__name__)
 

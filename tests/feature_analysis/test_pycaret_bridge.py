@@ -13,8 +13,8 @@ import pytest
 np = pytest.importorskip("numpy")
 pd = pytest.importorskip("pandas")
 
-from feature_analysis import ALLOWLIST, FeatureAnalysisData
-from feature_analysis.pycaret_selection import (  # noqa: E402
+from cases.alpha_d.feature_data import ALLOWLIST, FeatureAnalysisData
+from feature_selection.pycaret_selection import (  # noqa: E402
     build_dataframe,
     case_level_split,
     enforce_allowlist,

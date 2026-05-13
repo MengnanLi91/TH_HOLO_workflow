@@ -35,7 +35,7 @@ from sklearn.model_selection import GroupKFold, KFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from feature_analysis.data_loader import GROUPED_FEATURES, FeatureAnalysisData
+from cases.alpha_d.feature_data import GROUPED_FEATURES, FeatureAnalysisData
 
 logger = logging.getLogger(__name__)
 

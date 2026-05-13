@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from training.alpha_d_targets import (
+from cases.alpha_d.physics.targets import (
     convert_alpha_d_values_between_bases,
     is_alpha_d_target,
 )

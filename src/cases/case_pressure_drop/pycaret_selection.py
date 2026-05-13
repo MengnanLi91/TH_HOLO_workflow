@@ -31,7 +31,7 @@ import numpy as np
 
 from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
 from cases.case_pressure_drop.feature_selection import SelectionResult
-from feature_analysis.manifest import build_manifest, write_manifest
+from feature_selection.manifest import build_manifest, write_manifest
 
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ Darcy resistance coefficient profiles from the contraction region, and
 writes per-case Zarr stores for MLP surrogate training.
 
 Usage (from src/ directory):
-    python run_alpha_d_etl.py \\
+    python cases/alpha_d/run_etl.py \\
         etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \\
         etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
 """

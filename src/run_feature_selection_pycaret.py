@@ -24,12 +24,9 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from feature_analysis import (
-    build_manifest,
-    load_feature_matrix,
-    run_pycaret_selection,
-    write_manifest,
-)
+from cases.alpha_d.feature_data import load_feature_matrix
+from feature_selection.manifest import build_manifest, write_manifest
+from feature_selection.pycaret_selection import run_pycaret_selection
 
 logger = logging.getLogger(__name__)
 

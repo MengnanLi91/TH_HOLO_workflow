@@ -8,7 +8,7 @@ from typing import Any, Callable
 import numpy as np
 
 from cases.case_pressure_drop.data import CasePressureDropDataset
-from feature_analysis.manifest import build_manifest, write_manifest
+from feature_selection.manifest import build_manifest, write_manifest
 
 
 def _require_sklearn() -> None:
