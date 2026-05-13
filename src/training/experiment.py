@@ -83,7 +83,7 @@ class Experiment:
         """HPO-side Δp metric (mean squared log-Δp error on val).
 
         Default no-op for experiments without a Δp integral.  Override in
-        Δp-aware subclasses (e.g. ``AlphaDExperiment``).
+        case-specific subclasses that compute a pressure-drop integral.
         """
         return 0.0
 
