@@ -2,29 +2,29 @@
 
 Subclasses physicsnemo_curator's DataSource ABC (write-only role).
 
-Zarr store layout per simulation run
--------------------------------------
-{sim_name}.zarr/
-├── mesh/
-│   ├── coords          float32 [N, D]   node coordinates
-│   ├── connectivity    int32   [E, K]   element→node (0-indexed)
-│   ├── edge_src        int32   [M]      graph edge source nodes
-│   └── edge_dst        int32   [M]      graph edge destination nodes
-├── fields/
-│   ├── {field_name}    float32 [T, E]   normalized element solution field
-│   └── ...
-├── probes/
-│   ├── {probe_name}    float32 [Np, C]  CSV line-probe values
-│   └── ...
-├── grid/
-│   ├── x               float32 [Nx]     grid x-coordinates
-│   ├── y               float32 [Ny]     grid y-coordinates
-│   └── {field_name}    float32 [T,Nx,Ny] interpolated field on regular grid
-└── metadata/
-    ├── time_steps      float32 [T]
-    ├── field_names     str attrs on /metadata
-    ├── probe_columns   str attrs on /metadata
-    └── norm_stats/{field_name}  attrs: mean, std
+Zarr store layout per simulation run::
+
+    {sim_name}.zarr/
+    ├── mesh/
+    │   ├── coords          float32 [N, D]   node coordinates
+    │   ├── connectivity    int32   [E, K]   element→node (0-indexed)
+    │   ├── edge_src        int32   [M]      graph edge source nodes
+    │   └── edge_dst        int32   [M]      graph edge destination nodes
+    ├── fields/
+    │   ├── {field_name}    float32 [T, E]   normalized element solution field
+    │   └── ...
+    ├── probes/
+    │   ├── {probe_name}    float32 [Np, C]  CSV line-probe values
+    │   └── ...
+    ├── grid/
+    │   ├── x               float32 [Nx]     grid x-coordinates
+    │   ├── y               float32 [Ny]     grid y-coordinates
+    │   └── {field_name}    float32 [T,Nx,Ny] interpolated field on regular grid
+    └── metadata/
+        ├── time_steps      float32 [T]
+        ├── field_names     str attrs on /metadata
+        ├── probe_columns   str attrs on /metadata
+        └── norm_stats/{field_name}  attrs: mean, std
 """
 
 import json
@@ -99,7 +99,7 @@ class MooseZarrSink(DataSource):
         return False
 
     def cleanup_temp_files(self) -> None:
-        """Remove orphaned *.zarr_temp directories from interrupted runs."""
+        """Remove orphaned ``*.zarr_temp`` directories from interrupted runs."""
         for temp_store in self.output_dir.glob("*.zarr_temp"):
             self.logger.warning("Removing orphaned temp Zarr store: %s", temp_store)
             import shutil

@@ -150,28 +150,13 @@ html_theme_options = {
 # mermaid.js loader; keep the default.
 
 # -- Suppress noisy warnings (do not silence anything load-bearing) ---------
-# `docutils` is suppressed to drop a small set of docstring-formatting
-# parse warnings inside existing `src/` modules (this docs build is not
-# allowed to edit src/). The specific docstrings flagged today are:
-#   - cases.moose_grid.etl.data_sources.csv_source.CSVProbeSource.read_all
-#   - cases.moose_grid.etl.data_sources.zarr_sink.MooseZarrSink.cleanup_temp_files
-#   - dataset.moose_dataset (module docstring, block-quote unindent at L35)
-#   - dataset.moose_dataset.MooseDataset (class docstring, inline emphasis L4)
-# Fix these in `src/` to drop the blanket and re-enable docutils warnings.
-#
-# We DO NOT suppress `ref.python` — that category catches typoed cross-refs
-# in the prose pages and must stay loud.
+# Only `misc.highlighting_failure` is suppressed — pygments occasionally
+# warns about lexer mismatches in mermaid blocks; that's cosmetic. All
+# docutils, autodoc, and ref.python warnings stay loud.
 suppress_warnings: list[str] = [
-    "docutils",
     "misc.highlighting_failure",
 ]
 
-# Single-target ambiguity in autodoc: ``probe_data`` is an attribute on
-# both `MooseRawData` and `MooseProcessedData` in the same module. The
-# autoresolved cross-ref matches both targets and Sphinx emits a `ref.python`
-# warning that does not respect `nitpick_ignore`. We install a narrow
-# logging filter (below) to drop that one message while keeping all other
-# `ref.python` warnings live.
 # Nitpicky mode is intentionally **off**. Turning it on (or passing
 # `sphinx-build -n`) escalates every unresolved cross-reference to a
 # warning, including autodoc-driven references into physicsnemo and
@@ -182,22 +167,6 @@ nitpicky = False
 nitpick_ignore: list[tuple[str, str]] = []
 
 
-import logging as _logging  # noqa: E402
-
-
-class _DropProbeDataAmbiguity(_logging.Filter):
-    """Filter out the one cross-reference ambiguity we cannot fix from src/."""
-
-    _NEEDLE = "more than one target found for cross-reference 'probe_data'"
-
-    def filter(self, record: _logging.LogRecord) -> bool:
-        message = record.getMessage()
-        return self._NEEDLE not in message
-
-
-_logging.getLogger("sphinx").addFilter(_DropProbeDataAmbiguity())
-_logging.getLogger("sphinx.sphinx").addFilter(_DropProbeDataAmbiguity())
-_logging.getLogger("").addFilter(_DropProbeDataAmbiguity())
 
 
 # -- Helpful defaults for sphinx-copybutton --------------------------------

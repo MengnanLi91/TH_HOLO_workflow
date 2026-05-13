@@ -78,11 +78,15 @@ class CSVProbeSource:
         """Read all probe CSVs for a simulation run.
 
         Returns:
-            probe_data   : dict mapping probe_name → numpy array [Np, C]
-                           where Np = number of sample points, C = columns.
-                           When multiple time steps are found, data from
-                           the *last* time step is used (steady-state typical).
-            probe_columns: ordered list of column names (shared across probes).
+            A pair ``(probe_data, probe_columns)``:
+
+            - ``probe_data``: dict mapping ``probe_name`` to a numpy array
+              of shape ``[Np, C]`` where ``Np`` is the number of sample
+              points and ``C`` the number of columns. When multiple time
+              steps are found, data from the last time step is used
+              (steady-state typical).
+            - ``probe_columns``: ordered list of column names shared
+              across probes.
         """
         probe_files = find_probe_files(sim_prefix, self.data_dir)
 

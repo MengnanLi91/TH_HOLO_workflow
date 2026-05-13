@@ -31,8 +31,9 @@ If time_idx is given (≥ 0), only that time step is returned (T-dim removed).
 
 Denormalization
 ───────────────
-    dataset.denormalize("pressure", tensor)
-returns a tensor in original physical units.
+
+Call ``dataset.denormalize("pressure", tensor)`` to recover a tensor in
+original physical units.
 """
 
 import json
@@ -50,7 +51,7 @@ class MooseDataset(Dataset):
     """Dataset over a directory of processed MOOSE Zarr stores.
 
     Args:
-        zarr_dir  : Path to the directory containing *.zarr stores.
+        zarr_dir  : Path to the directory containing ``*.zarr`` stores.
         mode      : One of "graph", "point_cloud", "grid".
         time_idx  : If ≥ 0, return only this time step (removes T dimension).
                     If -1 (default), return all time steps.

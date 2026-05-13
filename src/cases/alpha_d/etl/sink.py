@@ -1,6 +1,6 @@
 """AlphaDZarrSink: writes per-case alpha_D profiles to Zarr stores.
 
-Zarr store layout per case:
+Zarr store layout per case::
 
     {case_name}.zarr/
         features    float32 [N_stations, D_in]
