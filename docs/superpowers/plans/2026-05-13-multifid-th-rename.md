@@ -531,14 +531,17 @@ Up to this point the substitutions were purely mechanical. This task adds *new* 
 
 ---
 
-## Task 7: Rebuild the Apptainer SIF
+## Task 7: Rename the Apptainer SIF artifact (rebuild deferred)
 
 **Files:**
-- Build artifact: `multifid-th-gpu.sif` (new) at repo root
-- Removed: `th-holo-gpu.sif` (old) at repo root
+- Renamed: `th-holo-gpu.sif` → `multifid-th-gpu.sif` at repo root
 - Possibly modify: `.gitignore` if SIF filenames aren't already pattern-matched
 
-The Batch 1–5 commits already updated `docker/gpu.def`'s `%help` block to reference the new SIF filename, so the rebuild bakes the correct help text in.
+**Decision recorded (2026-05-13):** rebuild deferred. The current
+`th-holo-gpu.sif` is functionally identical to a fresh rebuild — only
+its internal `%help` text mentions the old name. A separate
+`build/multifid-th-sif-rebuild` task can rebuild it from the renamed
+`docker/gpu.def` whenever convenient.
 
 - [ ] **Step 1: Confirm `.gitignore` excludes both old and new SIF names**
 
@@ -547,20 +550,23 @@ The Batch 1–5 commits already updated `docker/gpu.def`'s `%help` block to refe
   grep -nE '\.sif|th-holo|multifid' .gitignore
   ```
 
-  Expected: a pattern like `*.sif` or two explicit entries. If `th-holo-gpu.sif` is the only SIF entry, add `multifid-th-*.sif`.
+  Expected: a pattern like `*.sif` or explicit entries covering both
+  the old and new filenames. If only `th-holo-gpu.sif` is listed,
+  add `multifid-th-*.sif`.
 
-  If a change is needed, edit `.gitignore` and stage it (commit happens in Step 4 below).
+  If a change is needed, edit `.gitignore` and stage it.
 
-- [ ] **Step 2: Rebuild the SIF**
+- [ ] **Step 2: Rename the existing SIF file in place**
 
   Run:
   ```bash
-  apptainer build multifid-th-gpu.sif docker/gpu.def
+  mv th-holo-gpu.sif multifid-th-gpu.sif
+  ls -la *.sif
   ```
 
-  Expected: completes in ~20–30 minutes. New file `multifid-th-gpu.sif` appears at repo root.
+  Expected: `multifid-th-gpu.sif` at repo root; no `th-holo-gpu.sif`.
 
-- [ ] **Step 3: Verify the new SIF works**
+- [ ] **Step 3: Verify the renamed SIF still executes**
 
   Run:
   ```bash
@@ -569,28 +575,20 @@ The Batch 1–5 commits already updated `docker/gpu.def`'s `%help` block to refe
 
   Expected: prints a torch version + `physicsnemo`, no `ImportError`.
 
-  Also verify `%help` text:
-  ```bash
-  apptainer run-help multifid-th-gpu.sif | head -30
-  ```
+  Note: `apptainer run-help multifid-th-gpu.sif` will still show the
+  old name baked in at build time. That's expected and is the only
+  reason a rebuild is deferred (not blocking).
 
-  Expected: lines reference `multifid-th-gpu.sif`, not `th-holo-gpu.sif`.
-
-- [ ] **Step 4: Remove the old SIF and commit any .gitignore tweak**
-
-  Run:
-  ```bash
-  rm th-holo-gpu.sif
-  ls -la *.sif
-  ```
-
-  Expected: only `multifid-th-gpu.sif` (and any other pre-existing SIFs like `th-holo-ngc.sif` if present — leave those for a future rename pass since they're not in scope for this branch).
+- [ ] **Step 4: Commit any `.gitignore` tweak**
 
   If `.gitignore` was modified in Step 1:
   ```bash
   git add .gitignore
   git commit -m "Allow multifid-th-*.sif build artifacts"
   ```
+
+  Otherwise no commit on this task — the `mv` of the SIF is a
+  filesystem op only (SIF is gitignored).
 
 ---
 
