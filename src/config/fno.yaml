@@ -2,6 +2,10 @@ defaults:
   - default
   - _self_  # Apply this file last so these values override default.yaml.
 
+hydra:
+  searchpath:
+    - pkg://training.config  # default.yaml moved here in Phase 3
+
 model:
   name: fno
   params:

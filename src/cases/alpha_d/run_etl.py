@@ -30,8 +30,8 @@ from physicsnemo_curator.utils import utils as curator_utils
 
 @hydra.main(
     version_base="1.3",
-    config_path="../../alpha_d_etl/config",
-    config_name="alpha_d_etl",
+    config_path="configs",
+    config_name="etl",
 )
 def main(cfg: DictConfig) -> None:
     """Run the alpha-D extraction ETL pipeline."""

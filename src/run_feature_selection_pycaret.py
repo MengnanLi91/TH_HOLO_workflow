@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(
     version_base="1.3",
-    config_path="feature_analysis/config",
-    config_name="pycaret_feature_analysis",
+    config_path="cases/alpha_d/configs",
+    config_name="pycaret",
 )
 def main(cfg: DictConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")

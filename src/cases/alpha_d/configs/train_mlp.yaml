@@ -2,6 +2,11 @@ defaults:
   - default
   - _self_
 
+hydra:
+  searchpath:
+    - pkg://training.config       # finds default.yaml
+    - pkg://cases.alpha_d.configs # finds sibling case configs
+
 model:
   name: mlp
   params:
