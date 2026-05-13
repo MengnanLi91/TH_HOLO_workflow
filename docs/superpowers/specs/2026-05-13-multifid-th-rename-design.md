@@ -151,10 +151,37 @@ Order matters here. Each step is irreversible without manual cleanup.
    existing clones continue to fetch via the old URL, but the canonical
    URL changes.
 3. **Update local remote:** `git remote set-url origin git@github.com:MengnanLi91/multifid-th.git`.
-4. **Stop the running HTTP server on port 8765** (its cwd is inside the
-   old path). Background task ID `b4xxc198h`.
-5. **Filesystem path rename:** `mv /data/lim2/projects/TH_HOLO_workflow /data/lim2/projects/multifid-th`.
-6. **Reload VS Code Remote SSH workspace** at the new path.
+4. **Filesystem path rename:** `mv /data/lim2/projects/TH_HOLO_workflow /data/lim2/projects/multifid-th`.
+
+   Long-lived processes whose cwd was inside the old path (the background
+   `http.server` on port 8765, this Claude session's Bash shell, any
+   other open terminal) keep functioning at the inode level — Linux
+   directory renames don't disturb open file descriptors. Their `pwd`
+   no longer matches a stable path, though, so `cd $(pwd)` will fail
+   and tab-completion gets confused. Restart them at the new path when
+   convenient; nothing time-sensitive.
+5. **Re-run the editable install** at the new path so `import training`
+   / `import cases.*` / `pytest` resolve against it. The existing
+   `.pth` / egg-link inside `/home/lim2/.local/lib/python3.11/`
+   points at the *old* absolute path and is broken until this step
+   runs:
+
+   ```bash
+   apptainer exec --pwd /data/lim2/projects/multifid-th \
+     multifid-th-gpu.sif pip install --user --no-deps -e .
+   ```
+
+   Verify with: `apptainer exec --pwd /data/lim2/projects/multifid-th
+   multifid-th-gpu.sif python -c 'import training; print(training.__file__)'`
+   — the printed path should start with `/data/lim2/projects/multifid-th/src/`.
+6. **Reload VS Code Remote SSH workspace** at the new path
+   (*File → Open Folder* → `/data/lim2/projects/multifid-th/`, or reload
+   the window with the new workspace).
+7. **Restart this Claude session** in the new working directory so it
+   picks up the renamed auto-memory directory (Batch 5 below). Until
+   then, this session can continue using the old `--pwd
+   /data/lim2/projects/TH_HOLO_workflow` only if the symlink mitigation
+   in *Risks* is in place; otherwise it should be ended cleanly.
 
 ### Batch 5 — Memory entries
 
@@ -188,6 +215,7 @@ derived from the project path). Migration steps:
 | Tests still pass | Batch 2 | `pytest` reports 110 passed / 3 deselected. |
 | SIF works | Batch 3 | `apptainer exec --pwd $(pwd) multifid-th-gpu.sif python -c 'import physicsnemo, torch; print(torch.__version__)'` succeeds. |
 | Remote rewired | Batch 4 | `git remote -v` shows `multifid-th`; `git push` succeeds from the renamed working tree at `/data/lim2/projects/multifid-th/`. |
+| Editable install repointed | Batch 4 | `apptainer exec --pwd /data/lim2/projects/multifid-th multifid-th-gpu.sif python -c 'import training; print(training.__file__)'` prints a path under `/data/lim2/projects/multifid-th/src/`. |
 | Memory accessible | Batch 5 | A fresh Claude session in the new working dir loads memory from `~/.claude/projects/-data-lim2-projects-multifid-th/`. |
 
 ## Risks and mitigations
@@ -223,5 +251,8 @@ The rename is done when all of:
 5. Filesystem working tree is at `/data/lim2/projects/multifid-th/`.
 6. `multifid-th-gpu.sif` exists at the repo root and successfully
    imports `physicsnemo` and `torch`.
-7. Auto-memory directory is at `~/.claude/projects/-data-lim2-projects-multifid-th/`
+7. The editable install (`pip install --user --no-deps -e .`) has been
+   re-run at the new path; `python -c 'import training'` resolves to
+   `/data/lim2/projects/multifid-th/src/training/`.
+8. Auto-memory directory is at `~/.claude/projects/-data-lim2-projects-multifid-th/`
    and contains a `project-rename.md` entry pointing back at this spec.
