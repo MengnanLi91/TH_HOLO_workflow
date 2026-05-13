@@ -10,8 +10,8 @@ outputs/
 build/
 dist/
 
-# MkDocs build output
-site/
+# Sphinx build output
+docs/_build/
 
 # Environment files
 .env
