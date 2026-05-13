@@ -22,8 +22,7 @@ V1 contract
 
 - Inside ``setup()``, ``fold_strategy='groupkfold'`` with
   ``fold_groups='case_id'`` keeps internal CV group-safe.
-- Output ``selected_features.txt`` matches the existing
-  ``run_feature_analysis.py`` contract: one name per line, no header,
+- Output ``selected_features.txt`` is one name per line, no header,
   drop-in for ``data.input_columns_file`` in the MLP training config.
 """
 
@@ -305,12 +304,10 @@ def run_pycaret_selection(
 
 
 def write_selected_features(path: Path, selected: list[str]) -> None:
-    """Write ``selected_features.txt`` matching the feature_analysis contract.
+    """Write ``selected_features.txt``.
 
     One name per line, no header, no blank lines, trailing newline.
-    Mirrors the exact format produced by ``run_feature_analysis.py`` so
-    the two selection paths are drop-in compatible for
-    ``data.input_columns_file`` in the training config.
+    Drop-in for ``data.input_columns_file`` in the training config.
     """
     if any(not s or s != s.strip() for s in selected):
         raise ValueError(

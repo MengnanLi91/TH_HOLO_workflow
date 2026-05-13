@@ -63,7 +63,7 @@ training:
   weight_decay: 9.8e-3
   lr_scheduler: cosine
   lr_warmup_epochs: 10
-  experiment: training.experiments.alpha_d:AlphaDExperiment
+  experiment: cases.alpha_d.experiment:AlphaDExperiment
   consistency_weight: 0.0
   delta_p_weight: 0.0  # disabled; rely on the encoded target alone
   early_stopping:

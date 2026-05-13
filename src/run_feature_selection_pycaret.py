@@ -1,7 +1,6 @@
 """PyCaret-based feature selection entry point.
 
-Optional low-code selection path parallel to ``run_feature_analysis.py``.
-Reuses ``feature_analysis.load_feature_matrix`` (and therefore its
+Reuses ``cases.alpha_d.feature_data.load_feature_matrix`` (and its
 ``ALLOWLIST``) to build the DataFrame, runs PyCaret regression
 ``setup()`` with GroupKFold by ``case_id``, and writes a
 ``selected_features.txt`` that drops in to

@@ -61,7 +61,7 @@ training:
   weight_decay: 1.0e-5
   lr_scheduler: cosine
   lr_warmup_epochs: 10
-  experiment: training.experiments.alpha_d:AlphaDExperiment
+  experiment: cases.alpha_d.experiment:AlphaDExperiment
   consistency_weight: 0.0
   delta_p_weight: 0.0
   early_stopping:

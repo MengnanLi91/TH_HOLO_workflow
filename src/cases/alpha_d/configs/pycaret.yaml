@@ -1,13 +1,11 @@
-# PyCaret-based feature selection (v1, tabular / alpha_D only).
+# PyCaret-based feature selection (v1, tabular / alpha_D).
 #
-# Parallel to feature_analysis.yaml — PyCaret is an optional low-code
-# selection front-end; the sklearn path in run_feature_analysis.py remains
-# the rigorous baseline. The output selected_features.txt is drop-in
-# compatible with data.input_columns_file in src/config/alpha_d_mlp.yaml.
+# Output selected_features.txt is drop-in compatible with
+# data.input_columns_file in src/cases/alpha_d/configs/train_mlp.yaml.
 #
 # Allowlist guard
 # ---------------
-# Features are loaded via feature_analysis.data_loader.load_feature_matrix,
+# Features are loaded via cases.alpha_d.feature_data.load_feature_matrix,
 # which enforces the shared ALLOWLIST. The v1 runner also locks
 # polynomial_features / feature_interaction / pca / group_features off so
 # PyCaret cannot synthesize columns TabularPairDataset cannot reproduce.
