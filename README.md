@@ -85,17 +85,16 @@ PhysicsNeMo `FullyConnected` MLP surrogate.
 
 ```bash
 # 1. Extract alpha_D profiles from CFD output
-docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py'
+docker compose run --rm etl bash -lc 'cd src && python cases/alpha_d/run_etl.py'
 
 # 2. Train (HPO + retrain best, all in one command)
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
 # 2b. Or skip HPO and train directly
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp hpo=null'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
 # 3. Evaluate
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
-  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
 See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full walkthrough.

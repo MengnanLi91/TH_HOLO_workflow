@@ -90,7 +90,7 @@ All models support Optuna-based hyperparameter optimization via
 search space over `training.*` and `model.params.*` paths.
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp
 ```
 
 See [Hyperparameter Optimization Guide](../user/hyperparameter_optimization.md)

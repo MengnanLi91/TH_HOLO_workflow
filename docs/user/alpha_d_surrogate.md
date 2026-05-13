@@ -48,7 +48,7 @@ stations, and writes per-case `.zarr` stores.
 ### Run the extraction
 
 ```bash
-cd src && python run_alpha_d_etl.py \
+cd src && python cases/alpha_d/run_etl.py \
     etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \
     etl.sink.output_dir=../data/flow_contraction_expansion/parametric_study/processed
 ```
@@ -94,7 +94,7 @@ For each case:
 
 The per-station feature row written by `AlphaDTransformation` and the
 engineered features synthesized at load time by
-`feature_analysis/data_loader.py::build_engineered_feature_map`.
+`cases/alpha_d/feature_data.py::build_engineered_feature_map`.
 
 Notation:
 - `Re_global = ρ V_bulk D / μ` is the case-level Reynolds number
@@ -182,7 +182,7 @@ target_names: ['log_alpha_D', 'signed_log1p_alpha_D']
 
 ### ETL configuration reference
 
-Config file: `src/alpha_d_etl/config/alpha_d_etl.yaml`
+Config file: `src/cases/alpha_d/configs/etl.yaml`
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -197,13 +197,13 @@ Config file: `src/alpha_d_etl/config/alpha_d_etl.yaml`
 
 ## Step 2: Train the MLP
 
-The training config `src/config/alpha_d_mlp.yaml` is pre-configured for
-the axial-profile MLP.
+The training config `src/cases/alpha_d/configs/train_mlp.yaml` is
+pre-configured for the axial-profile MLP.
 
 ### Run training
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
 This trains a 6-layer FullyConnected MLP (`layer_size=128`,
@@ -213,22 +213,22 @@ This trains a 6-layer FullyConnected MLP (`layer_size=128`,
 
 ```bash
 # More epochs, different learning rate
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
   training.epochs=500 training.lr=1e-4'
 
 # Larger model
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
   model.params.layer_size=256 model.params.num_layers=8'
 
 # Different data directory (if your Zarr stores are elsewhere)
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp \
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
   data.zarr_dir=../data/my_processed_cases'
 ```
 
 ### Training output
 
-- Checkpoint: `data/models/alpha_d_mlp.mdlus` (PhysicsNeMo format)
-- Run metadata: `data/models/run_meta.json` (records split, model params, final loss)
+- Checkpoint: `data/cases/train_mlp/model.mdlus` (PhysicsNeMo format; path = `${output.root_dir}/${hydra:job.config_name}/model.mdlus`)
+- Run metadata: `data/cases/train_mlp/run_meta.json` (records split, model params, final loss)
 
 ### Lock a split for fair model comparisons
 
@@ -250,7 +250,7 @@ This writes:
 Then train future models against that same split:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp_v2 \
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
   data.split.strategy=file \
   data.split.train_file=../data/splits/alpha_d_locked_v1/train.txt \
   data.split.test_file=../data/splits/alpha_d_locked_v1/test.txt'
@@ -273,7 +273,7 @@ epoch 50/200: loss=1.234567e-02
 
 ### Training config reference
 
-Config file: `src/config/alpha_d_mlp.yaml`
+Config file: `src/cases/alpha_d/configs/train_mlp.yaml`
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -295,9 +295,11 @@ Config file: `src/config/alpha_d_mlp.yaml`
 ## Step 3: Evaluate
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
-  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
+
+`eval.checkpoint` defaults to `${output.checkpoint}` (the path written during
+training), so no override is required for the standard flow.
 
 The evaluator:
 
@@ -319,32 +321,30 @@ indicate better fits.
 ### Verify with metrics JSON
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
-  eval.checkpoint=../data/models/alpha_d_mlp.mdlus \
-  output.metrics_out=../data/models/alpha_d_mlp_metrics.json'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp \
+  output.metrics_out=../data/cases/train_mlp/metrics.json'
 ```
 
 Then inspect:
 
 ```bash
-python -c "import json; m=json.load(open('../data/models/alpha_d_mlp_metrics.json')); print(json.dumps(m, indent=2))"
+python -c "import json; m=json.load(open('../data/cases/train_mlp/metrics.json')); print(json.dumps(m, indent=2))"
 ```
 
 ## Quick-reference command summary
 
 ```bash
 # 1. Extract alpha_D profiles from CFD
-docker compose run --rm etl bash -lc 'cd src && python run_alpha_d_etl.py'
+docker compose run --rm etl bash -lc 'cd src && python cases/alpha_d/run_etl.py'
 
 # 2. Train (HPO + retrain best, all in one command)
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
 # 2b. Train directly without HPO (power user)
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp hpo=null'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
 # 3. Evaluate on held-out cases
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name alpha_d_mlp \
-  eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
 ### Apptainer (HPC) equivalent
@@ -359,20 +359,19 @@ absolute path to your repo checkout (or set `APPTAINER_BIND` once and omit
 ```bash
 # 1. Extract alpha_D profiles (CPU is fine for ETL — drop --nv)
 apptainer exec --bind /path/to/project:/path/to/project th-holo-gpu.sif \
-  bash -lc 'cd /path/to/project/src && python run_alpha_d_etl.py'
+  bash -lc 'cd /path/to/project/src && python cases/alpha_d/run_etl.py'
 
 # 2. Train (HPO + retrain best)
 apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
-  bash -lc 'cd /path/to/project/src && python train.py --config-name alpha_d_mlp'
+  bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
 # 2b. Train directly without HPO
 apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
-  bash -lc 'cd /path/to/project/src && python train.py --config-name alpha_d_mlp hpo=null'
+  bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
 # 3. Evaluate
 apptainer exec --nv --bind /path/to/project:/path/to/project th-holo-gpu.sif \
-  bash -lc 'cd /path/to/project/src && python evaluate.py --config-name alpha_d_mlp \
-    eval.checkpoint=../data/models/alpha_d_mlp.mdlus'
+  bash -lc 'cd /path/to/project/src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
 `th-holo-gpu.sif` (built from `docker/gpu.def`) ships PyTorch CUDA 12.4 wheels +
@@ -393,19 +392,25 @@ The alpha_D pipeline integrates with the existing generic training framework:
   done at the case level (never mixing rows from the same CFD case across
   train and test).
 - **ETL**: `AlphaDSource` / `AlphaDTransformation` / `AlphaDZarrSink` in
-  `src/alpha_d_etl/`, following the PhysicsNeMo Curator pattern.
+  `src/cases/alpha_d/etl/`, following the PhysicsNeMo Curator pattern.
+- **Experiment hooks**: `AlphaDExperiment` in
+  `src/cases/alpha_d/experiment.py` adds throat-weighted loss, the optional
+  per-epoch Δp integral loss, and the plotting-decode hook.
+- **Feature data**: `cases.alpha_d.feature_data` owns the ALLOWLIST,
+  engineered-feature synthesis, and the `FeatureAnalysisData` loader.
 
 ## Note: HPO is built into training
 
-The `alpha_d_mlp.yaml` config includes an `hpo` section with a search
-space.  When you run `python train.py --config-name alpha_d_mlp`, it
-automatically runs Optuna HPO first, then retrains with the best
+The `train_mlp.yaml` config includes an `hpo` section with a search
+space. When you run
+`python train.py --config-path cases/alpha_d/configs --config-name train_mlp`,
+it automatically runs Optuna HPO first, then retrains with the best
 hyperparameters.
 
 To skip HPO and train directly with the parameters in the config:
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp hpo=null
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
 ```
 
 See [Hyperparameter Optimization Guide](hyperparameter_optimization.md)

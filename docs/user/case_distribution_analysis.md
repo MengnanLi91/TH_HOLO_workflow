@@ -79,7 +79,7 @@ cd src && python analyze_case_distribution.py \
 ```
 
 Mirrors the filtering logic in ``TabularPairDataset``.  Useful when
-deciding the ``data.min_Dr`` value in ``alpha_d_mlp.yaml``: run it with
+deciding the ``data.min_Dr`` value in ``cases/alpha_d/configs/train_mlp.yaml``: run it with
 different thresholds and see which bins disappear.
 
 ### Exclude specific problematic cases
