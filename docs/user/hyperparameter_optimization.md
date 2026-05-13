@@ -319,9 +319,9 @@ path is used.
   that just need more epochs to converge.
 - If you change the search space definition, start a fresh study by
   choosing a new `hpo.study_name` or deleting the old `.db` file.
-- After finishing an HPO run, use the
-  [version comparison tool](version_comparison.md) to review progress
-  and check for regressions across versions.
+- After finishing an HPO run, review the optimization history and
+  parameter-importance plots in `hpo_results/` to check progress and
+  watch for regressions across studies.
 - Before tuning ``data.min_Dr`` or ``data.exclude_cases``, preview the
   resulting distribution with
   [`analyze_case_distribution.py`](case_distribution_analysis.md) so

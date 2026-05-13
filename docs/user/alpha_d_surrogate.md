@@ -421,9 +421,9 @@ Before training, use the
 preview how much data you have in each ``Dr`` / ``Re`` / ``Lr`` bin --
 especially after applying ``min_Dr`` or ``exclude_cases`` filters.
 
-After running multiple HPO versions, use the
-[Version Comparison](version_comparison.md) tool to review training
-progress and compare evaluation metrics across versions.
+After running multiple HPO versions, review training progress and
+compare evaluation metrics across versions using whichever notebook
+or script you've adopted for cross-run comparison.
 
 ## Next steps (planned)
 

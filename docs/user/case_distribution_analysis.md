@@ -147,8 +147,8 @@ One table per axis (``Dr``, ``Re``, ``Lr``).  Columns:
 - **Support** -- coloured marker classifying the training support.
 
 Bins flagged ``⚠ very low`` or ``✗ none`` are likely to show outsized
-evaluation errors.  Cross-reference them with the
-[version comparison tool](version_comparison.md) to confirm.
+evaluation errors.  Cross-reference them with your evaluation-metrics
+review workflow to confirm.
 
 ## Typical workflow
 
@@ -188,6 +188,3 @@ design parameter to the simulation campaign:
 - [Hyperparameter Optimization](hyperparameter_optimization.md) --
   configuring ``data.min_Dr`` and ``data.exclude_cases`` filters that
   this tool previews.
-- [Version Comparison](version_comparison.md) -- review evaluation
-  metrics across versions; cross-reference worst-case lists with the
-  distribution tables produced here.
