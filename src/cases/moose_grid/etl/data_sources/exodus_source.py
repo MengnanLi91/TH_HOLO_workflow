@@ -31,8 +31,8 @@ from read_exdous import ExodusReader
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
-from moose_etl.data_sources.csv_source import CSVProbeSource
-from moose_etl.schemas import MooseRawData
+from cases.moose_grid.etl.data_sources.csv_source import CSVProbeSource
+from cases.moose_grid.etl.schemas import MooseRawData
 
 logger = logging.getLogger(__name__)
 

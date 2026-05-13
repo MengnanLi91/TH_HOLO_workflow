@@ -1,12 +1,11 @@
-# MOOSE Simulation ETL Pipeline — Hydra configuration
+# MOOSE Simulation ETL Pipeline — shared template.
 #
-# Usage (from src/ directory):
-#   python run_etl.py \
-#       etl.source.input_dir=../data \
-#       etl.source.data_dir=../data \
-#       etl.sink.output_dir=../data/processed
-#
-# Override num_processes, grid resolution, compression, etc. on the CLI.
+# Concrete variants (e.g. etl.yaml = lid-driven) extend this base via
+#   defaults:
+#     - etl_base
+#     - _self_
+# and fill in the `???` paths. Run via:
+#   python run_etl.py --config-path cases/moose_grid/configs --config-name etl
 
 defaults:
   - _self_
@@ -16,7 +15,7 @@ etl:
     num_processes: 4
 
   source:
-    _target_: moose_etl.data_sources.exodus_source.ExodusDataSource
+    _target_: cases.moose_grid.etl.data_sources.exodus_source.ExodusDataSource
     # Directory containing Exodus (.e) files
     input_dir: ???
     # Directory containing CSV probe files (defaults to input_dir if omitted)
@@ -24,7 +23,7 @@ etl:
 
   transformations:
     moose_transform:
-      _target_: moose_etl.transformations.moose_transform.MooseDataTransformation
+      _target_: cases.moose_grid.etl.transformations.moose_transform.MooseDataTransformation
       # Regular-grid resolution for CNN-based models
       grid_nx: 64
       grid_ny: 64
@@ -32,7 +31,7 @@ etl:
       eps: 1.0e-8
 
   sink:
-    _target_: moose_etl.data_sources.zarr_sink.MooseZarrSink
+    _target_: cases.moose_grid.etl.data_sources.zarr_sink.MooseZarrSink
     # Directory where .zarr stores will be written
     output_dir: ???
     overwrite_existing: true
@@ -42,5 +41,5 @@ etl:
 
   # Optional: validate output after processing
   # validator:
-  #   _target_: moose_etl.validators.MooseDatasetValidator
+  #   _target_: cases.moose_grid.etl.validators.MooseDatasetValidator
   #   output_dir: ${etl.sink.output_dir}

@@ -4,7 +4,8 @@ defaults:
 
 hydra:
   searchpath:
-    - pkg://training.config  # default.yaml moved here in Phase 3
+    - pkg://training.config         # finds default.yaml
+    - pkg://cases.moose_grid.configs # finds sibling case configs
 
 model:
   name: fno

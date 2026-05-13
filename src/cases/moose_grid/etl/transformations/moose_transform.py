@@ -23,7 +23,7 @@ from scipy.interpolate import griddata
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
-from moose_etl.schemas import MooseProcessedData, NormStats
+from cases.moose_grid.etl.schemas import MooseProcessedData, NormStats
 
 logger = logging.getLogger(__name__)
 

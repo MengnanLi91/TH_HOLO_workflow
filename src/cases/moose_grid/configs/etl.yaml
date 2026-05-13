@@ -1,5 +1,10 @@
+# Lid-driven cavity flow — concrete ETL variant.
+#
+# Run via:
+#   python run_etl.py --config-path cases/moose_grid/configs --config-name etl
+#   python cases/moose_grid/run_etl.py
 defaults:
-  - moose_etl
+  - etl_base
   - _self_
 
 etl:
