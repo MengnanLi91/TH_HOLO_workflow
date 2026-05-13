@@ -12,7 +12,7 @@ model variants share the same ETL + feature pipeline:
 
 ## Layout
 
-```mermaid
+```{mermaid}
 flowchart LR
     R["cases/alpha_d/<br/>README.md"] --> Cfg["configs/<br/>train_mlp · train_conv1d · etl · pycaret"]
     R --> DS["datasets/<br/>profile.py (AlphaDProfileDataset)"]
@@ -70,23 +70,27 @@ Reads the Zarr stores, runs PyCaret regression with the
 
 ### 3. Train
 
-=== "MLP (with HPO)"
+::::{tab-set}
 
-    ```bash
-    python train.py --config-path cases/alpha_d/configs --config-name train_mlp
-    ```
+:::{tab-item} MLP (with HPO)
+```bash
+python train.py --config-path cases/alpha_d/configs --config-name train_mlp
+```
+:::
 
-=== "MLP (skip HPO)"
+:::{tab-item} MLP (skip HPO)
+```bash
+python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
+```
+:::
 
-    ```bash
-    python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
-    ```
+:::{tab-item} Conv1D profile
+```bash
+python train.py --config-path cases/alpha_d/configs --config-name train_conv1d
+```
+:::
 
-=== "Conv1D profile"
-
-    ```bash
-    python train.py --config-path cases/alpha_d/configs --config-name train_conv1d
-    ```
+::::
 
 A discoverability wrapper exists for the MLP path:
 
@@ -114,5 +118,5 @@ training conditions.
   — HPO study layout and CLI overrides.
 - [Case Distribution Analysis](../user/case_distribution_analysis.md) —
   pre-training data audit.
-- [Repo Layout Refactor Plan](../dev/repo_layout_refactor_plan.md)
+- [Repo Layout Refactor Plan](../archive/repo_layout_refactor_plan.md)
   (archived) — historical record of why this layout exists.

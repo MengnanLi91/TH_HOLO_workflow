@@ -1,9 +1,12 @@
 # MooseDataset API
 
-`MooseDataset` is a PyTorch `Dataset` that loads processed MOOSE simulation
-data from Zarr stores and returns tensors ready for ML training.
+{py:class}`dataset.moose_dataset.MooseDataset` is a PyTorch `Dataset`
+that loads processed MOOSE simulation data from Zarr stores and returns
+tensors ready for ML training.
 
-**Source:** `src/dataset/moose_dataset.py`
+**Source:** `src/dataset/moose_dataset.py` — see the
+[`dataset` API reference](../api/dataset.md) for the auto-generated
+signature and per-method docs.
 
 ## Constructor
 

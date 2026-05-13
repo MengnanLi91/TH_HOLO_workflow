@@ -383,20 +383,22 @@ PhysicsNeMo and matches the `etl-gpu` Docker service; it runs CPU-only without
 
 The alpha_D pipeline integrates with the existing generic training framework:
 
-- **Model**: `mlp` in the model registry (`src/training/models/mlp.py`),
+- **Model**: `mlp` in the model registry ({py:mod}`training.models.mlp`),
   wrapping PhysicsNeMo's `FullyConnected`.
-- **Adapter**: `PointwiseAdapter` in `src/training/adapters.py`, handling
+- **Adapter**: {py:class}`training.adapters.PointwiseAdapter`, handling
   tabular `(B, D_in) -> (B, D_out)` data.
-- **Dataset**: `TabularPairDataset` in `src/training/datasets_tabular.py`,
+- **Dataset**: {py:class}`training.datasets_tabular.TabularPairDataset`,
   reads per-case `.zarr` stores and concatenates row-wise.  Splitting is
   done at the case level (never mixing rows from the same CFD case across
   train and test).
 - **ETL**: `AlphaDSource` / `AlphaDTransformation` / `AlphaDZarrSink` in
-  `src/cases/alpha_d/etl/`, following the PhysicsNeMo Curator pattern.
-- **Experiment hooks**: `AlphaDExperiment` in
-  `src/cases/alpha_d/experiment.py` adds throat-weighted loss, the optional
-  per-epoch Δp integral loss, and the plotting-decode hook.
-- **Feature data**: `cases.alpha_d.feature_data` owns the ALLOWLIST,
+  {py:mod}`cases.alpha_d.etl.source`, {py:mod}`cases.alpha_d.etl.transform`,
+  and {py:mod}`cases.alpha_d.etl.sink`, following the PhysicsNeMo Curator
+  pattern.
+- **Experiment hooks**: {py:class}`cases.alpha_d.experiment.AlphaDExperiment`
+  adds throat-weighted loss, the optional per-epoch Δp integral loss, and
+  the plotting-decode hook.
+- **Feature data**: {py:mod}`cases.alpha_d.feature_data` owns the ALLOWLIST,
   engineered-feature synthesis, and the `FeatureAnalysisData` loader.
 
 ## Note: HPO is built into training

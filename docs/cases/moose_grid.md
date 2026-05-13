@@ -2,8 +2,10 @@
 
 `cases/moose_grid/` is the canonical MOOSE → grid/graph training case.
 It owns the original Exodus-based ETL pipeline that produces the
-multi-mode `*.zarr` stores consumed by [`MooseDataset`](../dev/dataset.md),
-and the FNO example training config that downstream grid models clone.
+multi-mode `*.zarr` stores consumed by
+{py:class}`dataset.moose_dataset.MooseDataset` (see the
+[Dataset API page](../dev/dataset.md)), and the FNO example training
+config that downstream grid models clone.
 
 ## Layout
 
@@ -23,7 +25,7 @@ cases/moose_grid/
 
 ## Workflow
 
-```mermaid
+```{mermaid}
 flowchart LR
     A["MOOSE .e + CSV probes"] --> S["ExodusDataSource<br/>CSVProbeSource"]
     S --> T["MooseDataTransformation<br/>z-score · edges · grid interp"]

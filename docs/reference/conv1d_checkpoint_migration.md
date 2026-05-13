@@ -1,13 +1,14 @@
 # Conv1D Profile Checkpoint Migration
 
-The Phase 7 refactor renamed `AlphaDConv1D` to `Conv1DProfile` so the
+The Phase 7 refactor renamed `AlphaDConv1D` to
+{py:class}`training.models.conv1d_profile.Conv1DProfile` so the
 1D convolutional profile model could be reused by future cases. The
 backward-compat subclass alias keeps old checkpoints loadable, but
 PhysicsNeMo embeds the class name (`__name__`) and module path inside
 `args.json` of the saved archive, so the alias is consulted every time
 the checkpoint is loaded.
 
-`training.models._migrate_conv1d_checkpoint` rewrites the embedded
+{py:mod}`training.models._migrate_conv1d_checkpoint` rewrites the embedded
 `__name__` from `AlphaDConv1D` to `Conv1DProfile` so the checkpoint no
 longer depends on the alias.
 
@@ -38,3 +39,4 @@ alias`). New checkpoints are already written with the new name.
 ## Source
 
 - `src/training/models/_migrate_conv1d_checkpoint.py`
+- API reference: {py:mod}`training.models._migrate_conv1d_checkpoint`

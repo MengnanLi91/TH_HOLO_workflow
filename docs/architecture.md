@@ -8,7 +8,7 @@ you need to navigate the codebase.
 
 ## Two ETLs feed one trainer
 
-```mermaid
+```{mermaid}
 flowchart LR
     subgraph ETL_grid["cases/moose_grid (run_etl.py)"]
         Aex["MOOSE .e + CSV probes"]
@@ -48,7 +48,7 @@ See:
 
 ## Training framework: registry → adapter → dataset → runner
 
-```mermaid
+```{mermaid}
 flowchart TB
     subgraph Reg["Model registry (training/models/__init__.py)"]
         R1["mlp → pointwise"]
@@ -85,18 +85,18 @@ and an MLP run. The runner stays the same.
 
 Key files:
 
-- Registry — `src/training/models/__init__.py`.
-- Adapters — `src/training/adapters.py`.
-- Datasets — `src/training/datasets.py`, `src/training/datasets_tabular.py`,
-  and the case-owned `src/cases/alpha_d/datasets/profile.py`
-  (`AlphaDProfileDataset`).
-- Runner — `src/training/runner.py`.
-- Experiments — base `src/training/experiment.py`; case-specific overrides
-  live with the case (e.g. `src/cases/alpha_d/experiment.py`).
+- Registry — {py:mod}`training.models` (`src/training/models/__init__.py`).
+- Adapters — {py:mod}`training.adapters`.
+- Datasets — {py:mod}`training.datasets`, {py:mod}`training.datasets_tabular`,
+  and the case-owned {py:class}`cases.alpha_d.datasets.profile.AlphaDProfileDataset`.
+- Runner — {py:mod}`training.runner`.
+- Experiments — base {py:class}`training.experiment.Experiment`; case-specific
+  overrides live with the case (e.g.
+  {py:class}`cases.alpha_d.experiment.AlphaDExperiment`).
 
 ## HPO orchestration
 
-```mermaid
+```{mermaid}
 flowchart LR
     Cfg["train_*.yaml<br/>(hpo section present)"] --> Gate{"hpo=null<br/>on CLI?"}
     Gate -- "yes" --> Direct["train() once<br/>on full pool"]
@@ -120,11 +120,11 @@ for the full search-space format and artifact reference.
 ## Per-case folder layout
 
 The 2026-05 refactor (see the archived
-[refactor plan](dev/repo_layout_refactor_plan.md)) moved every
+[refactor plan](archive/repo_layout_refactor_plan.md)) moved every
 case-specific concern out of the generic training core into a
 self-contained `src/cases/<case>/` folder.
 
-```mermaid
+```{mermaid}
 flowchart TB
     SRC["src/"] --> CASES["cases/"]
     SRC --> TRAIN["training/<br/>(generic: registry · adapters · runner · experiment)"]
@@ -158,7 +158,7 @@ only.
 
 ## `run_meta.json` round-trip
 
-```mermaid
+```{mermaid}
 sequenceDiagram
     autonumber
     participant T as train.py

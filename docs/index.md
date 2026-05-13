@@ -5,7 +5,7 @@ TH_HOLO_workflow is a PhysicsNeMo-based pipeline that turns
 probes) into ML-ready Zarr datasets, then trains and evaluates a family
 of surrogate models against them through a single generic training core.
 
-```mermaid
+```{mermaid}
 flowchart LR
     A["MOOSE outputs<br/>(.e + CSV probes)"]
     B["ETL pipeline<br/>(read · transform · validate)"]
@@ -24,7 +24,7 @@ flowchart LR
 
 ## Architecture at a glance
 
-```mermaid
+```{mermaid}
 flowchart LR
     subgraph ETL["Two ETL pipelines"]
         E1["cases/moose_grid<br/>(run_etl.py)"]
@@ -50,23 +50,27 @@ through four adapters**. The deeper structure is on the
 
 ## Quick start
 
-=== "Docker Compose"
+::::{tab-set}
 
-    ```bash
-    git submodule update --init physicsnemo-curator physicsnemo
-    docker compose build etl-dev
-    docker compose run --rm etl-dev bash -lc \
-      'cd src && python run_etl.py'
-    ```
+:::{tab-item} Docker Compose
+```bash
+git submodule update --init physicsnemo-curator physicsnemo
+docker compose build etl-dev
+docker compose run --rm etl-dev bash -lc \
+  'cd src && python run_etl.py'
+```
+:::
 
-=== "Apptainer (HPC)"
+:::{tab-item} Apptainer (HPC)
+```bash
+git submodule update --init physicsnemo-curator physicsnemo
+apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
+apptainer exec --bind /path/to/project:/path/to/project \
+  th-holo-cpu.sif bash -lc 'cd /path/to/project/src && python run_etl.py'
+```
+:::
 
-    ```bash
-    git submodule update --init physicsnemo-curator physicsnemo
-    apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
-    apptainer exec --bind /path/to/project:/path/to/project \
-      th-holo-cpu.sif bash -lc 'cd /path/to/project/src && python run_etl.py'
-    ```
+::::
 
 The default config is the lid-driven flow at
 `src/cases/moose_grid/configs/etl.yaml`, which writes output to
@@ -125,26 +129,20 @@ The full walkthrough is in the
   [FNO training and evaluation guide](dev/fno_train_eval.md) and the
   [Dataset API](dev/dataset.md).
 - **Curious about the layout?** See the
-  [Repo Layout Refactor Plan](dev/repo_layout_refactor_plan.md)
+  [Repo Layout Refactor Plan](archive/repo_layout_refactor_plan.md)
   (archived — refactor complete) for the design rationale.
 
-## Documentation map
+## Site contents
 
-- **User guide**
-    - [Getting Started](user/getting_started.md) — Docker / Apptainer setup, troubleshooting.
-    - [Alpha-D Surrogate Tutorial](user/alpha_d_surrogate.md)
-    - [Hyperparameter Optimization](user/hyperparameter_optimization.md)
-    - [Case Distribution Analysis](user/case_distribution_analysis.md)
-- **Cases**
-    - [MOOSE Grid](cases/moose_grid.md)
-    - [Alpha-D](cases/alpha_d.md)
-    - [Case Pressure Drop](cases/case_pressure_drop.md)
-- **Developer**
-    - [Architecture](architecture.md) — diagrams of the trainer, adapters, HPO, `run_meta.json` round-trip.
-    - [ETL Pipeline](dev/etl_pipeline.md)
-    - [Dataset API](dev/dataset.md)
-    - [FNO Training and Evaluation](dev/fno_train_eval.md)
-- **Reference**
-    - [Conv1D profile checkpoint migration](reference/conv1d_checkpoint_migration.md)
-- **Archive**
-    - [Repo Layout Refactor Plan](dev/repo_layout_refactor_plan.md) (historical)
+```{toctree}
+:maxdepth: 2
+:caption: Navigation
+
+architecture
+user/index
+cases/index
+dev/index
+reference/index
+api/index
+archive/index
+```
