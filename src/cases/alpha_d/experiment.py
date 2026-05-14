@@ -15,6 +15,8 @@ Usage -- set in the YAML config::
       delta_p_weight: 0.1
 """
 
+from __future__ import annotations
+
 import math
 from typing import Any
 

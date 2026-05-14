@@ -10,7 +10,7 @@ flowchart LR
     A["MOOSE outputs<br/>(.e + CSV probes)"]
     B["ETL pipeline<br/>(read · transform · validate)"]
     C["Processed dataset<br/>(*.zarr)"]
-    D["MooseDataset<br/>(graph · point_cloud · grid)"]
+    D["MOOSEDataset<br/>(graph · point_cloud · grid)"]
     A --> B --> C --> D
 ```
 
@@ -78,15 +78,6 @@ Open the Alpha-D Surrogate tutorial.
 How adapters, datasets, and the runner fit together when adding a model.
 
 Open the Architecture page.
-:::
-
-:::{grid-item-card} {octicon}`archive` Repo layout
-:link: archive/repo_layout_refactor_plan
-:link-type: doc
-
-Design rationale for the per-case layout (archived; refactor complete).
-
-Open the Repo Layout Refactor Plan.
 :::
 
 ::::
@@ -169,7 +160,5 @@ architecture
 user/index
 cases/index
 dev/index
-reference/index
 api/index
-archive/index
 ```

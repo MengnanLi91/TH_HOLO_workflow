@@ -1,7 +1,7 @@
 """Data schemas for MOOSE simulation ETL pipeline.
 
-MooseRawData   -- raw data extracted directly from Exodus + CSV files.
-MooseProcessedData -- normalized, graph-ready, grid-ready data for ML training.
+MOOSERawData   -- raw data extracted directly from Exodus + CSV files.
+MOOSEProcessedData -- normalized, graph-ready, grid-ready data for ML training.
 """
 
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ import numpy as np
 
 
 @dataclass
-class MooseRawData:
+class MOOSERawData:
     """Raw data extracted from a single MOOSE simulation run.
 
     coords       : [N, D]     node coordinates (D=2 for 2-D, D=3 for 3-D)
@@ -43,7 +43,7 @@ class NormStats:
 
 
 @dataclass
-class MooseProcessedData:
+class MOOSEProcessedData:
     """Processed, normalized data ready for PhysicsNeMo ML training.
 
     coords       : [N, D]        node coordinates

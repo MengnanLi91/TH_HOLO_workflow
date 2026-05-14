@@ -11,7 +11,7 @@ The packages mirror the layout described on the
   runner, experiment hooks, HPO).
 - **`cases.<name>`** — per-case ETL, datasets, physics, and experiments.
 - **`feature_selection`** — shared feature-analysis helpers.
-- **`dataset`** — the public `MooseDataset` consumed by downstream user
+- **`dataset`** — the public `MOOSEDataset` consumed by downstream user
   code.
 
 ```{toctree}

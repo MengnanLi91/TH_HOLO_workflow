@@ -14,7 +14,7 @@ flowchart LR
     A["MOOSE outputs (.e + CSV probes)"]
     B["ETL pipeline (read, transform, validate)"]
     C["Processed dataset (*.zarr)"]
-    D["Training interface: MooseDataset (graph | point_cloud | grid)"]
+    D["Training interface: MOOSEDataset (graph | point_cloud | grid)"]
     A --> B --> C --> D
 ```
 

@@ -12,6 +12,8 @@ All cases are loaded and concatenated row-wise.  Splitting is done at
 the case level via ``subset_by_case_indices``.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from pathlib import Path
 

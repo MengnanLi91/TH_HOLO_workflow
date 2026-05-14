@@ -12,6 +12,21 @@ requires-python = ">=3.11"
 # inside the existing images is a no-op for dependency resolution.
 dependencies = []
 
+[project.optional-dependencies]
+# Documentation build deps. Install with `pip install -e ".[docs]"`, then
+# `make -C docs html`. Kept unpinned to match the project convention of
+# pinning runtime versions inside the Dockerfiles, not in pyproject.
+docs = [
+    "sphinx",
+    "furo",
+    "myst-parser",
+    "sphinxcontrib-mermaid",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = ["read_exdous"]

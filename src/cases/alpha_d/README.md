@@ -89,4 +89,3 @@ training conditions.
 - [`docs/user/alpha_d_surrogate.md`](../../../docs/user/alpha_d_surrogate.md) — full tutorial with feature reference and config knobs.
 - [`docs/user/hyperparameter_optimization.md`](../../../docs/user/hyperparameter_optimization.md) — HPO study layout and CLI overrides.
 - [`docs/user/case_distribution_analysis.md`](../../../docs/user/case_distribution_analysis.md) — pre-training data audit.
-- [`docs/dev/repo_layout_refactor_plan.md`](../../../docs/dev/repo_layout_refactor_plan.md) — why this layout exists.

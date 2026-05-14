@@ -1,4 +1,4 @@
-"""MooseDatasetValidator: validates processed Zarr dataset structure.
+"""MOOSEDatasetValidator: validates processed Zarr dataset structure.
 
 Checks that every .zarr store in the output directory has the expected
 group hierarchy and required arrays before ML training begins.
@@ -32,7 +32,7 @@ _REQUIRED_ARRAYS: dict[str, list[str]] = {
 _REQUIRED_META_ATTRS = ["field_names", "probe_columns", "sim_name"]
 
 
-class MooseDatasetValidator(DatasetValidator):
+class MOOSEDatasetValidator(DatasetValidator):
     """Validates a directory of processed Zarr stores.
 
     Args:

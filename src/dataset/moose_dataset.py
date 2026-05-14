@@ -1,4 +1,4 @@
-"""MooseDataset: PyTorch Dataset over processed Zarr simulation stores.
+"""MOOSEDataset: PyTorch Dataset over processed Zarr simulation stores.
 
 Supports three representation modes for different PhysicsNeMo model families:
 
@@ -47,7 +47,7 @@ from torch.utils.data import Dataset
 logger = logging.getLogger(__name__)
 
 
-class MooseDataset(Dataset):
+class MOOSEDataset(Dataset):
     """Dataset over a directory of processed MOOSE Zarr stores.
 
     Args:
@@ -76,7 +76,7 @@ class MooseDataset(Dataset):
             raise FileNotFoundError(f"No .zarr stores found in {self.zarr_dir}")
 
         logger.info(
-            "MooseDataset: found %d simulation(s), mode='%s'",
+            "MOOSEDataset: found %d simulation(s), mode='%s'",
             len(self.sim_paths),
             mode,
         )

@@ -118,5 +118,3 @@ training conditions.
   — HPO study layout and CLI overrides.
 - [Case Distribution Analysis](../user/case_distribution_analysis.md) —
   pre-training data audit.
-- [Repo Layout Refactor Plan](../archive/repo_layout_refactor_plan.md)
-  (archived) — historical record of why this layout exists.

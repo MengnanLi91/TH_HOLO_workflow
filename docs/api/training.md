@@ -51,7 +51,7 @@ four adapter classes, a shared runner, and pluggable experiment hooks.
 
 ## Internal datasets
 
-`MooseDataset` (under [`dataset`](dataset.md)) is the public Dataset API.
+`MOOSEDataset` (under [`dataset`](dataset.md)) is the public Dataset API.
 The classes below are the input/output-slicing variants used internally
 by `train.py`.
 

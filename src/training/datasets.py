@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 
-from dataset.moose_dataset import MooseDataset
+from dataset.moose_dataset import MOOSEDataset
 from training import _require_pyg
 
 
@@ -38,7 +38,7 @@ def resolve_time_idx(time_idx: int, num_steps: int, label: str) -> int:
 
 
 class GridPairDataset(Dataset):
-    """Build supervised grid pairs `(x, y)` from MooseDataset grid samples."""
+    """Build supervised grid pairs `(x, y)` from MOOSEDataset grid samples."""
 
     def __init__(
         self,
@@ -49,7 +49,7 @@ class GridPairDataset(Dataset):
         target_time_idx: int,
     ):
         self.zarr_dir = Path(zarr_dir)
-        self.base = MooseDataset(zarr_dir=self.zarr_dir, mode="grid", time_idx=-1)
+        self.base = MOOSEDataset(zarr_dir=self.zarr_dir, mode="grid", time_idx=-1)
         reference = self.base[0]
 
         self.field_names = list(reference["field_names"])
@@ -130,7 +130,7 @@ class GridPairDataset(Dataset):
 
 
 class GraphPairDataset(Dataset):
-    """Build supervised PyG Data objects from MooseDataset graph samples."""
+    """Build supervised PyG Data objects from MOOSEDataset graph samples."""
 
     def __init__(
         self,
@@ -145,7 +145,7 @@ class GraphPairDataset(Dataset):
 
         self._pyg_data_cls = Data
         self.zarr_dir = Path(zarr_dir)
-        self.base = MooseDataset(zarr_dir=self.zarr_dir, mode="graph", time_idx=-1)
+        self.base = MOOSEDataset(zarr_dir=self.zarr_dir, mode="graph", time_idx=-1)
         reference = self.base[0]
 
         self.field_names = list(reference["field_names"])

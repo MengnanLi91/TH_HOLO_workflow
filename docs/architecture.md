@@ -12,7 +12,7 @@ you need to navigate the codebase.
 flowchart LR
     subgraph ETL_grid["cases/moose_grid (run_etl.py)"]
         Aex["MOOSE .e + CSV probes"]
-        Aetl["ExodusDataSource → MooseDataTransformation → MooseZarrSink"]
+        Aetl["ExodusDataSource → MOOSEDataTransformation → MOOSEZarrSink"]
         Aex --> Aetl
     end
 
@@ -119,16 +119,14 @@ for the full search-space format and artifact reference.
 
 ## Per-case folder layout
 
-The 2026-05 refactor (see the archived
-[refactor plan](archive/repo_layout_refactor_plan.md)) moved every
-case-specific concern out of the generic training core into a
-self-contained `src/cases/<case>/` folder.
+Every case-specific concern lives in a self-contained `src/cases/<case>/`
+folder, kept out of the generic training core.
 
 ```{mermaid}
 flowchart TB
     SRC["src/"] --> CASES["cases/"]
     SRC --> TRAIN["training/<br/>(generic: registry · adapters · runner · experiment)"]
-    SRC --> DS["dataset/<br/>(MooseDataset public API)"]
+    SRC --> DS["dataset/<br/>(MOOSEDataset public API)"]
     SRC --> ENT["train.py · evaluate.py · run_etl.py"]
 
     CASES --> MG["moose_grid/"]

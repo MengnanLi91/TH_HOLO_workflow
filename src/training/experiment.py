@@ -1,5 +1,7 @@
 """Experiment abstraction for optional custom training/eval steps."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any
 

@@ -1,6 +1,6 @@
-# MooseDataset API
+# MOOSEDataset API
 
-{py:class}`dataset.moose_dataset.MooseDataset` is a PyTorch `Dataset`
+{py:class}`dataset.moose_dataset.MOOSEDataset` is a PyTorch `Dataset`
 that loads processed MOOSE simulation data from Zarr stores and returns
 tensors ready for ML training.
 
@@ -11,7 +11,7 @@ signature and per-method docs.
 ## Constructor
 
 ```python
-MooseDataset(zarr_dir, mode="graph", time_idx=-1)
+MOOSEDataset(zarr_dir, mode="graph", time_idx=-1)
 ```
 
 | Argument | Type | Default | Description |
@@ -27,7 +27,7 @@ Each simulation run is one dataset item (`len(ds)` == number of `.zarr` stores).
 ### `"graph"` — GNN / MeshGraphNet
 
 ```python
-ds = MooseDataset("data/processed", mode="graph")
+ds = MOOSEDataset("data/processed", mode="graph")
 sample = ds[0]
 ```
 
@@ -46,7 +46,7 @@ sample = ds[0]
 ### `"point_cloud"` — PointNet / Transformer
 
 ```python
-ds = MooseDataset("data/processed", mode="point_cloud")
+ds = MOOSEDataset("data/processed", mode="point_cloud")
 sample = ds[0]
 ```
 
@@ -62,7 +62,7 @@ sample = ds[0]
 ### `"grid"` — CNN / FNO / U-Net
 
 ```python
-ds = MooseDataset("data/processed", mode="grid")
+ds = MOOSEDataset("data/processed", mode="grid")
 sample = ds[0]
 ```
 
@@ -81,7 +81,7 @@ sample = ds[0]
 Pass `time_idx` to remove the T dimension from all field tensors:
 
 ```python
-ds = MooseDataset("data/processed", mode="graph", time_idx=0)
+ds = MOOSEDataset("data/processed", mode="graph", time_idx=0)
 sample = ds[0]
 # elem_fields: [E, F]  (no T dim)
 # node_fields: [N, F]
@@ -93,7 +93,7 @@ Fields in the Zarr store are z-score normalized. Use `denormalize` to convert
 a tensor back to physical units:
 
 ```python
-ds = MooseDataset("data/processed", mode="grid")
+ds = MOOSEDataset("data/processed", mode="grid")
 sample = ds[0]
 
 pressure_norm = sample["grid_fields"][..., 0]       # normalized
@@ -113,9 +113,9 @@ vel_x_phys = vel_x_norm * stats["std"] + stats["mean"]
 
 ```python
 from torch.utils.data import DataLoader
-from dataset.moose_dataset import MooseDataset
+from dataset.moose_dataset import MOOSEDataset
 
-ds = MooseDataset("data/processed", mode="grid")
+ds = MOOSEDataset("data/processed", mode="grid")
 
 # Grid mode works directly with the default collate_fn
 loader = DataLoader(ds, batch_size=4, shuffle=True)

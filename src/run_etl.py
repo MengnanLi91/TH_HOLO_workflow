@@ -50,7 +50,7 @@ def main(cfg: DictConfig) -> None:
     # Instantiate source (ExodusDataSource)
     source = instantiate(cfg.etl.source, processing_config)
 
-    # Instantiate sink (MooseZarrSink)
+    # Instantiate sink (MOOSEZarrSink)
     sink = instantiate(cfg.etl.sink, processing_config)
 
     # Instantiate transformations — curator pattern passes cfg as positional arg

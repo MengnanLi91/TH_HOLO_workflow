@@ -1,4 +1,4 @@
-"""MooseDataTransformation: normalize, build graph, interpolate to grid.
+"""MOOSEDataTransformation: normalize, build graph, interpolate to grid.
 
 Implements the DataTransformation ABC from physicsnemo-curator.
 
@@ -9,8 +9,8 @@ Pipeline:
   3. Bilinear interpolation of element-centroid values onto a regular Nx×Ny grid
      using scipy.interpolate.griddata.
 
-Returns a dict containing all fields of MooseProcessedData, ready for
-MooseZarrSink to write to disk.
+Returns a dict containing all fields of MOOSEProcessedData, ready for
+MOOSEZarrSink to write to disk.
 """
 
 import itertools
@@ -23,12 +23,12 @@ from scipy.interpolate import griddata
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
-from cases.moose_grid.etl.schemas import MooseProcessedData, NormStats
+from cases.moose_grid.etl.schemas import MOOSEProcessedData, NormStats
 
 logger = logging.getLogger(__name__)
 
 
-class MooseDataTransformation(DataTransformation):
+class MOOSEDataTransformation(DataTransformation):
     """Normalize, build graph, and interpolate MOOSE simulation data.
 
     Args:
@@ -61,7 +61,7 @@ class MooseDataTransformation(DataTransformation):
             data: dict produced by ExodusDataSource.read_file().
 
         Returns:
-            dict of MooseProcessedData fields, or None to skip this sample.
+            dict of MOOSEProcessedData fields, or None to skip this sample.
         """
         coords: np.ndarray = data["coords"]           # [N, D]
         connectivity: np.ndarray = data["connectivity"]  # [E, K]
@@ -87,7 +87,7 @@ class MooseDataTransformation(DataTransformation):
             coords, connectivity, norm_fields
         )
 
-        processed = MooseProcessedData(
+        processed = MOOSEProcessedData(
             coords=coords,
             connectivity=connectivity,
             edge_src=edge_src,

@@ -7,7 +7,7 @@ Each Exodus file represents one simulation run.  The reader:
   2. Extracts element solution fields for every time step.
   3. Optionally co-reads matching CSV line-probe files via CSVProbeSource.
 
-The returned dict is keyed so that MooseDataTransformation can consume it
+The returned dict is keyed so that MOOSEDataTransformation can consume it
 directly without field-name guessing.
 """
 
@@ -32,7 +32,7 @@ from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 from cases.moose_grid.etl.data_sources.csv_source import CSVProbeSource
-from cases.moose_grid.etl.schemas import MooseRawData
+from cases.moose_grid.etl.schemas import MOOSERawData
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class ExodusDataSource(DataSource):
     def read_file(self, filename: str) -> dict[str, Any]:
         """Read one Exodus file and its associated CSV probes.
 
-        Returns a dict that can be passed directly to MooseDataTransformation.
+        Returns a dict that can be passed directly to MOOSEDataTransformation.
         """
         from netCDF4 import Dataset as NC4Dataset  # local import — not always installed
 
@@ -117,16 +117,16 @@ class ExodusDataSource(DataSource):
     # ------------------------------------------------------------------
 
     def _get_output_path(self, filename: str) -> Path:
-        raise NotImplementedError("ExodusDataSource is read-only; use MooseZarrSink for writing.")
+        raise NotImplementedError("ExodusDataSource is read-only; use MOOSEZarrSink for writing.")
 
     def _write_impl_temp_file(self, data: dict[str, Any], output_path: Path) -> None:
-        raise NotImplementedError("ExodusDataSource is read-only; use MooseZarrSink for writing.")
+        raise NotImplementedError("ExodusDataSource is read-only; use MOOSEZarrSink for writing.")
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _extract_exodus(self, ds, sim_name: str) -> MooseRawData:
+    def _extract_exodus(self, ds, sim_name: str) -> MOOSERawData:
         """Extract geometry, fields, and time from an open netCDF4 Dataset."""
 
         # --- Coordinates ---
@@ -176,7 +176,7 @@ class ExodusDataSource(DataSource):
                         "Element variable index %d not found in %s", fi + 1, sim_name
                     )
 
-        return MooseRawData(
+        return MOOSERawData(
             coords=coords,
             connectivity=connectivity,
             field_names=elem_field_names,

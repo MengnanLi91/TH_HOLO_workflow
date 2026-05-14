@@ -93,14 +93,31 @@ autodoc_typehints_description_target = "documented_params"
 autodoc_member_order = "bysource"
 autoclass_content = "class"
 
-# Lazy / optional deps used inside the codebase. None are required at import
-# time for the modules we autodoc, but list a couple of known-optional names
-# defensively so future module-level imports do not break the build.
+# Mocked imports for autodoc. The docs build runs in a lightweight Python
+# environment that intentionally does not install the project's heavy runtime
+# stack (torch, physicsnemo, zarr, hydra, …). Without these mocks, autodoc
+# fails to import any module that touches them and falls back to empty pages.
+#
+# Keep this list in sync with third-party imports across `src/`. Stdlib and
+# in-project packages don't need to appear here.
 autodoc_mock_imports: list[str] = [
+    "hydra",
+    "matplotlib",
+    "netCDF4",
+    "numpy",
+    "omegaconf",
+    "optuna",
+    "pandas",
+    "physicsnemo",
+    "physicsnemo_curator",
     "pycaret",
+    "scipy",
+    "sklearn",
+    "torch",
     "torch_geometric",
     "torch_scatter",
     "torch_sparse",
+    "zarr",
 ]
 
 

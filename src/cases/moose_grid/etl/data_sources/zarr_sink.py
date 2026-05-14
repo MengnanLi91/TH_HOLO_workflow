@@ -1,4 +1,4 @@
-"""MooseZarrSink: writes processed MOOSE simulation data to Zarr format.
+"""MOOSEZarrSink: writes processed MOOSE simulation data to Zarr format.
 
 Subclasses physicsnemo_curator's DataSource ABC (write-only role).
 
@@ -42,7 +42,7 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 logger = logging.getLogger(__name__)
 
 
-class MooseZarrSink(DataSource):
+class MOOSEZarrSink(DataSource):
     """Writes processed MOOSE data to per-simulation Zarr stores.
 
     Args:
@@ -83,10 +83,10 @@ class MooseZarrSink(DataSource):
     # ------------------------------------------------------------------
 
     def get_file_list(self) -> list[str]:
-        raise NotImplementedError("MooseZarrSink is write-only.")
+        raise NotImplementedError("MOOSEZarrSink is write-only.")
 
     def read_file(self, filename: str) -> dict[str, Any]:
-        raise NotImplementedError("MooseZarrSink is write-only.")
+        raise NotImplementedError("MOOSEZarrSink is write-only.")
 
     def _get_output_path(self, filename: str) -> Path:
         """Map an Exodus filename to its output .zarr path."""
