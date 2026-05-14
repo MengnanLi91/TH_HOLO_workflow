@@ -55,8 +55,11 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     # Internal planning and spec docs live under docs/ for editor
-    # convenience but aren't part of the user-facing site.
-    "superpowers/**",
+    # convenience but aren't part of the user-facing site. Excluded
+    # narrowly so that a future user-facing doc under docs/superpowers/
+    # would still get picked up.
+    "superpowers/plans/**",
+    "superpowers/specs/**",
 ]
 
 templates_path = ["_templates"]
