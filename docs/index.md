@@ -91,7 +91,7 @@ Open the Architecture page.
 git submodule update --init physicsnemo-curator physicsnemo
 docker compose build etl-dev
 docker compose run --rm etl-dev bash -lc \
-  'cd src && python run_etl.py'
+  'cd src && python cases/moose_grid/run_etl.py'
 ```
 :::
 
@@ -100,7 +100,7 @@ docker compose run --rm etl-dev bash -lc \
 git submodule update --init physicsnemo-curator physicsnemo
 apptainer build multifid-th-cpu.sif docker/physicsnemo-cpu.def
 apptainer exec --bind /path/to/project:/path/to/project \
-  multifid-th-cpu.sif bash -lc 'cd /path/to/project/src && python run_etl.py'
+  multifid-th-cpu.sif bash -lc 'cd /path/to/project/src && python cases/moose_grid/run_etl.py'
 ```
 :::
 
@@ -134,18 +134,26 @@ a PhysicsNeMo `FullyConnected` MLP:
 docker compose run --rm etl bash -lc \
   'cd src && python cases/alpha_d/run_etl.py'
 
-# 2. Train (HPO + retrain best, one command)
+# 2. PyCaret feature selection (writes selected_features.txt that
+#    train_mlp consumes via data.input_columns_file)
+docker compose run --rm etl bash -lc \
+  'cd src && python cases/alpha_d/run_feature_selection_pycaret.py'
+
+# 3. Train (HPO + retrain best, one command)
 docker compose run --rm etl bash -lc \
   'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
-# 2b. Or skip HPO and train directly
+# 3b. Or skip HPO and train directly
 docker compose run --rm etl bash -lc \
   'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
-# 3. Evaluate
+# 4. Evaluate
 docker compose run --rm etl bash -lc \
   'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
+
+The Conv1D path (`--config-name train_conv1d`) hard-codes its input
+columns and does not need step 2.
 
 The full walkthrough is in the
 [Alpha-D Surrogate Tutorial](user/alpha_d_surrogate.md).

@@ -83,8 +83,8 @@ For each case:
 
 ```
 {case_name}.zarr/
-    features      float32 [50, 10]   -- 50 stations x 10 input features
-    targets       float32 [50, 1]    -- 50 stations x 1 target (log_alpha_D)
+    features      float32 [50, 13]   -- 50 stations x 13 input features
+    targets       float32 [50, 2]    -- log_alpha_D and signed_log1p_alpha_D
     sample_weight float32 [50]       -- per-station weights (higher in throat)
     metadata/
         attrs: case_id, feature_names, target_names, Re, Dr, Lr, delta_p_case
@@ -120,6 +120,9 @@ Notation:
 | `is_upstream` | `1` if `z < z_throat_start` else `0` | local | One-hot region flag |
 | `is_throat` | `1` if `z_throat_start ≤ z ≤ z_throat_end` else `0` | local | One-hot region flag |
 | `is_downstream` | `1` if `z > z_throat_end` else `0` | local | One-hot region flag |
+| `dD_dz_local` | `np.gradient(d_local_over_D, z_hat)` | local | Discrete axial gradient of `d_local/D`; spikes at contraction edges, ~0 elsewhere |
+| `dist_to_throat_start` | `z_hat − z_throat_start_hat` | local | Signed: positive past the entry (inside throat / downstream), negative upstream |
+| `dist_to_throat_end` | `z_throat_end_hat − z_hat` | local | Signed: positive upstream of the exit (inside throat / upstream), negative past it. Note the sign convention is opposite of `dist_to_throat_start` so both are "positive toward throat centre" |
 
 #### Engineered features (synthesized at load time)
 
@@ -136,9 +139,13 @@ can reproduce them at training time without any extra storage.
 | `Dr_times_Lr` | `Dr × Lr` | case-level | |
 | `z_hat_times_Dr` | `z_hat × Dr` | local | |
 | `z_hat_times_Lr` | `z_hat × Lr` | local | |
-| `dist_to_throat_start` | `z_hat − z_throat_start_hat` | local | Signed |
-| `dist_to_throat_end` | `z_hat − z_throat_end_hat` | local | Signed |
 | `dist_to_nearest_step` | `min(\|dist_to_throat_start\|, \|dist_to_throat_end\|)` | local | Unsigned |
+
+Historical note: `dist_to_throat_start` and `dist_to_throat_end` are still
+listed in `ENGINEERED_FEATURES` (and the `build_engineered_feature_map`
+fallback computation), but the ETL writes them into Zarr directly, and
+`load_feature_matrix` prefers the Zarr column when a name is in both
+sets. They are documented under **Base features** above.
 
 In ideal incompressible flow `V_local/V_bulk` equals `1/A_local_over_A`
 exactly, so `log10_Re_local` would algebraically reduce to
@@ -172,11 +179,11 @@ print('target_names:', json.loads(meta.attrs['target_names']))
 
 Expected output:
 ```
-features shape: (50, 10)
+features shape: (50, 13)
 targets shape: (50, 2)
 case_id: Re_5000__Dr_0p144__Lr_0p01
 Re: 5000.0
-feature_names: ['log10_Re', 'Dr', 'Lr', 'z_hat', 'd_local_over_D', 'A_local_over_A', 'V_local_over_V_bulk', 'is_upstream', 'is_throat', 'is_downstream']
+feature_names: ['log10_Re', 'Dr', 'Lr', 'z_hat', 'd_local_over_D', 'A_local_over_A', 'V_local_over_V_bulk', 'is_upstream', 'is_throat', 'is_downstream', 'dD_dz_local', 'dist_to_throat_start', 'dist_to_throat_end']
 target_names: ['log_alpha_D', 'signed_log1p_alpha_D']
 ```
 
@@ -195,7 +202,56 @@ Config file: `src/cases/alpha_d/configs/etl.yaml`
 | `etl.transformations.alpha_d_transform.rho` | `1.0` | Fluid density (kg/m^3) |
 | `etl.sink.output_dir` | *(required)* | Directory for output Zarr stores |
 
-## Step 2: Train the MLP
+## Step 2: PyCaret feature selection
+
+The MLP training config selects its inputs from a `selected_features.txt`
+file written by PyCaret. Run this step after ETL and before training:
+
+```bash
+cd src && python cases/alpha_d/run_feature_selection_pycaret.py
+```
+
+The script reads the per-case Zarr stores from
+`../data/flow_contraction_expansion/parametric_study/processed/` (override
+with `data.zarr_dir=…`), runs PyCaret regression with `GroupKFold` by
+`case_id` over the ALLOWLIST-constrained candidate set, and writes
+`selected_features.txt` to
+`../data/feature_analysis/pycaret/default/` (override with
+`output.dir=…`).
+
+That output path is exactly where `train_mlp.yaml`'s
+`data.input_columns_file` points, so the MLP training step picks it up
+with no extra flags.
+
+### When you can skip this step
+
+- **Conv1D** (`train_conv1d`) hard-codes its input columns in
+  `train_conv1d.yaml`, so the Conv1D path does not need PyCaret output.
+- For the MLP, you can also bypass PyCaret by passing an explicit list
+  on the CLI:
+  ```bash
+  python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
+    data.input_columns_file=null \
+    'data.input_columns=[log10_Re,Dr,Lr,z_hat,d_local_over_D,V_local_over_V_bulk]'
+  ```
+
+### Common knobs
+
+```bash
+# Keep more features than the default 6
+python cases/alpha_d/run_feature_selection_pycaret.py \
+  pycaret.setup.n_features_to_select=8
+
+# Write output somewhere else
+python cases/alpha_d/run_feature_selection_pycaret.py \
+  output.dir=../data/feature_analysis/pycaret/run_1
+```
+
+If you change `output.dir`, also override
+`data.input_columns_file=…/selected_features.txt` in Step 3 so training
+reads from the same place.
+
+## Step 3: Train the MLP
 
 The training config `src/cases/alpha_d/configs/train_mlp.yaml` is
 pre-configured for the axial-profile MLP.
@@ -283,8 +339,9 @@ Config file: `src/cases/alpha_d/configs/train_mlp.yaml`
 | `model.params.activation_fn` | `silu` | Activation function |
 | `model.params.skip_connections` | `true` | Skip connections every 2 layers |
 | `data.zarr_dir` | `../data/.../processed` | Directory of alpha_D Zarr stores |
-| `data.input_columns` | 10 features | See config for full list |
-| `data.output_columns` | `[log_alpha_D]` | Target column |
+| `data.input_columns` | `null` | Explicit column list; `null` means defer to `input_columns_file` |
+| `data.input_columns_file` | `…/pycaret/default/selected_features.txt` | PyCaret-written file (Step 2). Set `null` if you populate `input_columns` directly |
+| `data.output_columns` | `[signed_log1p_alpha_D]` | Target column |
 | `data.split.strategy` | `random` | Split strategy (`sequential`, `random`, `file`) |
 | `data.split.train_ratio` | `0.8` | Fraction of cases for training |
 | `training.epochs` | `200` | Training epochs |
@@ -292,7 +349,7 @@ Config file: `src/cases/alpha_d/configs/train_mlp.yaml`
 | `training.lr` | `3e-4` | Learning rate |
 | `training.loss` | `mse` | Loss function |
 
-## Step 3: Evaluate
+## Step 4: Evaluate
 
 ```bash
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
@@ -337,15 +394,21 @@ python -c "import json; m=json.load(open('../data/cases/train_mlp/metrics.json')
 # 1. Extract alpha_D profiles from CFD
 docker compose run --rm etl bash -lc 'cd src && python cases/alpha_d/run_etl.py'
 
-# 2. Train (HPO + retrain best, all in one command)
+# 2. PyCaret feature selection (writes selected_features.txt)
+docker compose run --rm etl bash -lc 'cd src && python cases/alpha_d/run_feature_selection_pycaret.py'
+
+# 3. Train (HPO + retrain best, all in one command)
 docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
-# 2b. Train directly without HPO (power user)
+# 3b. Train directly without HPO (power user)
 docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
-# 3. Evaluate on held-out cases
+# 4. Evaluate on held-out cases
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
+
+If you only want the Conv1D model, skip step 2 and substitute
+`--config-name train_conv1d` in step 3.
 
 ### Apptainer (HPC) equivalent
 
@@ -361,15 +424,19 @@ absolute path to your repo checkout (or set `APPTAINER_BIND` once and omit
 apptainer exec --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python cases/alpha_d/run_etl.py'
 
-# 2. Train (HPO + retrain best)
+# 2. PyCaret feature selection (CPU is fine — drop --nv)
+apptainer exec --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
+  bash -lc 'cd /path/to/project/src && python cases/alpha_d/run_feature_selection_pycaret.py'
+
+# 3. Train (HPO + retrain best)
 apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 
-# 2b. Train directly without HPO
+# 3b. Train directly without HPO
 apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
 
-# 3. Evaluate
+# 4. Evaluate
 apptainer exec --nv --bind /path/to/project:/path/to/project multifid-th-gpu.sif \
   bash -lc 'cd /path/to/project/src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
@@ -404,15 +471,19 @@ The alpha_D pipeline integrates with the existing generic training framework:
 ## Note: HPO is built into training
 
 The `train_mlp.yaml` config includes an `hpo` section with a search
-space. When you run
-`python train.py --config-path cases/alpha_d/configs --config-name train_mlp`,
-it automatically runs Optuna HPO first, then retrains with the best
-hyperparameters.
+space. Both entry points — the top-level `train.py` and the case
+wrapper `cases/alpha_d/train.py` — call the same
+`training.runner.train_or_hpo` dispatcher, which runs Optuna HPO first
+and then retrains with the best hyperparameters whenever the config
+contains a non-empty `hpo.search_space`.
 
-To skip HPO and train directly with the parameters in the config:
+To skip HPO and train directly with the parameters in the config, set
+`hpo=null` on the CLI:
 
 ```bash
 cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
+# or, equivalently, via the case wrapper:
+cd src && python cases/alpha_d/train.py hpo=null
 ```
 
 See [Hyperparameter Optimization Guide](hyperparameter_optimization.md)

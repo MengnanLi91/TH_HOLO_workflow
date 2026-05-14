@@ -5,7 +5,7 @@
 #     - etl_base
 #     - _self_
 # and fill in the `???` paths. Run via:
-#   python run_etl.py --config-path cases/moose_grid/configs --config-name etl
+#   python cases/moose_grid/run_etl.py
 
 defaults:
   - _self_

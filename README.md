@@ -30,27 +30,22 @@ flowchart LR
 ```bash
 git submodule update --init physicsnemo-curator physicsnemo
 docker compose build etl-dev
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py'
-```
-
-The default config is the lid-driven flow at `src/cases/moose_grid/configs/etl.yaml`, which writes output to `data/processed/lid-driven/*.zarr`. Equivalent invocations:
-
-```bash
 docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py'
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-path cases/moose_grid/configs --config-name etl'
 ```
 
-You can still override values on the command line if needed:
+The default config is the lid-driven flow at `src/cases/moose_grid/configs/etl.yaml`, which writes output to `data/processed/lid-driven/*.zarr`.
+
+You can override values on the command line if needed:
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py etl.processing.num_processes=8'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py etl.processing.num_processes=8'
 ```
 
 To create a new dataset config, copy `src/cases/moose_grid/configs/etl.yaml` to
 `src/cases/moose_grid/configs/<your_config>.yaml`, update the source/sink paths, then run:
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name <your_config>'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py --config-name <your_config>'
 ```
 
 ## Train an FNO with PhysicsNeMo
@@ -118,3 +113,16 @@ See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full wa
 - [ETL Pipeline Internals](docs/dev/etl_pipeline.md)
 - [Dataset API](docs/dev/dataset.md)
 - [FNO Training and Evaluation](docs/dev/fno_train_eval.md)
+- [Building the documentation](docs/dev/building_docs.md)
+
+### Build the docs locally
+
+```bash
+pip install -e ".[docs]"
+make -C docs html
+# Open docs/_build/html/index.html in a browser
+```
+
+For live reload while editing: `make -C docs livehtml` and browse to
+<http://localhost:8000>. See [docs/dev/building_docs.md](docs/dev/building_docs.md)
+for strict mode, the Apptainer fallback, and the full target list.

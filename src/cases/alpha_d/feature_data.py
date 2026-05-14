@@ -38,6 +38,7 @@ BASE_ALLOWLIST: tuple[str, ...] = (
     "d_local_over_D",
     "A_local_over_A",
     "V_local_over_V_bulk",
+    "dD_dz_local",
 )
 
 ENGINEERED_FEATURES: tuple[str, ...] = (
@@ -121,8 +122,10 @@ def build_engineered_feature_map(
         z_throat_start = 2.0
         z_throat_end = 2.0
 
+    # Sign convention matches the ETL: both signed distances are positive
+    # toward the throat centre (entry: past start; exit: upstream of end).
     dist_to_throat_start = z_hat - z_throat_start
-    dist_to_throat_end = z_hat - z_throat_end
+    dist_to_throat_end = z_throat_end - z_hat
     dist_to_nearest_step = np.minimum(
         np.abs(dist_to_throat_start),
         np.abs(dist_to_throat_end),

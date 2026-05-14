@@ -117,7 +117,7 @@ The pipeline is configured via Hydra. The shared base template lives at
 variant at `src/cases/moose_grid/configs/etl.yaml`. Any key can be overridden on the CLI.
 
 ```bash
-python run_etl.py \
+python cases/moose_grid/run_etl.py \
     etl.source.input_dir=../data \
     etl.source.data_dir=../data \
     etl.sink.output_dir=../data/processed \

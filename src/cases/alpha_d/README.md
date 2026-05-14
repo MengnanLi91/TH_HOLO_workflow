@@ -42,37 +42,45 @@ feature/target matrix plus per-case metadata. See
 [`docs/user/alpha_d_surrogate.md`](../../../docs/user/alpha_d_surrogate.md)
 for the Zarr layout and feature reference.
 
-### 2. (Optional) PyCaret feature selection
+### 2. PyCaret feature selection — required for MLP, skip for Conv1D
 
 ```bash
 python cases/alpha_d/run_feature_selection_pycaret.py
 ```
 
 Reads the Zarr stores, runs PyCaret regression with the
-ALLOWLIST-constrained candidate set, writes
-`selected_features.txt` for the MLP training config to pick up via
-`data.input_columns_file`.
+ALLOWLIST-constrained candidate set, writes `selected_features.txt`.
+
+- **MLP** (`train_mlp.yaml`) pulls its input columns from
+  `data.input_columns_file: …/selected_features.txt`, so this step
+  must run first (or you must override `data.input_columns=[…]` and
+  set `data.input_columns_file=null` from the CLI).
+- **Conv1D** (`train_conv1d.yaml`) hard-codes its `input_columns` list
+  in the YAML and does not read `input_columns_file`, so the Conv1D
+  path skips this step entirely.
 
 ### 3. Train
 
 ```bash
-# MLP with HPO + retrain best
+# MLP with HPO + retrain best  (needs Step 2 output)
 python train.py --config-path cases/alpha_d/configs --config-name train_mlp
 
-# MLP, skip HPO
+# MLP, skip HPO  (needs Step 2 output)
 python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
 
-# Conv1D profile model (no HPO)
+# Conv1D profile model (no HPO; does not need Step 2)
 python train.py --config-path cases/alpha_d/configs --config-name train_conv1d
 ```
 
-A discoverability wrapper exists for the MLP path:
+A discoverability wrapper exists for the MLP path. It defaults to
+`--config-name train_mlp` for this case but is otherwise equivalent to
+the top-level `train.py` — both honour an `hpo` block in the config:
 
 ```bash
-python cases/alpha_d/train.py          # equivalent, but no HPO dispatch
+python cases/alpha_d/train.py                       # MLP with HPO (default config)
+python cases/alpha_d/train.py hpo=null              # MLP, skip HPO
+python cases/alpha_d/train.py --config-name train_conv1d   # Conv1D
 ```
-
-Use the canonical `train.py` invocation when you need HPO.
 
 ### 4. Evaluate
 

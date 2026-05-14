@@ -40,8 +40,6 @@ flowchart LR
 ```bash
 # ETL: MOOSE outputs → Zarr (default = lid-driven flow)
 python cases/moose_grid/run_etl.py
-# equivalent to:
-python run_etl.py --config-path cases/moose_grid/configs --config-name etl
 
 # Train FNO
 python train.py --config-path cases/moose_grid/configs --config-name train_fno

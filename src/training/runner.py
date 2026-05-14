@@ -582,6 +582,53 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     }
 
 
+def _has_hpo(cfg: Any) -> bool:
+    """True iff the config requests Optuna HPO (non-empty search_space)."""
+    cfg_dict = to_plain_dict(cfg) if not isinstance(cfg, dict) else cfg
+    hpo = cfg_dict.get("hpo")
+    if not isinstance(hpo, dict):
+        return False
+    return bool(hpo.get("search_space"))
+
+
+def _log_hpo_summary(results: dict[str, Any]) -> None:
+    """Print the post-run HPO summary that previously lived in src/train.py."""
+    n_complete = results.get("n_complete", 0)
+    n_pruned = results.get("n_pruned", 0)
+    n_trials = results.get("n_trials", 0)
+    print(f"\nHPO complete: {n_complete} finished, {n_pruned} pruned, {n_trials} total")
+
+    if n_complete > 0:
+        print(
+            f"Best trial #{results['best_trial_number']}: "
+            f"val_loss={results['best_value']:.6e}"
+        )
+        print(f"Best params: {json.dumps(results['best_params'], indent=2)}")
+        print(f"Artifacts saved to: {results['output_dir']}")
+
+        if "retrain" in results:
+            retrain = results["retrain"]
+            print(f"\nRetrained model saved to: {retrain['checkpoint']}")
+            print(f"Final train loss: {retrain['final_train_loss']:.6e}")
+
+
+def train_or_hpo(cfg: Any) -> None:
+    """Dispatch to Optuna HPO when ``cfg.hpo.search_space`` is populated; train otherwise.
+
+    Single source of truth for the train-vs-HPO branching shared by every
+    ``@hydra.main`` entry point (top-level ``src/train.py`` and the
+    per-case ``src/cases/<case>/train.py`` wrappers). Entry-point choice
+    only affects which config is loaded — never whether HPO runs.
+    """
+    if _has_hpo(cfg):
+        from training.hpo.study import run_hpo
+
+        results = run_hpo(to_plain_dict(cfg))
+        _log_hpo_summary(results)
+    else:
+        train(cfg)
+
+
 def _indices_for_test_split(
     sim_names: list[str],
     split_meta: dict[str, Any],

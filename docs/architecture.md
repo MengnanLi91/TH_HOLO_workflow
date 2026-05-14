@@ -127,7 +127,7 @@ flowchart TB
     SRC["src/"] --> CASES["cases/"]
     SRC --> TRAIN["training/<br/>(generic: registry · adapters · runner · experiment)"]
     SRC --> DS["dataset/<br/>(MOOSEDataset public API)"]
-    SRC --> ENT["train.py · evaluate.py · run_etl.py"]
+    SRC --> ENT["train.py · evaluate.py"]
 
     CASES --> MG["moose_grid/"]
     CASES --> AD["alpha_d/"]

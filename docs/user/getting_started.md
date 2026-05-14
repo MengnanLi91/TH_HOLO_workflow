@@ -59,10 +59,10 @@ in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
 
 ```bash
 docker compose build etl-dev
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py'
 ```
 
-`python run_etl.py` defaults to `cases/moose_grid/configs/etl.yaml` (the lid-driven flow). Replace `etl-dev` with `etl` or `etl-ngc` if needed.
+`cases/moose_grid/run_etl.py` defaults to `cases/moose_grid/configs/etl.yaml` (the lid-driven flow). Replace `etl-dev` with `etl` or `etl-ngc` if needed.
 
 ## Build and run with Apptainer (HPC)
 
@@ -121,7 +121,7 @@ always accessible without an explicit `--bind`.
 apptainer exec \
   --bind /path/to/project:/path/to/project \
   multifid-th-cpu.sif \
-  bash -c 'cd /path/to/src && python run_etl.py'
+  bash -c 'cd /path/to/src && python cases/moose_grid/run_etl.py'
 
 # GPU
 apptainer exec --nv \
@@ -171,7 +171,7 @@ etl:
 ### Option A2: same run with CLI overrides (no dedicated yaml)
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py \
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py \
   etl.source.input_dir=../data/lid-driven \
   etl.source.data_dir=../data/lid-driven \
   etl.sink.output_dir=../data/processed/lid-driven \
@@ -196,7 +196,7 @@ Edit these keys in `src/cases/moose_grid/configs/my_case.yaml`:
 Run with your new config name:
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name my_case'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py --config-name my_case'
 ```
 
 ### Option B: interactive shell
@@ -209,7 +209,7 @@ Then inside the container:
 
 ```bash
 cd src
-python run_etl.py
+python cases/moose_grid/run_etl.py
 ```
 
 ## Input and output conventions
