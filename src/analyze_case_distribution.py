@@ -15,8 +15,6 @@ Usage (inside the container):
         --run-meta ../data/models/case_pressure_drop/run_meta.json
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import sys

@@ -124,16 +124,6 @@ by `train.py`.
    :show-inheritance:
 ```
 
-### Checkpoint migration utility
-
-```{eval-rst}
-.. automodule:: training.models._migrate_conv1d_checkpoint
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :private-members:
-```
-
 ## Hyperparameter optimization
 
 ```{eval-rst}

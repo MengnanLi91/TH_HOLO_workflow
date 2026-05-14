@@ -16,11 +16,9 @@ imports cleanly but the model is not registered — mirroring how
 ``GraphAdapter`` only activates if PyG is importable. This keeps
 ``_load_builtins`` from hard-failing in envs without physicsnemo.
 
-Backward-compat: ``AlphaDConv1D`` was the original class name. Old
-``.mdlus`` checkpoints have ``__name__ == "AlphaDConv1D"`` baked in;
-the alias subclass below keeps them loadable. Run
-``training.models._migrate_conv1d_checkpoint`` on the file to upgrade
-to the new name in-place.
+Backward-compat: ``AlphaDConv1D`` was the original class name. The
+alias subclass below keeps old ``.mdlus`` checkpoints loadable, since
+PhysicsNeMo embeds ``__name__`` in the saved archive.
 """
 
 import torch
@@ -113,12 +111,7 @@ if _PhysicsNeMoModule is not None:
             return self.head(h)
 
     class AlphaDConv1D(Conv1DProfile):
-        """Backward-compat alias for old ``.mdlus`` checkpoints.
-
-        Kept until all known checkpoints have been migrated via
-        ``training.models._migrate_conv1d_checkpoint``. Remove in a
-        follow-up release once no live checkpoint references it.
-        """
+        """Backward-compat alias for old ``.mdlus`` checkpoints."""
 
     def build(model_cfg: dict, dataset_info: dict):
         resolved = {
