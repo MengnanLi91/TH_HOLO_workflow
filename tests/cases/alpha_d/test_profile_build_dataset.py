@@ -1,9 +1,9 @@
-"""Phase 2e: ProfileAdapter resolves a case-side build_dataset entrypoint.
+"""ProfileAdapter resolves a case-side ``build_dataset`` entrypoint.
 
-The generic ProfileAdapter must no longer hardcode ``AlphaDProfileDataset``.
-Instead it reads ``data.dataset_entrypoint`` and calls the resolved
-callable, which returns the case dataset. The alpha-D case ships its own
-``build_dataset(data_cfg)`` next to its dataset class.
+The generic ``ProfileAdapter`` reads ``data.dataset_entrypoint`` and calls
+the resolved callable rather than hardcoding ``AlphaDProfileDataset``. The
+alpha-D case ships its own ``build_dataset(data_cfg)`` next to its dataset
+class so the adapter stays case-agnostic.
 """
 
 from __future__ import annotations

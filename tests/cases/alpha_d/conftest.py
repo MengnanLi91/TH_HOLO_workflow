@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 
+np = pytest.importorskip("numpy")
 zarr = pytest.importorskip("zarr")
 
 from cases.alpha_d.physics.targets import encode_alpha_d_target

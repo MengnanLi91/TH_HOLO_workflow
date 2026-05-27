@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
+
+np = pytest.importorskip("numpy")
 
 from cases.alpha_d.physics.baseline import (
     BaselineGeometry,

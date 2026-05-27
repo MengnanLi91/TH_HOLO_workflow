@@ -53,6 +53,14 @@ in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
 `etl-dev` and `etl` run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
 `etl-gpu` and `etl-ngc` are `amd64`-only and support NVIDIA GPUs.
 
+```{note}
+None of these images include MOOSE itself — they ship the Python /
+PhysicsNeMo stack used to consume MOOSE outputs. To produce the `.e`
+files the ETL reads, see [Running MOOSE Simulations](running_moose.md),
+which documents the separate `moose-dev-openmpi-x86_64.sif` Apptainer
+image and links to MOOSE's official install paths.
+```
+
 ## Build and run with Docker Compose
 
 ### Option A: direct run from host terminal
@@ -276,6 +284,38 @@ docker compose logs --tail=100 etl-ngc
 
 `docker compose run --rm ...` removes the container when it exits, including its
 stored logs. Omit `--rm` if you need to inspect logs after a run.
+
+## Build the documentation
+
+The site you're reading is built with Sphinx + MyST + Furo. The
+`multifid-th-cpu.sif` image already has the full Sphinx stack installed,
+so no extra install step is required.
+
+From the repository root:
+
+```bash
+# Apptainer (preferred on HPC)
+apptainer exec --bind "$PWD:$PWD" --pwd "$PWD" multifid-th-cpu.sif \
+    make -C docs html
+
+# Docker (workstation)
+docker compose run --rm etl bash -lc 'make -C docs html'
+```
+
+Open `docs/_build/html/index.html` in a browser to preview.
+
+Rebuild after:
+
+- editing any `.md` file under `docs/`,
+- editing module / class / function docstrings (autodoc pulls them into
+  the API pages), or
+- adding / removing classes or functions exposed via `automodule`
+  directives in `docs/api/`.
+
+For live reload, the nitpicky `strict` target (warnings-fatal,
+matching CI), and the full list of make targets, see
+[Building the documentation](../dev/building_docs.md). `docs/_build/`
+is git-ignored — don't commit anything under it.
 
 ## Troubleshooting builds
 

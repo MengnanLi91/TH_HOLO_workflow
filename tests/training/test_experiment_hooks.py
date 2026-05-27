@@ -1,8 +1,9 @@
 """Tests for the case-agnostic Experiment hook API.
 
-Phase 2a introduces ``compute_extended_metrics`` and ``print_extended_metrics``
-on the base ``Experiment`` so the runner can delegate case-specific evaluation
-without inline ``is_alpha_d_target`` checks. Both default to no-ops.
+The base ``Experiment`` exposes ``compute_extended_metrics`` /
+``print_extended_metrics`` so the runner can delegate case-specific
+evaluation without inline ``is_alpha_d_target`` checks. Both default to
+no-ops; case experiments override.
 """
 
 from __future__ import annotations
@@ -55,3 +56,13 @@ def test_prepare_for_training_default_is_noop() -> None:
 def test_on_epoch_end_extra_step_default_is_noop() -> None:
     exp = _make_experiment()
     assert exp.on_epoch_end_extra_step() is None
+
+
+def test_baseline_for_plotting_default_returns_none() -> None:
+    exp = _make_experiment()
+    result = exp.baseline_for_plotting(
+        dataset=object(),
+        field_name="anything",
+        mask=None,
+    )
+    assert result is None

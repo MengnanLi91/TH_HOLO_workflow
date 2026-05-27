@@ -18,7 +18,7 @@ flowchart LR
     R --> DS["datasets/<br/>profile.py (AlphaDProfileDataset)"]
     R --> ETL["etl/<br/>source · transform · sink"]
     R --> Phys["physics/<br/>baseline · targets"]
-    R --> Exp["experiment.py<br/>throat loss · Δp loss · decode hooks"]
+    R --> Exp["experiment.py<br/>throat loss · decode + baseline plot hooks"]
     R --> FD["feature_data.py<br/>ALLOWLIST · engineered features"]
     R --> Met["metrics.py<br/>per-region MSE/RMSE · Δp eval"]
     R --> Tr["transforms.py<br/>signed-log1p residual target"]
@@ -33,7 +33,7 @@ cases/alpha_d/
 ├── datasets/          # AlphaDProfileDataset + build_dataset entry point
 ├── etl/               # PhysicsNeMo Curator pipeline (source, transform, sink)
 ├── physics/           # baseline, targets — alpha_D encoding + analytical baseline
-├── experiment.py      # AlphaDExperiment — throat-weighted loss, Δp loss, decode hooks
+├── experiment.py      # AlphaDExperiment — throat-weighted loss + decode/baseline plot hooks
 ├── feature_data.py    # ALLOWLIST, GROUPED_FEATURES, engineered_features_spec
 ├── metrics.py         # extended metrics (per-region MSE/RMSE, Δp evaluation)
 ├── transforms.py      # alpha_d_residual_transform (target = signed-log1p residual)

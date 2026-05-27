@@ -29,8 +29,11 @@ from training.losses import get_loss_fn
 from training.models import get_build_fn_and_adapter, model_entrypoint_string
 from training.plotting import (
     resolve_plot_indices,
+    save_delta_p_parity_plot,
     save_grid_prediction_plots,
+    save_parity_plot,
     save_pointwise_profile_plots,
+    save_profile_prediction_plots,
     select_best_worst_pointwise_cases,
 )
 
@@ -125,8 +128,7 @@ def build_experiment(
     """Instantiate an Experiment from an optional entrypoint string.
 
     Extra *kwargs* are forwarded to the experiment constructor, allowing
-    custom experiments to accept domain-specific arguments such as
-    ``consistency_weight`` or ``norm_stats``.
+    custom experiments to accept domain-specific arguments.
     """
     if experiment_entrypoint:
         experiment_cls = _load_object(experiment_entrypoint)
@@ -311,12 +313,6 @@ def train(cfg: dict | Any) -> dict[str, Any]:
 
     experiment_entrypoint = training_cfg.get("experiment")
     experiment_kwargs: dict[str, Any] = {}
-    consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
-    if consistency_weight > 0:
-        experiment_kwargs["consistency_weight"] = consistency_weight
-    delta_p_weight = float(training_cfg.get("delta_p_weight", 0.0))
-    if delta_p_weight > 0:
-        experiment_kwargs["delta_p_weight"] = delta_p_weight
     experiment = _build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
@@ -828,12 +824,47 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                     case_entries=plot_cases,
                     plot_dpi=int(output_cfg.get("plot_dpi", 150)),
                     decode_fn=experiment.decode_for_plotting,
+                    baseline_fn=experiment.baseline_for_plotting,
+                )
+            elif adapter.family == "profile":
+                plot_cases = select_best_worst_pointwise_cases(extended_metrics, output_fields)
+                plot_files = save_profile_prediction_plots(
+                    model=model,
+                    dataset=eval_dataset,
+                    output_fields=output_fields,
+                    device=device,
+                    plot_dir=plot_dir_value,
+                    case_entries=plot_cases,
+                    plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                    decode_fn=experiment.decode_for_plotting,
+                    baseline_fn=experiment.baseline_for_plotting,
                 )
             else:
                 raise ValueError(
-                    "Plotting currently supports only grid and pointwise adapters. "
-                    f"Received adapter='{adapter.family}'."
+                    "Plotting currently supports grid, pointwise, and profile "
+                    f"adapters. Received adapter='{adapter.family}'."
                 )
+
+            if adapter.family in {"pointwise", "profile"}:
+                parity_files = save_parity_plot(
+                    cat_preds=torch.cat(all_preds, dim=0),
+                    cat_targets=torch.cat(all_targets, dim=0),
+                    dataset=eval_dataset,
+                    output_fields=output_fields,
+                    plot_dir=plot_dir_value,
+                    decode_fn=experiment.decode_for_plotting,
+                    plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                )
+                plot_files.extend(parity_files)
+
+                dp_per_case = extended_metrics.get("delta_p", {}).get("per_case") or []
+                dp_parity = save_delta_p_parity_plot(
+                    per_case=dp_per_case,
+                    plot_dir=plot_dir_value,
+                    plot_dpi=int(output_cfg.get("plot_dpi", 150)),
+                )
+                if dp_parity is not None:
+                    plot_files.append(dp_parity)
         except ModuleNotFoundError as exc:
             print(f"Skipping plot generation: {exc}")
 

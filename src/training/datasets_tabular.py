@@ -464,11 +464,25 @@ class TabularPairDataset(Dataset):
         self,
         encoded: torch.Tensor,
         row_mask: np.ndarray | torch.Tensor | None = None,
+        field_idx: int | None = None,
     ) -> torch.Tensor:
         """Re-add the per-row encoded baseline to an encoded tensor.
 
         No-op when no target baseline was attached (``has_target_baseline``
         is False) so callers can use it unconditionally at decode boundaries.
+
+        Parameters
+        ----------
+        encoded
+            Encoded tensor in residual space (e.g. a model prediction).
+        row_mask
+            Optional row selector — numpy boolean / integer array or torch
+            tensor — to slice the baseline before adding.
+        field_idx
+            Output-field index when the dataset has multiple target
+            columns. When ``None``, falls back to auto-squeezing a
+            single-field baseline so 1-D ``encoded`` tensors broadcast
+            correctly.
         """
         if not self.has_target_baseline or self._baseline_encoded is None:
             return encoded
@@ -477,7 +491,9 @@ class TabularPairDataset(Dataset):
             if isinstance(row_mask, np.ndarray):
                 row_mask = torch.as_tensor(row_mask)
             bl = bl[row_mask]
-        # Allow callers to pass a 1-D field-slice; broadcast accordingly.
-        if encoded.dim() == 1 and bl.dim() == 2 and bl.shape[1] == 1:
+        if field_idx is not None:
+            bl = bl[..., field_idx]
+        elif encoded.dim() == 1 and bl.dim() == 2 and bl.shape[1] == 1:
+            # Allow callers to pass a 1-D field-slice; broadcast accordingly.
             bl = bl.squeeze(-1)
         return encoded + bl.to(encoded.dtype).to(encoded.device)

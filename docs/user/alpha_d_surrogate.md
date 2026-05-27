@@ -382,6 +382,30 @@ docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path
   output.metrics_out=../data/cases/train_mlp/metrics.json'
 ```
 
+### Plots
+
+Pass `output.plot_dir=<path>` to the evaluator to generate the full
+diagnostic set:
+
+```bash
+python evaluate.py --config-path cases/alpha_d/configs --config-name train_conv1d \
+    output.plot_dir=../data/cases/train_conv1d/plots
+```
+
+The plotter writes (for the pointwise and profile adapters):
+
+| File | What it shows |
+|---|---|
+| `best_<case>_alpha_D_profile.png` | Best-fit case: α_D(z) — three curves: ground truth (solid + markers), prediction (dashed), and the closed-form analytical baseline (dotted gray). |
+| `worst_<case>_alpha_D_profile.png` | Same but for the worst-fit case by pointwise RMSE on the test split. |
+| `parity_alpha_D.png` | Per-station scatter of predicted vs. ground-truth α_D across the entire test set, with `y = x` and ±10% reference lines. Points coloured by region (`is_upstream` / `is_throat` / `is_downstream`) when those flags appear in the selected feature set. |
+| `delta_p_parity.png` | Per-case scatter of predicted ΔP (trapezoidal integral of predicted α_D over the ROI) vs. ground-truth `delta_p_case`. Same `y = x` + ±10% references, log-log axes when both sides are positive. Points coloured by `Dr` on a viridis colorbar — useful for spotting the low-Dr × high-Re corner where the surrogate has historically had the largest tail. |
+
+`output.plot_dir` defaults to `null`, so no plots are produced unless
+you opt in. Baseline / extended metrics (per-region MSE, R², Δp
+relative-error breakdown by Dr) are written to
+`output.metrics_out` regardless.
+
 Then inspect:
 
 ```bash
@@ -463,8 +487,10 @@ The alpha_D pipeline integrates with the existing generic training framework:
   and {py:mod}`cases.alpha_d.etl.sink`, following the PhysicsNeMo Curator
   pattern.
 - **Experiment hooks**: {py:class}`cases.alpha_d.experiment.AlphaDExperiment`
-  adds throat-weighted loss, the optional per-epoch Δp integral loss, and
-  the plotting-decode hook.
+  adds throat-weighted loss and the plotting hooks
+  ({py:meth}`~cases.alpha_d.experiment.AlphaDExperiment.decode_for_plotting`,
+  {py:meth}`~cases.alpha_d.experiment.AlphaDExperiment.baseline_for_plotting`)
+  the runner uses for per-case profile and parity plots.
 - **Feature data**: {py:mod}`cases.alpha_d.feature_data` owns the ALLOWLIST,
   engineered-feature synthesis, and the `FeatureAnalysisData` loader.
 
@@ -498,10 +524,27 @@ After running multiple HPO versions, review training progress and
 compare evaluation metrics across versions using whichever notebook
 or script you've adopted for cross-run comparison.
 
-## Next steps (planned)
+## Status
 
-- Weighted MSE loss with higher weight in the throat/expansion region
-- Stratified 70/15/15 split over Re, Dr, Lr
-- Pressure-drop consistency loss (case-level integrated delta-P)
-- Parity plots and error-by-parameter diagnostics
+Landed since the original tutorial draft:
+
+- **Region-weighted loss** — `data.throat_weight` / `data.downstream_weight`
+  in `TabularPairDataset` (Conv1D + MLP).
+- **Stratified case split** — `data.split.strategy: stratified` with
+  `n_bins` covering Re × Dr × Lr.
+- **Parity and per-case profile plots** — see [Plots](#plots) above.
+- **Per-case Δp integral evaluation** — `extended.delta_p.per_case` in
+  `eval_metrics.json` reports trapezoidal-integrated ΔP_pred vs.
+  ground-truth `delta_p_case` for every test case.
+
+Explicitly **not** done (tried, regressed, removed):
+
+- A pressure-drop-consistency training loss (`delta_p_weight` in the
+  experiment). Two attempts (`delta_p_weight = 0.25` direct;
+  `delta_p_weight = 0.05` via HPO selection) degraded the test Δp by
+  30–130% versus the pure relative_l2 baseline, even when val loss
+  looked comparable. The log-space Δp loss has ~unit magnitude, so any
+  non-trivial weight starves the per-station signal that the model
+  actually fits well. The term and its hooks were removed from
+  `AlphaDExperiment`.
 - MOOSE offline coupling: export predictions for closed-loop verification

@@ -26,9 +26,9 @@ data:
   # resolves the entrypoint and threads them into TabularPairDataset.
   engineered_features_entrypoint: cases.alpha_d.feature_data:engineered_features_spec
   # Selected via PyCaret + region indicators added back so per-region eval metrics fire.
-  # The three trailing columns (dD_dz_local + signed throat distances) are
-  # neighbour-context features added in v5 to give the pointwise MLP some
-  # geometric awareness it otherwise lacks (see throat R²~0.3 problem).
+  # Trailing columns (dD_dz_local + signed throat distances) are
+  # neighbour-context features that give the pointwise MLP some geometric
+  # awareness it otherwise lacks (helps the throat R² ≈ 0.3 problem).
   input_columns: null
   input_columns_file: ../data/feature_analysis/pycaret/default/selected_features.txt
   output_columns: [signed_log1p_alpha_D]
@@ -64,8 +64,6 @@ training:
   lr_scheduler: cosine
   lr_warmup_epochs: 10
   experiment: cases.alpha_d.experiment:AlphaDExperiment
-  consistency_weight: 0.0
-  delta_p_weight: 0.0  # disabled; rely on the encoded target alone
   early_stopping:
     patience: 30
     val_ratio: 0.15
@@ -91,17 +89,10 @@ output:
 # Hyperparameter optimization.  Set hpo=null on the CLI to skip HPO and
 # train directly with the parameters above.
 hpo:
-  # v5 — input dim grew from 9 to 12 with the addition of neighbour
-  # context features (dD_dz_local, dist_to_throat_start,
-  # dist_to_throat_end) in the ETL.  Bump study_name whenever the
-  # input dimensionality, objective, or search space changes (Optuna
-  # otherwise mixes incompatible runs in the SQLite store).
-  study_name: alpha_d_mlp_hpo_residual_v5
-  # Weight on the val Δp term in the HPO objective.  ~1.0 puts encoded
-  # val loss and val Δp on the same order of magnitude in the current
-  # dataset; raise to bias HPO toward Δp accuracy at the expense of
-  # pointwise fit, lower for the reverse.
-  delta_p_objective_weight: 1.0
+  # Bump study_name (e.g. append _v8, _v9, …) whenever the input feature
+  # set, target encoding, or search space changes — Optuna otherwise mixes
+  # incompatible trials in the SQLite store.
+  study_name: alpha_d_mlp_hpo_residual_v7
   direction: minimize
   n_trials: 50
   seed: 42
@@ -164,11 +155,3 @@ hpo:
     data.downstream_weight:
       type: categorical
       choices: [1.0, 2.0, 3.0, 5.0]
-
-    # Pressure-drop integral loss weight.  Wider than the previous 0–0.05
-    # range so HPO can actually explore the regime where Δp loss
-    # dominates and re-biases toward throat samples that drive the
-    # integral.
-    training.delta_p_weight:
-      type: categorical
-      choices: [0.0, 0.05, 0.1, 0.25, 0.5]

@@ -37,8 +37,14 @@ pycaret:
     normalize: true
     transformation: false
     remove_multicollinearity: true
-    multicollinearity_threshold: 0.9
+    # 0.95 keeps both the signed (dist_to_throat_start) and unsigned
+    # (dist_to_nearest_step) throat-distance features. A stricter threshold
+    # (≤ 0.9) prunes one as redundant, which hurts the conv1d's ability to
+    # distinguish the upstream-of-throat vicinity from the downstream side.
+    multicollinearity_threshold: 0.95
     low_variance_threshold: 0.0
     feature_selection: true
     feature_selection_method: classic    # classic | univariate | sequential
-    n_features_to_select: 6
+    # Selects the top N features by gradient-boosting importance. 7 keeps
+    # the standard top-6 plus the signed throat-inlet distance.
+    n_features_to_select: 7

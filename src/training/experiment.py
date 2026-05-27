@@ -81,14 +81,6 @@ class Experiment:
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)
 
-    def compute_val_delta_p_metric(self) -> float:
-        """HPO-side Δp metric (mean squared log-Δp error on val).
-
-        Default no-op for experiments without a Δp integral.  Override in
-        case-specific subclasses that compute a pressure-drop integral.
-        """
-        return 0.0
-
     def compute_extended_metrics(
         self,
         eval_dataset,
@@ -128,6 +120,21 @@ class Experiment:
         to apply baseline re-add, unit conversion, etc.
         """
         _ = (values, dataset, field_name, mask)
+        return None
+
+    def baseline_for_plotting(
+        self,
+        dataset,
+        field_name: str,
+        mask,
+    ):
+        """Return ``(decoded_baseline_ndarray, label)`` or ``None``.
+
+        Case experiments that train a residual on top of an analytical
+        baseline override this so the plotter can overlay the baseline as a
+        third curve next to ground truth and prediction. Default: no baseline.
+        """
+        _ = (dataset, field_name, mask)
         return None
 
     def prepare_for_training(

@@ -182,7 +182,6 @@ class TestObjective:
             search_space={},  # No search space -- use base config as-is
             hpo_cfg={
                 "validation": {"split_ratio": 0.25, "seed": 42},
-                "delta_p_objective_weight": 0.0,
             },
             prepared=prepared,
             train_inner_idx=train_inner,

@@ -1,9 +1,9 @@
-"""Phase 2b: target_transform callable replaces target_residual_baseline flag.
+"""Generic ``target_transform`` callable contract.
 
-The dataset must accept a generic `target_transform` callable and stash any
-returned ``baseline_encoded`` on `self`. The dataset's "baseline applied"
-flag is named ``has_target_baseline`` (case-agnostic), not the legacy
-alpha-D-flavoured ``target_residual_baseline``.
+The dataset accepts a case-agnostic ``target_transform`` callable and stashes
+any returned ``baseline_encoded`` on ``self``. The corresponding "baseline
+applied" flag is named ``has_target_baseline`` so the dataset stays free of
+alpha-D-specific naming.
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
 """Alpha-D-specific extended evaluation metrics.
 
-Moved out of ``training.runner`` in Phase 2a of the repo-layout refactor so
-the runner stops importing alpha-D physics. The runner delegates via
-``AlphaDExperiment.compute_extended_metrics`` (see
-``cases/alpha_d/experiment.py``); base experiments fall through to a no-op.
+The generic runner calls :meth:`Experiment.compute_extended_metrics`, which
+``AlphaDExperiment`` (in ``cases/alpha_d/experiment.py``) overrides to invoke
+the helpers in this module. Base experiments inherit a no-op and skip this
+module entirely, so the runner stays alpha-D-agnostic.
 
 Three functions live here:
 
@@ -53,8 +53,6 @@ def compute_delta_p_metrics(
     row_case_idx = getattr(eval_dataset, "_row_case_idx", None)
     raw_z_hat = getattr(eval_dataset, "_raw_z_hat", None)
     raw_d_over_D = getattr(eval_dataset, "_raw_d_local_over_D", None)
-    residual_mode = bool(getattr(eval_dataset, "has_target_baseline", False))
-    baseline_encoded = getattr(eval_dataset, "_baseline_encoded", None)
 
     if case_meta is None or case_names is None or row_case_idx is None:
         return {}
@@ -63,6 +61,13 @@ def compute_delta_p_metrics(
 
     per_case: list[dict[str, Any]] = []
     model.eval()
+
+    # Profile-dataset wrappers expose _case_slices (per-case row indices
+    # into the inner TabularPair, sorted by z_hat). When present, feed the
+    # Conv1D model its expected [1, C, S] layout instead of the pointwise
+    # [S, C] forward used by the MLP path.
+    case_slices = getattr(eval_dataset, "_case_slices", None)
+    profile_mode = case_slices is not None
 
     with torch.no_grad():
         for ci, case_name in enumerate(case_names):
@@ -77,15 +82,24 @@ def compute_delta_p_metrics(
             rho = float(cm.get("rho", 1.0))
             V_bulk = float(cm.get("V_bulk", 1.0))
 
-            mask = row_case_idx == ci
-            x_full = eval_dataset._x[mask].to(device)
-            z_hat = raw_z_hat[mask].to(device)
-            d_over_D = raw_d_over_D[mask].to(device)
-
-            pred_values = model(x_full).squeeze(-1)  # [n_stations]
-            if residual_mode and baseline_encoded is not None:
-                bl = baseline_encoded[mask, 0].to(pred_values.device).to(pred_values.dtype)
-                pred_values = pred_values + bl
+            if profile_mode:
+                rows = torch.as_tensor(case_slices[ci], dtype=torch.long)
+                x_case = eval_dataset._x[rows].T.unsqueeze(0).to(device)  # [1, C, S]
+                z_hat = raw_z_hat[rows].to(device)
+                d_over_D = raw_d_over_D[rows].to(device)
+                pred_values = model(x_case)[0, 0]  # [n_stations]
+                pred_values = eval_dataset.add_baseline_to_encoded(
+                    pred_values, row_mask=rows, field_idx=0,
+                )
+            else:
+                mask = row_case_idx == ci
+                x_full = eval_dataset._x[mask].to(device)
+                z_hat = raw_z_hat[mask].to(device)
+                d_over_D = raw_d_over_D[mask].to(device)
+                pred_values = model(x_full).squeeze(-1)  # [n_stations]
+                pred_values = eval_dataset.add_baseline_to_encoded(
+                    pred_values, row_mask=mask, field_idx=0,
+                )
             alpha_D_bulk = alpha_d_values_to_bulk(
                 pred_values,
                 target_name=alpha_d_target_name,
@@ -111,6 +125,8 @@ def compute_delta_p_metrics(
                 "delta_p_pred": delta_p_pred,
                 "relative_error": rel_err,
                 "log_abs_error": log_err,
+                "Dr": float(cm.get("Dr", 0.0)),
+                "Re": float(cm.get("Re", 0.0)),
             })
 
     if not per_case:
@@ -131,6 +147,7 @@ def compute_delta_p_metrics(
         "log_abs_error_median": float(np.median(log_errors)),
         "worst_cases": per_case[:10],
         "best_cases": list(reversed(per_case[-10:])),
+        "per_case": per_case,
     }
 
 
@@ -147,8 +164,6 @@ def compute_pointwise_extended_metrics(
     metrics: dict[str, Any] = {}
     raw_d_over_D = getattr(dataset, "_raw_d_local_over_D", None)
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
-    residual_mode = bool(getattr(dataset, "has_target_baseline", False))
-    baseline_encoded = getattr(dataset, "_baseline_encoded", None)
 
     def _has_physical_inverse(name: str) -> bool:
         return (
@@ -156,14 +171,6 @@ def compute_pointwise_extended_metrics(
             or name.startswith("log_")
             or name.startswith("log10_")
         )
-
-    def _add_baseline(values: torch.Tensor, field_idx: int, mask=None) -> torch.Tensor:
-        if not residual_mode or baseline_encoded is None:
-            return values
-        bl = baseline_encoded[:, field_idx]
-        if mask is not None:
-            bl = bl[mask]
-        return values + bl.to(values.dtype).to(values.device)
 
     per_field_extended = []
     for i, name in enumerate(output_fields):
@@ -176,8 +183,8 @@ def compute_pointwise_extended_metrics(
 
         if _has_physical_inverse(name):
             d_over_D = raw_d_over_D if is_alpha_d_target(name) else None
-            p_full = _add_baseline(p, i)
-            t_full = _add_baseline(t, i)
+            p_full = dataset.add_baseline_to_encoded(p, field_idx=i)
+            t_full = dataset.add_baseline_to_encoded(t, field_idx=i)
             p_phys = field_values_to_physical(
                 p_full,
                 field_name=name,
@@ -234,8 +241,8 @@ def compute_pointwise_extended_metrics(
                     d_over_D = raw_d_over_D[mask] if (
                         raw_d_over_D is not None and is_alpha_d_target(field_name)
                     ) else None
-                    p_full = _add_baseline(p, i, mask=mask)
-                    t_full = _add_baseline(t, i, mask=mask)
+                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
+                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,
@@ -273,8 +280,8 @@ def compute_pointwise_extended_metrics(
                     d_over_D = raw_d_over_D[mask] if (
                         raw_d_over_D is not None and is_alpha_d_target(field_name)
                     ) else None
-                    p_full = _add_baseline(p, i, mask=mask)
-                    t_full = _add_baseline(t, i, mask=mask)
+                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
+                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,

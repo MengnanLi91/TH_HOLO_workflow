@@ -90,12 +90,6 @@ def make_objective(
 
         # 4. Build experiment (respects training.experiment entrypoint)
         experiment_kwargs: dict[str, Any] = {}
-        consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
-        if consistency_weight > 0:
-            experiment_kwargs["consistency_weight"] = consistency_weight
-        delta_p_weight = float(training_cfg.get("delta_p_weight", 0.0))
-        if delta_p_weight > 0:
-            experiment_kwargs["delta_p_weight"] = delta_p_weight
         experiment = build_experiment(
             experiment_entrypoint=training_cfg.get("experiment"),
             model=model,
@@ -106,10 +100,6 @@ def make_objective(
             **experiment_kwargs,
         )
         experiment.prepare_for_training(train_ds, val_ds, device)
-
-        # Val-side Δp objective weight: still needed for HPO scoring even
-        # when delta_p_weight=0 trains without the Δp gradient step.
-        delta_p_obj_weight = float(hpo_cfg["delta_p_objective_weight"])
 
         # 5. Build DataLoaders
         epochs = int(training_cfg.get("epochs", 20))
@@ -166,13 +156,7 @@ def make_objective(
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-        # Combined HPO objective: encoded val loss + λ · val Δp metric.
-        # The Δp metric is mean squared log-Δp error on the val set,
-        # independent of training.delta_p_weight so trials at
-        # delta_p_weight=0 are still penalised for poor Δp.
-        val_dp_term = experiment.compute_val_delta_p_metric()
         trial.set_user_attr("val_loss", float(val_loss))
-        trial.set_user_attr("val_delta_p_metric", float(val_dp_term))
-        return float(val_loss) + delta_p_obj_weight * val_dp_term
+        return float(val_loss)
 
     return objective

@@ -30,3 +30,4 @@ docker/certs/*.cer
 # agents
 .claude/
 CLAUDE.md
+src/logs.log

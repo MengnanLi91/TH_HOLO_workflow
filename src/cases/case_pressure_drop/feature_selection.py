@@ -116,7 +116,7 @@ def _score_lasso(X_tr, y_tr, X_va, y_va, rng, **_kwargs) -> np.ndarray:
                 "lasso",
                 LassoCV(
                     cv=cv_splits,
-                    alphas=30,
+                    n_alphas=30,
                     max_iter=5000,
                     random_state=0,
                     precompute=False,

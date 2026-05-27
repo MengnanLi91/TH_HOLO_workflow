@@ -159,6 +159,12 @@ class AlphaDProfileDataset(Dataset):
             self._inner.subset_by_case_indices(case_indices)
         )
 
+    def add_baseline_to_encoded(self, encoded, row_mask=None, field_idx=None):
+        """Delegate to the inner TabularPairDataset."""
+        return self._inner.add_baseline_to_encoded(
+            encoded, row_mask=row_mask, field_idx=field_idx,
+        )
+
 
 def _build_case_slices(inner: TabularPairDataset) -> list[np.ndarray]:
     """Index per-case row slices into ``inner``, sorted by z_hat."""

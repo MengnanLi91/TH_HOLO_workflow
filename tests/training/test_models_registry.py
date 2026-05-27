@@ -7,6 +7,11 @@ import types
 
 import pytest
 
+# Importing training.models triggers _load_builtins(), which imports
+# training.models.mlp -> torch. Skip collection when torch is absent so
+# the no-deps CI install can still collect the rest of the suite.
+pytest.importorskip("torch")
+
 from training.models import MODEL_REGISTRY, get_build_fn_and_adapter
 
 
