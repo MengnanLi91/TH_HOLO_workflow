@@ -20,9 +20,7 @@ _VALID_ADAPTERS = ("grid", "graph", "pointwise", "profile")
 
 def register_model(name: str, build_fn: Callable, adapter: str) -> None:
     if adapter not in _VALID_ADAPTERS:
-        raise ValueError(
-            f"adapter must be one of {_VALID_ADAPTERS}, got '{adapter}'."
-        )
+        raise ValueError(f"adapter must be one of {_VALID_ADAPTERS}, got '{adapter}'.")
     if name in MODEL_REGISTRY:
         raise ValueError(f"Model '{name}' is already registered.")
     MODEL_REGISTRY[name] = ModelEntry(build_fn=build_fn, adapter=adapter)
@@ -53,7 +51,8 @@ def _validate_build_signature(build_fn: Callable, entrypoint: str) -> None:
     positional_count = sum(
         1
         for param in parameters
-        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        if param.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     )
     has_varargs = any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters)
 
@@ -91,9 +90,7 @@ def get_build_fn_and_adapter(model_cfg: dict) -> tuple[Callable, str]:
     if not name:
         raise ValueError("model.name is required when model.entrypoint is not set.")
     if name not in MODEL_REGISTRY:
-        raise ValueError(
-            f"Unknown model '{name}'. Registered models: {sorted(MODEL_REGISTRY)}"
-        )
+        raise ValueError(f"Unknown model '{name}'. Registered models: {sorted(MODEL_REGISTRY)}")
 
     entry = MODEL_REGISTRY[name]
     user_adapter = model_cfg.get("adapter")

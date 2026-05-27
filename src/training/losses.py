@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 import torch
 
-
 LossFn = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 

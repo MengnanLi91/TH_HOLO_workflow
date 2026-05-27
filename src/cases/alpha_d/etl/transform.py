@@ -20,9 +20,9 @@ import math
 from typing import Any, Optional
 
 import numpy as np
-
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
 from cases.alpha_d.physics.targets import encode_alpha_d_target
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,10 @@ logger = logging.getLogger(__name__)
 # Geometry helpers
 # ---------------------------------------------------------------------------
 
-def _local_diameter(z: np.ndarray, z_throat_start: float, z_throat_end: float,
-                    D_big: float, D_small: float) -> np.ndarray:
+
+def _local_diameter(
+    z: np.ndarray, z_throat_start: float, z_throat_end: float, D_big: float, D_small: float
+) -> np.ndarray:
     """Compute local pipe diameter along the z-axis.
 
     Upstream/downstream of the contraction the diameter is D_big.
@@ -46,8 +48,9 @@ def _local_diameter(z: np.ndarray, z_throat_start: float, z_throat_end: float,
     return d
 
 
-def _region_flags(z_hat: np.ndarray, z_norm_throat_start: float,
-                  z_norm_throat_end: float) -> dict[str, np.ndarray]:
+def _region_flags(
+    z_hat: np.ndarray, z_norm_throat_start: float, z_norm_throat_end: float
+) -> dict[str, np.ndarray]:
     """Compute region flags from normalized z coordinate.
 
     Returns ``is_upstream``, ``is_throat``, ``is_downstream`` as float32
@@ -100,10 +103,10 @@ class AlphaDTransformation(DataTransformation):
         """Compute alpha_D axial profile for one CFD case."""
         case_name: str = data["case_name"]
         case_meta: dict = data["case_meta"]
-        coords: np.ndarray = data["coords"]          # [N, 3] in meters
+        coords: np.ndarray = data["coords"]  # [N, 3] in meters
         connectivity: np.ndarray = data["connectivity"]
         field_names: list[str] = data["field_names"]
-        fields: np.ndarray = data["fields"]           # [T, E, F]
+        fields: np.ndarray = data["fields"]  # [T, E, F]
 
         # --- Extract case parameters ---
         Re = float(case_meta.get("Re", 0))
@@ -114,8 +117,9 @@ class AlphaDTransformation(DataTransformation):
         D_contraction_m = float(case_meta.get("D_contraction_m", D_big * Dr))
 
         if Re <= 0 or Dr <= 0 or Lr <= 0:
-            logger.warning("Skipping %s: invalid case parameters (Re=%s Dr=%s Lr=%s)",
-                           case_name, Re, Dr, Lr)
+            logger.warning(
+                "Skipping %s: invalid case parameters (Re=%s Dr=%s Lr=%s)", case_name, Re, Dr, Lr
+            )
             return None
 
         # --- Geometry: locate the contraction region ---
@@ -151,7 +155,7 @@ class AlphaDTransformation(DataTransformation):
 
         # Use last time step (converged steady state)
         pressure = fields[-1, :, p_idx]  # [E]
-        vel_z = fields[-1, :, vz_idx]    # [E]
+        vel_z = fields[-1, :, vz_idx]  # [E]
 
         # --- Select ROI elements ---
         roi_mask = (elem_z >= z_roi_start) & (elem_z <= z_roi_end)
@@ -159,7 +163,9 @@ class AlphaDTransformation(DataTransformation):
         if n_roi < self.n_stations * self.min_elements:
             logger.warning(
                 "Skipping %s: only %d ROI elements (need %d).",
-                case_name, n_roi, self.n_stations * self.min_elements,
+                case_name,
+                n_roi,
+                self.n_stations * self.min_elements,
             )
             return None
 
@@ -172,7 +178,7 @@ class AlphaDTransformation(DataTransformation):
         # formed by node x,y coordinates projected onto the z-plane.
         # Simplified: use radial position to weight by annular area for
         # axisymmetric meshes.
-        elem_r = np.sqrt(elem_centroids[:, 0]**2 + elem_centroids[:, 1]**2)
+        elem_r = np.sqrt(elem_centroids[:, 0] ** 2 + elem_centroids[:, 1] ** 2)
 
         p_avg = np.zeros(self.n_stations, dtype=np.float64)
         vz_avg = np.zeros(self.n_stations, dtype=np.float64)
@@ -268,29 +274,40 @@ class AlphaDTransformation(DataTransformation):
         weights = _sample_weights(regions)
 
         feature_names = [
-            "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-            "A_local_over_A", "V_local_over_V_bulk",
-            "is_upstream", "is_throat", "is_downstream",
-            "dD_dz_local", "dist_to_throat_start", "dist_to_throat_end",
+            "log10_Re",
+            "Dr",
+            "Lr",
+            "z_hat",
+            "d_local_over_D",
+            "A_local_over_A",
+            "V_local_over_V_bulk",
+            "is_upstream",
+            "is_throat",
+            "is_downstream",
+            "dD_dz_local",
+            "dist_to_throat_start",
+            "dist_to_throat_end",
         ]
         target_names = ["log_alpha_D", "signed_log1p_alpha_D"]
 
         n_out = self.n_stations
-        features = np.column_stack([
-            np.full(n_out, math.log10(Re), dtype=np.float32),
-            np.full(n_out, Dr, dtype=np.float32),
-            np.full(n_out, Lr, dtype=np.float32),
-            z_hat.astype(np.float32),
-            d_local_over_D.astype(np.float32),
-            A_local_over_A.astype(np.float32),
-            V_local_over_V_bulk.astype(np.float32),
-            regions["is_upstream"],
-            regions["is_throat"],
-            regions["is_downstream"],
-            dD_dz_local.astype(np.float32),
-            dist_to_throat_start.astype(np.float32),
-            dist_to_throat_end.astype(np.float32),
-        ])  # [n_out, 13]
+        features = np.column_stack(
+            [
+                np.full(n_out, math.log10(Re), dtype=np.float32),
+                np.full(n_out, Dr, dtype=np.float32),
+                np.full(n_out, Lr, dtype=np.float32),
+                z_hat.astype(np.float32),
+                d_local_over_D.astype(np.float32),
+                A_local_over_A.astype(np.float32),
+                V_local_over_V_bulk.astype(np.float32),
+                regions["is_upstream"],
+                regions["is_throat"],
+                regions["is_downstream"],
+                dD_dz_local.astype(np.float32),
+                dist_to_throat_start.astype(np.float32),
+                dist_to_throat_end.astype(np.float32),
+            ]
+        )  # [n_out, 13]
 
         targets = np.column_stack([log_alpha_D, signed_log1p_alpha_D]).astype(np.float32)
 
@@ -298,9 +315,13 @@ class AlphaDTransformation(DataTransformation):
             "  %s: %d stations, delta_p=%.4f Pa, "
             "log_alpha_D range=[%.2f, %.2f], "
             "signed_log1p_alpha_D range=[%.2f, %.2f]",
-            case_name, n_out, delta_p_case,
-            float(log_alpha_D.min()), float(log_alpha_D.max()),
-            float(signed_log1p_alpha_D.min()), float(signed_log1p_alpha_D.max()),
+            case_name,
+            n_out,
+            delta_p_case,
+            float(log_alpha_D.min()),
+            float(log_alpha_D.max()),
+            float(signed_log1p_alpha_D.min()),
+            float(signed_log1p_alpha_D.max()),
         )
 
         return {

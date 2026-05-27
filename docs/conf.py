@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -67,7 +66,7 @@ templates_path = ["_templates"]
 
 # -- MyST configuration -----------------------------------------------------
 myst_enable_extensions = [
-    "colon_fence",       # :::{tab-set} and similar fenced directives
+    "colon_fence",  # :::{tab-set} and similar fenced directives
     "deflist",
     "tasklist",
     "fieldlist",
@@ -161,8 +160,8 @@ html_favicon = "_static/favicon.svg"
 # Scientific palette: a muted academic blue, used sparingly for brand and
 # link color. Chosen to sit comfortably alongside NumPy / SciPy / PyTorch
 # docs without competing with code-block syntax highlighting.
-_BRAND_PRIMARY = "#2a6f97"     # academic blue
-_BRAND_CONTENT = "#1f5478"     # slightly darker for link text on light bg
+_BRAND_PRIMARY = "#2a6f97"  # academic blue
+_BRAND_CONTENT = "#1f5478"  # slightly darker for link text on light bg
 _BRAND_PRIMARY_DARK = "#7dbce0"  # lifted brand for dark mode contrast
 _BRAND_CONTENT_DARK = "#9ccbe7"
 _BRAND_BORDER = "#1f5478"
@@ -231,8 +230,6 @@ suppress_warnings: list[str] = [
 # typoed `{py:class}` references in prose. The defaults stay quiet.
 nitpicky = False
 nitpick_ignore: list[tuple[str, str]] = []
-
-
 
 
 # -- Helpful defaults for sphinx-copybutton --------------------------------

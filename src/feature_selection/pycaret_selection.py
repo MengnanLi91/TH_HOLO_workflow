@@ -39,7 +39,6 @@ import numpy as np
 
 from feature_selection.data import FeatureAnalysisData
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -74,13 +73,10 @@ def build_dataframe(data: FeatureAnalysisData):
 
     if _CASE_ID_COL in data.feature_names:
         raise ValueError(
-            f"FeatureAnalysisData.feature_names contains reserved column "
-            f"{_CASE_ID_COL!r}."
+            f"FeatureAnalysisData.feature_names contains reserved column {_CASE_ID_COL!r}."
         )
     if data.target_name == _CASE_ID_COL:
-        raise ValueError(
-            f"target_name collides with reserved column {_CASE_ID_COL!r}."
-        )
+        raise ValueError(f"target_name collides with reserved column {_CASE_ID_COL!r}.")
 
     row_case_id = np.empty(data.groups.shape[0], dtype=object)
     for case_idx, case_name in enumerate(data.case_ids):
@@ -99,7 +95,7 @@ def case_level_split(df, *, case_id_col: str, test_ratio: float, seed: int):
     if not 0.0 < test_ratio < 1.0:
         raise ValueError(f"test_ratio must be in (0, 1); got {test_ratio}.")
     gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=seed)
-    (train_idx, test_idx), = gss.split(df, groups=df[case_id_col].values)
+    ((train_idx, test_idx),) = gss.split(df, groups=df[case_id_col].values)
     return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
 
 
@@ -182,10 +178,7 @@ def _extract_ranking(exp, ranker_id: str) -> list[dict[str, Any]]:
         importances = np.abs(coef)
 
     if importances is None or len(importances) != len(names):
-        return [
-            {"feature": n, "importance": None, "rank": i + 1}
-            for i, n in enumerate(names)
-        ]
+        return [{"feature": n, "importance": None, "rank": i + 1} for i, n in enumerate(names)]
 
     order = np.argsort(-importances)
     return [
@@ -228,12 +221,17 @@ def run_pycaret_selection(
 
     df = build_dataframe(data)
     train_df, test_df = case_level_split(
-        df, case_id_col=_CASE_ID_COL, test_ratio=test_ratio, seed=seed,
+        df,
+        case_id_col=_CASE_ID_COL,
+        test_ratio=test_ratio,
+        seed=seed,
     )
     logger.info(
         "PyCaret split: train=%d rows / %d cases, test=%d rows / %d cases",
-        len(train_df), train_df[_CASE_ID_COL].nunique(),
-        len(test_df), test_df[_CASE_ID_COL].nunique(),
+        len(train_df),
+        train_df[_CASE_ID_COL].nunique(),
+        len(test_df),
+        test_df[_CASE_ID_COL].nunique(),
     )
 
     user_setup: dict[str, Any] = dict(pycaret_cfg.get("setup") or {})
@@ -280,21 +278,22 @@ def run_pycaret_selection(
 
     # --- Artifacts -----------------------------------------------------
     write_selected_features(
-        output_dir / "selected_features.txt", selected, allowlist=allowlist,
+        output_dir / "selected_features.txt",
+        selected,
+        allowlist=allowlist,
     )
 
     with (output_dir / "feature_ranking.csv").open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=["rank", "feature", "importance"])
         writer.writeheader()
         for row in ranking:
-            writer.writerow({
-                "rank": row["rank"],
-                "feature": row["feature"],
-                "importance": (
-                    "" if row["importance"] is None
-                    else f"{row['importance']:.8e}"
-                ),
-            })
+            writer.writerow(
+                {
+                    "rank": row["rank"],
+                    "feature": row["feature"],
+                    "importance": ("" if row["importance"] is None else f"{row['importance']:.8e}"),
+                }
+            )
 
     setup_record = {
         "user_setup": user_setup,
@@ -305,9 +304,7 @@ def run_pycaret_selection(
         "ranker": ranker_id,
         "seed": seed,
         "test_ratio": test_ratio,
-        "ranking_source": (
-            f"create_model('{ranker_id}') feature_importances_ / |coef_|"
-        ),
+        "ranking_source": (f"create_model('{ranker_id}') feature_importances_ / |coef_|"),
     }
     (output_dir / "pycaret_setup.json").write_text(
         json.dumps(setup_record, indent=2, sort_keys=True)
@@ -337,9 +334,7 @@ def write_selected_features(
     file is rejected if any name falls outside it.
     """
     if any(not s or s != s.strip() for s in selected):
-        raise ValueError(
-            "selected_features contains empty or whitespace-padded names."
-        )
+        raise ValueError("selected_features contains empty or whitespace-padded names.")
     if allowlist is not None:
         enforce_allowlist(selected, allowlist)
     Path(path).write_text("\n".join(selected) + "\n")

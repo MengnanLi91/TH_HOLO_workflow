@@ -12,5 +12,6 @@ together.
 etl_pipeline
 dataset
 fno_train_eval
+code_style
 building_docs
 ```

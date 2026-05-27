@@ -97,8 +97,8 @@ def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
             np.full(len(alpha_bulk), 0.1, dtype=np.float32),
             z_hat,
             d_over_D,
-            d_over_D ** 2,
-            1.0 / (d_over_D ** 2),  # V_local/V_bulk = 1/A_local_over_A
+            d_over_D**2,
+            1.0 / (d_over_D**2),  # V_local/V_bulk = 1/A_local_over_A
             np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
             np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32),
             np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float32),

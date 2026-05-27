@@ -46,7 +46,9 @@ def test_alpha_d_compute_extended_metrics_shape(alpha_d_zarr_dir: Path) -> None:
     targets_batch = ds._y.clone()
 
     metrics = experiment.compute_extended_metrics(
-        ds, [preds_batch], [targets_batch],
+        ds,
+        [preds_batch],
+        [targets_batch],
     )
 
     assert isinstance(metrics, dict)
@@ -77,7 +79,9 @@ def test_alpha_d_compute_extended_metrics_profile_path(
     class _ZeroProfileModel(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             return torch.zeros(
-                (x.shape[0], 1, x.shape[2]), dtype=x.dtype, device=x.device,
+                (x.shape[0], 1, x.shape[2]),
+                dtype=x.dtype,
+                device=x.device,
             )
 
     experiment = AlphaDExperiment(
@@ -120,7 +124,9 @@ def test_alpha_d_delta_p_metrics_expose_full_per_case_list(
     class _ZeroProfileModel(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             return torch.zeros(
-                (x.shape[0], 1, x.shape[2]), dtype=x.dtype, device=x.device,
+                (x.shape[0], 1, x.shape[2]),
+                dtype=x.dtype,
+                device=x.device,
             )
 
     experiment = AlphaDExperiment(

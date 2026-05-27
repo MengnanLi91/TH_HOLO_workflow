@@ -3,6 +3,7 @@
 PyCaret itself is optional; the bridge tests don't import it. The full
 pipeline test is gated on ``pytest.importorskip('pycaret')``.
 """
+
 import json
 import math
 from pathlib import Path
@@ -17,7 +18,6 @@ from cases.case_pressure_drop.pycaret_selection import (
     enforce_candidate_set,
 )
 
-
 # ---------------------------------------------------------------------------
 # Synthetic case zarr fixture (same shape as test_workflow.py)
 # ---------------------------------------------------------------------------
@@ -29,11 +29,7 @@ def _fmt_param(value: float) -> str:
 
 
 def _case_name(re_value: float, dr_value: float, lr_value: float) -> str:
-    return (
-        f"Re_{int(round(re_value))}"
-        f"__Dr_{_fmt_param(dr_value)}"
-        f"__Lr_{_fmt_param(lr_value)}"
-    )
+    return f"Re_{int(round(re_value))}__Dr_{_fmt_param(dr_value)}__Lr_{_fmt_param(lr_value)}"
 
 
 def _delta_p_formula(re_value: float, dr_value: float, lr_value: float) -> float:

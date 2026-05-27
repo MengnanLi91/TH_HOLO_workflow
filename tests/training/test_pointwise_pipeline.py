@@ -19,8 +19,13 @@ zarr = pytest.importorskip("zarr")
 # ---------------------------------------------------------------------------
 
 FEATURE_NAMES = [
-    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-    "V_local_over_V_bulk", "is_throat",
+    "log10_Re",
+    "Dr",
+    "Lr",
+    "z_hat",
+    "d_local_over_D",
+    "V_local_over_V_bulk",
+    "is_throat",
 ]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 10
@@ -39,12 +44,8 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-            np.float32
-        )
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-            np.float32
-        )
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -140,9 +141,7 @@ class TestTabularPairDataset:
         assert len(sub) == 3 * ROWS_PER_CASE
         assert len(sub.sim_names) == 3
 
-    def test_default_has_no_engineered_features(
-        self, synthetic_zarr_dir: Path
-    ) -> None:
+    def test_default_has_no_engineered_features(self, synthetic_zarr_dir: Path) -> None:
         """Phase 1.5: TabularPairDataset is engineered-feature-agnostic.
 
         Without an explicit engineered_feature_names + builder, the dataset
@@ -253,7 +252,9 @@ class TestPointwiseAdapter:
         assert ds.normalize is True
         assert torch.is_tensor(ds.norm_stats["x_mean"])
 
-    def test_build_dataset_prefers_input_columns_file(self, synthetic_zarr_dir: Path, tmp_path: Path) -> None:
+    def test_build_dataset_prefers_input_columns_file(
+        self, synthetic_zarr_dir: Path, tmp_path: Path
+    ) -> None:
         from training.adapters import PointwiseAdapter
 
         cols_path = tmp_path / "selected_features.txt"
@@ -290,8 +291,20 @@ class TestPointwisePlotSelection:
         selected = select_best_worst_pointwise_cases(extended, ["log_alpha_D"])
 
         assert selected == [
-            {"label": "best", "case": "case_best", "field": "log_alpha_D", "rmse": 0.1, "median_relative_error": None},
-            {"label": "worst", "case": "case_worst", "field": "log_alpha_D", "rmse": 1.5, "median_relative_error": None},
+            {
+                "label": "best",
+                "case": "case_best",
+                "field": "log_alpha_D",
+                "rmse": 0.1,
+                "median_relative_error": None,
+            },
+            {
+                "label": "worst",
+                "case": "case_worst",
+                "field": "log_alpha_D",
+                "rmse": 1.5,
+                "median_relative_error": None,
+            },
         ]
 
 

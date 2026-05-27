@@ -26,7 +26,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-
 from physicsnemo_curator.etl.etl_orchestrator import ETLOrchestrator
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from physicsnemo_curator.utils import utils as curator_utils

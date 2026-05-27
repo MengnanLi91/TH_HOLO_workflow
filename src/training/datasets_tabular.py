@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+
 class TabularPairDataset(Dataset):
     """Reads a directory of ``.zarr`` stores and produces ``(x, y)`` pairs.
 
@@ -113,14 +114,11 @@ class TabularPairDataset(Dataset):
         case_meta_list: list[dict] = []
         has_weights = False
         eng_names: list[str] = (
-            list(engineered_feature_names)
-            if engineered_feature_names is not None
-            else []
+            list(engineered_feature_names) if engineered_feature_names is not None else []
         )
         if eng_names and engineered_feature_builder is None:
             raise ValueError(
-                "engineered_feature_builder is required when "
-                "engineered_feature_names is set."
+                "engineered_feature_builder is required when engineered_feature_names is set."
             )
 
         for sp in sim_paths:
@@ -165,13 +163,9 @@ class TabularPairDataset(Dataset):
             # source columns that may not be in input_columns).
             if eng_names:
                 engineered = engineered_feature_builder(features, raw_feature_names)
-                engineered_cols = [
-                    engineered[name].reshape(-1, 1) for name in eng_names
-                ]
+                engineered_cols = [engineered[name].reshape(-1, 1) for name in eng_names]
                 all_x.append(
-                    np.concatenate([features] + engineered_cols, axis=1).astype(
-                        np.float32
-                    )
+                    np.concatenate([features] + engineered_cols, axis=1).astype(np.float32)
                 )
             else:
                 all_x.append(features.astype(np.float32))
@@ -184,7 +178,7 @@ class TabularPairDataset(Dataset):
         # Concatenate
         # ----------------------------------------------------------
         full_x = np.concatenate(all_x, axis=0)  # [N, D_base]
-        full_y = np.concatenate(all_y, axis=0)   # [N, D_out]
+        full_y = np.concatenate(all_y, axis=0)  # [N, D_out]
 
         # Store per-case metadata
         self._case_meta = case_meta_list
@@ -192,20 +186,18 @@ class TabularPairDataset(Dataset):
 
         # Store raw geometry columns (before normalization) for delta_p loss
         z_hat_col = (
-            self._all_feature_names.index("z_hat")
-            if "z_hat" in self._all_feature_names else None
+            self._all_feature_names.index("z_hat") if "z_hat" in self._all_feature_names else None
         )
         d_over_D_col = (
             self._all_feature_names.index("d_local_over_D")
-            if "d_local_over_D" in self._all_feature_names else None
+            if "d_local_over_D" in self._all_feature_names
+            else None
         )
         self._raw_z_hat = (
-            torch.from_numpy(full_x[:, z_hat_col].copy())
-            if z_hat_col is not None else None
+            torch.from_numpy(full_x[:, z_hat_col].copy()) if z_hat_col is not None else None
         )
         self._raw_d_local_over_D = (
-            torch.from_numpy(full_x[:, d_over_D_col].copy())
-            if d_over_D_col is not None else None
+            torch.from_numpy(full_x[:, d_over_D_col].copy()) if d_over_D_col is not None else None
         )
 
         # ----------------------------------------------------------
@@ -231,9 +223,7 @@ class TabularPairDataset(Dataset):
             extras = extras or {}
             baseline = extras.get("baseline_encoded")
             if baseline is not None:
-                self._baseline_encoded = torch.from_numpy(
-                    np.asarray(baseline, dtype=np.float32)
-                )
+                self._baseline_encoded = torch.from_numpy(np.asarray(baseline, dtype=np.float32))
                 self.has_target_baseline = True
             self.local_velocity_normalization = bool(
                 extras.get("local_velocity_normalization", False)
@@ -268,7 +258,8 @@ class TabularPairDataset(Dataset):
         # ----------------------------------------------------------
         throat_col_full = (
             self._all_feature_names.index("is_throat")
-            if "is_throat" in self._all_feature_names else None
+            if "is_throat" in self._all_feature_names
+            else None
         )
 
         self.throat_weight = throat_weight
@@ -281,9 +272,14 @@ class TabularPairDataset(Dataset):
         # Region weights (downstream)
         downstream_col_full = (
             self._all_feature_names.index("is_downstream")
-            if "is_downstream" in self._all_feature_names else None
+            if "is_downstream" in self._all_feature_names
+            else None
         )
-        if downstream_weight is not None and downstream_weight > 0 and downstream_col_full is not None:
+        if (
+            downstream_weight is not None
+            and downstream_weight > 0
+            and downstream_col_full is not None
+        ):
             if self._w is not None:
                 # Multiply with existing weights (e.g. throat weights)
                 ds_mask = full_x[:, downstream_col_full] > 0.5
@@ -311,8 +307,7 @@ class TabularPairDataset(Dataset):
                 invalid = [i for i in keep if i < 0 or i >= len(self._case_ids_unique)]
                 if invalid:
                     raise ValueError(
-                        "norm_from_case_indices contains out-of-range case index(es): "
-                        f"{invalid}"
+                        f"norm_from_case_indices contains out-of-range case index(es): {invalid}"
                     )
                 mask = np.isin(self._row_case_idx, keep)
                 if not np.any(mask):
@@ -440,8 +435,7 @@ class TabularPairDataset(Dataset):
         new._case_meta = [self._case_meta[i] for i in case_indices]
         new._raw_z_hat = self._raw_z_hat[mask] if self._raw_z_hat is not None else None
         new._raw_d_local_over_D = (
-            self._raw_d_local_over_D[mask]
-            if self._raw_d_local_over_D is not None else None
+            self._raw_d_local_over_D[mask] if self._raw_d_local_over_D is not None else None
         )
 
         # Rebuild rows_per_case and row_case_idx for the subset

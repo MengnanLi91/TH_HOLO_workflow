@@ -216,9 +216,7 @@ class ExodusReader:
                         table.add_column("resolved", style="yellow")
                         for vname, var in group.variables.items():
                             resolved = (
-                                self.resolve_exodus_var_name(
-                                    vname, names_by_kind, entity_names
-                                )
+                                self.resolve_exodus_var_name(vname, names_by_kind, entity_names)
                                 or ""
                             )
                             table.add_row(vname, str(var.dtype), str(var.shape), resolved)
@@ -241,8 +239,7 @@ class ExodusReader:
                             self._print_line(f"{indent}    {label}", style="magenta")
                             for attr in var.ncattrs():
                                 self._print_line(
-                                    f"{indent}      @{attr} = "
-                                    f"{self._short(getattr(var, attr))}",
+                                    f"{indent}      @{attr} = {self._short(getattr(var, attr))}",
                                     style="dim",
                                 )
 

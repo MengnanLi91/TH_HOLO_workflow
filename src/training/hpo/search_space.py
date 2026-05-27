@@ -5,7 +5,6 @@ from typing import Any
 
 import optuna
 
-
 # Dot-path prefixes that must never be overridden during HPO because they
 # change the dataset or model identity rather than tuning hyperparameters.
 UNSAFE_PREFIXES = (
@@ -84,7 +83,8 @@ def sample_from_search_space(
             )
         elif param_type == "categorical":
             sampled[param_path] = trial.suggest_categorical(
-                param_path, spec["choices"],
+                param_path,
+                spec["choices"],
             )
         else:
             raise ValueError(
@@ -109,8 +109,7 @@ def apply_overrides(base_cfg: dict, overrides: dict[str, Any]) -> dict:
             if not isinstance(node, dict) or key not in node:
                 partial = ".".join(keys[: i + 1])
                 raise KeyError(
-                    f"Cannot apply override '{dot_path}': "
-                    f"'{partial}' does not exist in config."
+                    f"Cannot apply override '{dot_path}': '{partial}' does not exist in config."
                 )
             node = node[key]
         leaf = keys[-1]

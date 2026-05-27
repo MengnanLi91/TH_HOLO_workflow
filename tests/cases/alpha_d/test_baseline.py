@@ -21,7 +21,7 @@ def _trapezoidal_dp(profile: np.ndarray, geom: BaselineGeometry) -> float:
     z = _station_z_hat(geom.n_stations)
     in_throat = (z >= geom.z_throat_start_norm) & (z <= geom.z_throat_end_norm)
     D_h = np.where(in_throat, geom.D_big * geom.Dr, geom.D_big)
-    dp_dz = profile * geom.rho * geom.V_bulk ** 2 / (2.0 * D_h)
+    dp_dz = profile * geom.rho * geom.V_bulk**2 / (2.0 * D_h)
     return float(np.trapz(dp_dz, z * geom.L_roi))
 
 
@@ -126,8 +126,15 @@ def _write_alpha_d_zarr(
     from cases.alpha_d.physics.targets import encode_alpha_d_target
 
     feature_names = [
-        "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-        "V_local_over_V_bulk", "is_upstream", "is_throat", "is_downstream",
+        "log10_Re",
+        "Dr",
+        "Lr",
+        "z_hat",
+        "d_local_over_D",
+        "V_local_over_V_bulk",
+        "is_upstream",
+        "is_throat",
+        "is_downstream",
     ]
     target_names = ["log_alpha_D", "signed_log1p_alpha_D"]
 
@@ -138,19 +145,21 @@ def _write_alpha_d_zarr(
 
     in_throat = (z_hat >= z_throat_start_norm) & (z_hat <= z_throat_end_norm)
     d_local_over_D = np.where(in_throat, Dr, 1.0).astype(np.float32)
-    V_local_over_V_bulk = (1.0 / d_local_over_D ** 2).astype(np.float32)
+    V_local_over_V_bulk = (1.0 / d_local_over_D**2).astype(np.float32)
 
-    features = np.column_stack([
-        np.full(n_stations, np.log10(Re), np.float32),
-        np.full(n_stations, Dr, np.float32),
-        np.full(n_stations, Lr, np.float32),
-        z_hat.astype(np.float32),
-        d_local_over_D,
-        V_local_over_V_bulk,
-        (z_hat < z_throat_start_norm).astype(np.float32),
-        in_throat.astype(np.float32),
-        (z_hat > z_throat_end_norm).astype(np.float32),
-    ])
+    features = np.column_stack(
+        [
+            np.full(n_stations, np.log10(Re), np.float32),
+            np.full(n_stations, Dr, np.float32),
+            np.full(n_stations, Lr, np.float32),
+            z_hat.astype(np.float32),
+            d_local_over_D,
+            V_local_over_V_bulk,
+            (z_hat < z_throat_start_norm).astype(np.float32),
+            in_throat.astype(np.float32),
+            (z_hat > z_throat_end_norm).astype(np.float32),
+        ]
+    )
 
     rng = np.random.default_rng(int(Re + Dr * 1000 + Lr * 1e5))
     alpha_bulk = rng.uniform(-2.0, 50.0, size=n_stations).astype(np.float64)
@@ -235,8 +244,11 @@ def test_residual_helper_is_identity_when_disabled(tmp_path) -> None:
     out_dir = tmp_path / "processed"
     out_dir.mkdir()
     _write_alpha_d_zarr(
-        out_dir, case_name="Re_5000__Dr_0p617__Lr_0p137",
-        Re=5000, Dr=0.617, Lr=0.137,
+        out_dir,
+        case_name="Re_5000__Dr_0p617__Lr_0p137",
+        Re=5000,
+        Dr=0.617,
+        Lr=0.137,
     )
 
     ds = TabularPairDataset(

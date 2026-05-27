@@ -10,8 +10,6 @@ from __future__ import annotations
 import re as _re
 from collections import Counter
 from pathlib import Path
-from typing import Any
-
 
 AXES: tuple[str, ...] = ("Dr", "Re", "Lr")
 
@@ -160,7 +158,9 @@ def _print_distribution_rich(
     console = Console(width=120)
 
     full, train, test = _resolve_sims(
-        all_sims=all_sims, train_sims=train_sims, test_sims=test_sims,
+        all_sims=all_sims,
+        train_sims=train_sims,
+        test_sims=test_sims,
     )
     show_split = bool(train or test)
 
@@ -168,9 +168,7 @@ def _print_distribution_rich(
     if zarr_dir is not None:
         header_lines.append(f"[bold]Zarr directory:[/bold] [cyan]{zarr_dir}[/cyan]")
     if show_split:
-        header_lines.append(
-            f"[bold]Train / Test:[/bold] {len(train)} / {len(test)}"
-        )
+        header_lines.append(f"[bold]Train / Test:[/bold] {len(train)} / {len(test)}")
     console.print(
         Panel(
             "\n".join(header_lines),
@@ -194,9 +192,7 @@ def _print_distribution_rich(
         train_counts = bin_by(train, axis) if show_split else {}
         test_counts = bin_by(test, axis) if show_split else {}
 
-        all_values = sorted(
-            set(full_counts) | set(train_counts) | set(test_counts)
-        )
+        all_values = sorted(set(full_counts) | set(train_counts) | set(test_counts))
         if not all_values:
             continue
 
@@ -242,7 +238,9 @@ def _print_distribution_plain(
     axes: tuple[str, ...],
 ) -> None:
     full, train, test = _resolve_sims(
-        all_sims=all_sims, train_sims=train_sims, test_sims=test_sims,
+        all_sims=all_sims,
+        train_sims=train_sims,
+        test_sims=test_sims,
     )
     show_split = bool(train or test)
 
@@ -260,9 +258,7 @@ def _print_distribution_plain(
         train_counts = bin_by(train, axis) if show_split else {}
         test_counts = bin_by(test, axis) if show_split else {}
 
-        all_values = sorted(
-            set(full_counts) | set(train_counts) | set(test_counts)
-        )
+        all_values = sorted(set(full_counts) | set(train_counts) | set(test_counts))
         if not all_values:
             continue
 

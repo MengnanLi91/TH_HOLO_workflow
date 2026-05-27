@@ -89,7 +89,9 @@ def compute_delta_p_metrics(
                 d_over_D = raw_d_over_D[rows].to(device)
                 pred_values = model(x_case)[0, 0]  # [n_stations]
                 pred_values = eval_dataset.add_baseline_to_encoded(
-                    pred_values, row_mask=rows, field_idx=0,
+                    pred_values,
+                    row_mask=rows,
+                    field_idx=0,
                 )
             else:
                 mask = row_case_idx == ci
@@ -98,7 +100,9 @@ def compute_delta_p_metrics(
                 d_over_D = raw_d_over_D[mask].to(device)
                 pred_values = model(x_full).squeeze(-1)  # [n_stations]
                 pred_values = eval_dataset.add_baseline_to_encoded(
-                    pred_values, row_mask=mask, field_idx=0,
+                    pred_values,
+                    row_mask=mask,
+                    field_idx=0,
                 )
             alpha_D_bulk = alpha_d_values_to_bulk(
                 pred_values,
@@ -109,7 +113,7 @@ def compute_delta_p_metrics(
 
             # dp/dz = alpha_D_bulk * rho * V_bulk^2 / (2 * D_h)
             D_h = d_over_D * D_big
-            dp_dz = alpha_D_bulk * rho * V_bulk ** 2 / (2.0 * D_h)
+            dp_dz = alpha_D_bulk * rho * V_bulk**2 / (2.0 * D_h)
 
             # Trapezoidal integration over physical z
             L_roi = cm["Lr"] * outer_height_m + 2.0 * buffer_diams * D_big
@@ -119,15 +123,17 @@ def compute_delta_p_metrics(
             rel_err = abs(delta_p_pred - delta_p_gt) / abs(delta_p_gt)
             log_err = abs(math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8)))
 
-            per_case.append({
-                "case": case_name,
-                "delta_p_gt": delta_p_gt,
-                "delta_p_pred": delta_p_pred,
-                "relative_error": rel_err,
-                "log_abs_error": log_err,
-                "Dr": float(cm.get("Dr", 0.0)),
-                "Re": float(cm.get("Re", 0.0)),
-            })
+            per_case.append(
+                {
+                    "case": case_name,
+                    "delta_p_gt": delta_p_gt,
+                    "delta_p_pred": delta_p_pred,
+                    "relative_error": rel_err,
+                    "log_abs_error": log_err,
+                    "Dr": float(cm.get("Dr", 0.0)),
+                    "Re": float(cm.get("Re", 0.0)),
+                }
+            )
 
     if not per_case:
         return {}
@@ -166,11 +172,7 @@ def compute_pointwise_extended_metrics(
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
 
     def _has_physical_inverse(name: str) -> bool:
-        return (
-            is_alpha_d_target(name)
-            or name.startswith("log_")
-            or name.startswith("log10_")
-        )
+        return is_alpha_d_target(name) or name.startswith("log_") or name.startswith("log10_")
 
     per_field_extended = []
     for i, name in enumerate(output_fields):
@@ -201,8 +203,7 @@ def compute_pointwise_extended_metrics(
             entry["physical_median_relative_error"] = float(rel_err.median())
             entry["physical_p90_relative_error"] = float(rel_err.quantile(0.9))
             log_abs_err = (
-                p_phys.abs().clamp(min=1e-8).log()
-                - t_phys.abs().clamp(min=1e-8).log()
+                p_phys.abs().clamp(min=1e-8).log() - t_phys.abs().clamp(min=1e-8).log()
             ).abs()
             entry["physical_log_abs_error_median"] = float(log_abs_err.median())
             entry["physical_log_abs_error_mean"] = float(log_abs_err.mean())
@@ -238,9 +239,11 @@ def compute_pointwise_extended_metrics(
                 rmse = float(((p - t) ** 2).mean().sqrt())
                 field_metrics: dict[str, Any] = {"r2": r2, "rmse": rmse}
                 if _has_physical_inverse(field_name):
-                    d_over_D = raw_d_over_D[mask] if (
-                        raw_d_over_D is not None and is_alpha_d_target(field_name)
-                    ) else None
+                    d_over_D = (
+                        raw_d_over_D[mask]
+                        if (raw_d_over_D is not None and is_alpha_d_target(field_name))
+                        else None
+                    )
                     p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
                     t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
@@ -255,9 +258,7 @@ def compute_pointwise_extended_metrics(
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
                     )
-                    rel_err = (
-                        (p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)
-                    ).abs()
+                    rel_err = ((p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)).abs()
                     field_metrics["median_relative_error"] = float(rel_err.median())
                 region_entry[field_name] = field_metrics
             per_region[region_name] = region_entry
@@ -277,9 +278,11 @@ def compute_pointwise_extended_metrics(
                 case_rmse = float(((p - t) ** 2).mean().sqrt())
                 entry = {"case": case_name, "field": field_name, "rmse": case_rmse}
                 if _has_physical_inverse(field_name):
-                    d_over_D = raw_d_over_D[mask] if (
-                        raw_d_over_D is not None and is_alpha_d_target(field_name)
-                    ) else None
+                    d_over_D = (
+                        raw_d_over_D[mask]
+                        if (raw_d_over_D is not None and is_alpha_d_target(field_name))
+                        else None
+                    )
                     p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
                     t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
@@ -294,9 +297,7 @@ def compute_pointwise_extended_metrics(
                         d_over_D=d_over_D,
                         local_velocity_normalization=local_vel_norm,
                     )
-                    rel_err = (
-                        (p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)
-                    ).abs()
+                    rel_err = ((p_phys - t_phys) / t_phys.abs().clamp(min=1e-8)).abs()
                     entry["median_relative_error"] = float(rel_err.median())
                 per_case.append(entry)
         per_case.sort(key=lambda x: x["rmse"], reverse=True)

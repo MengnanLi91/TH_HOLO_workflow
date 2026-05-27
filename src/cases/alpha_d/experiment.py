@@ -80,12 +80,13 @@ class AlphaDExperiment(Experiment):
             cat_preds, cat_targets = flat_preds, flat_targets
 
         metrics = compute_pointwise_extended_metrics(
-            cat_preds, cat_targets, eval_dataset, output_fields,
+            cat_preds,
+            cat_targets,
+            eval_dataset,
+            output_fields,
         )
 
-        local_vel_norm = bool(
-            getattr(eval_dataset, "local_velocity_normalization", False)
-        )
+        local_vel_norm = bool(getattr(eval_dataset, "local_velocity_normalization", False))
         dp_metrics = compute_delta_p_metrics(
             self.model,
             eval_dataset,
@@ -99,6 +100,7 @@ class AlphaDExperiment(Experiment):
 
     def print_extended_metrics(self, metrics: dict[str, Any]) -> None:
         from cases.alpha_d.metrics import print_extended_metrics as _print
+
         _print(metrics)
 
     # ------------------------------------------------------------------

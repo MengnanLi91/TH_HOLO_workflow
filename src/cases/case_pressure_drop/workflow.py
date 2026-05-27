@@ -151,9 +151,7 @@ def split_case_indices(
             n_bins=int(split_cfg.get("n_bins", 3)),
         )
     else:
-        raise ValueError(
-            "split.strategy must be one of {'sequential', 'random', 'stratified'}."
-        )
+        raise ValueError("split.strategy must be one of {'sequential', 'random', 'stratified'}.")
 
     train_sims = [sim_names[idx] for idx in train_idx]
     test_sims = [sim_names[idx] for idx in test_idx]
@@ -161,10 +159,7 @@ def split_case_indices(
 
 
 def _comparison_table(metrics: dict[str, dict[str, float]], best_model_name: str) -> str:
-    header = (
-        "| Model | RMSE [Pa] | MAE [Pa] | R² | MAPE | "
-        "Median Abs Rel Err | Max Abs Rel Err |"
-    )
+    header = "| Model | RMSE [Pa] | MAE [Pa] | R² | MAPE | Median Abs Rel Err | Max Abs Rel Err |"
     divider = "|---|---:|---:|---:|---:|---:|---:|"
     lines = [header, divider]
     for model_name, row in sorted(
@@ -296,7 +291,7 @@ def _print_evaluation_summary_rich(
     header_lines = [
         f"[bold]Test cases:[/bold] {n_test_cases}",
         f"[bold]Best model on test:[/bold] [green]{best_model_name}[/green] ★",
-        f"[bold]Selected features:[/bold] "
+        "[bold]Selected features:[/bold] "
         + (", ".join(f"[cyan]{name}[/cyan]" for name in selected) or "[dim]n/a[/dim]"),
     ]
     console.print(
@@ -574,8 +569,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
             )
         else:
             raise ValueError(
-                f"feature_selection.method={fs_method!r} not supported. "
-                "Use 'borda' or 'pycaret'."
+                f"feature_selection.method={fs_method!r} not supported. Use 'borda' or 'pycaret'."
             )
         selected_features = list(fs_result.selected_features)
     else:

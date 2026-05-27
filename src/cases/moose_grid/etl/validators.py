@@ -8,7 +8,6 @@ import logging
 from pathlib import Path
 
 import zarr
-
 from physicsnemo_curator.etl.dataset_validators import (
     DatasetValidator,
     ValidationError,

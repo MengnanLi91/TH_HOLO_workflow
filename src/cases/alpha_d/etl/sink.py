@@ -15,12 +15,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import zarr
-from zarr.storage import LocalStore
-
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from zarr.storage import LocalStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +65,7 @@ class AlphaDZarrSink(DataSource):
         for temp_store in self.output_dir.glob("*.zarr_temp"):
             self.logger.warning("Removing orphaned temp Zarr store: %s", temp_store)
             import shutil
+
             shutil.rmtree(temp_store)
 
     # --- Write ---

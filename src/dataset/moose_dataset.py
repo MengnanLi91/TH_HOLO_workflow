@@ -123,11 +123,9 @@ class MOOSEDataset(Dataset):
     # Mode-specific loaders
     # ------------------------------------------------------------------
 
-    def _load_graph(
-        self, root, field_names: list[str], probe_columns: list[str]
-    ) -> dict:
+    def _load_graph(self, root, field_names: list[str], probe_columns: list[str]) -> dict:
         mesh = root["mesh"]
-        coords = to_tensor(mesh["coords"])                   # [N, D]
+        coords = to_tensor(mesh["coords"])  # [N, D]
         connectivity = torch.from_numpy(np.array(mesh["connectivity"], dtype=np.int64))
         edge_src = torch.from_numpy(np.array(mesh["edge_src"], dtype=np.int64))
         edge_dst = torch.from_numpy(np.array(mesh["edge_dst"], dtype=np.int64))
@@ -142,10 +140,7 @@ class MOOSEDataset(Dataset):
 
         # Probes
         probes_grp = root["probes"]
-        probe_data = {
-            name: to_tensor(probes_grp[name])
-            for name in probes_grp.array_keys()
-        }
+        probe_data = {name: to_tensor(probes_grp[name]) for name in probes_grp.array_keys()}
 
         return {
             "coords": coords,
@@ -221,6 +216,7 @@ class MOOSEDataset(Dataset):
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
+
 def to_tensor(arr) -> torch.Tensor:
     """Convert a zarr array to a float32 torch tensor."""
     return torch.from_numpy(np.array(arr, dtype=np.float32))
@@ -229,7 +225,7 @@ def to_tensor(arr) -> torch.Tensor:
 def load_fields(fields_grp, field_names: list[str]) -> torch.Tensor:
     """Load and stack element fields from a zarr group → [T, E, F]."""
     arrays = [
-        to_tensor(fields_grp[name]).unsqueeze(-1)   # [T, E, 1]
+        to_tensor(fields_grp[name]).unsqueeze(-1)  # [T, E, 1]
         for name in field_names
         if name in fields_grp
     ]
@@ -263,7 +259,7 @@ def elem_to_node(
     K = connectivity.shape[1]
 
     # Flatten leading dims for scatter
-    flat_fields = elem_fields.reshape(-1, E, F)   # [B, E, F]
+    flat_fields = elem_fields.reshape(-1, E, F)  # [B, E, F]
     B = flat_fields.shape[0]
 
     # node_fields accumulator

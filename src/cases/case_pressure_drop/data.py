@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 
-
 CANDIDATE_FEATURES: tuple[str, ...] = (
     "Re",
     "log10_Re",

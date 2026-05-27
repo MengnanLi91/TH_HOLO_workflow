@@ -47,15 +47,15 @@ def main(cfg: DictConfig) -> None:
         zarr_dir=data_cfg["zarr_dir"],
         target=data_cfg.get("target", "log_alpha_D"),
         selected_from_allowlist=data_cfg.get("selected_from_allowlist"),
-        local_velocity_normalization=bool(
-            data_cfg.get("local_velocity_normalization", True)
-        ),
+        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", True)),
         min_Dr=data_cfg.get("min_Dr"),
         exclude_cases=data_cfg.get("exclude_cases") or [],
     )
     logger.info(
         "Loaded %d rows across %d cases; %d candidate features.",
-        data.X.shape[0], data.n_cases, data.X.shape[1],
+        data.X.shape[0],
+        data.n_cases,
+        data.X.shape[1],
     )
 
     out_dir = Path(output_cfg["dir"]).expanduser().resolve()
@@ -69,7 +69,8 @@ def main(cfg: DictConfig) -> None:
     )
     logger.info(
         "Selected %d features: %s",
-        len(result["selected"]), result["selected"],
+        len(result["selected"]),
+        result["selected"],
     )
 
     manifest = build_manifest(
@@ -83,6 +84,7 @@ def main(cfg: DictConfig) -> None:
     )
     try:
         import pycaret
+
         manifest["versions"]["pycaret"] = getattr(pycaret, "__version__", "unknown")
     except ImportError:
         pass

@@ -207,8 +207,7 @@ class PointwiseAdapter(ModelAdapter):
             if not cols_path.exists():
                 raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
             input_columns = [
-                line.strip() for line in cols_path.read_text().splitlines()
-                if line.strip()
+                line.strip() for line in cols_path.read_text().splitlines() if line.strip()
             ]
             if not input_columns:
                 raise ValueError(f"input_columns_file is empty: {cols_path}")
@@ -228,17 +227,13 @@ class PointwiseAdapter(ModelAdapter):
         eng_builder = None
         if eng_ep is not None:
             module_name, fn_name = str(eng_ep).split(":", 1)
-            eng_names, eng_builder = getattr(
-                importlib.import_module(module_name), fn_name
-            )()
+            eng_names, eng_builder = getattr(importlib.import_module(module_name), fn_name)()
 
         tt_ep = data_cfg.get("target_transform")
         target_transform = None
         if tt_ep is not None:
             module_name, fn_name = str(tt_ep).split(":", 1)
-            target_transform = getattr(
-                importlib.import_module(module_name), fn_name
-            )
+            target_transform = getattr(importlib.import_module(module_name), fn_name)
 
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
@@ -251,9 +246,7 @@ class PointwiseAdapter(ModelAdapter):
             downstream_weight=_opt_float("downstream_weight"),
             include_case_idx=bool(data_cfg.get("include_case_idx", False)),
             exclude_cases=exclude_cases,
-            local_velocity_normalization=bool(
-                data_cfg.get("local_velocity_normalization", False)
-            ),
+            local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
             min_Dr=_opt_float("min_Dr"),
             target_transform=target_transform,
             engineered_feature_names=eng_names,

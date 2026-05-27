@@ -1,6 +1,5 @@
 """Optuna objective function for hyperparameter optimization."""
 
-import random
 from collections.abc import Callable
 from typing import Any
 

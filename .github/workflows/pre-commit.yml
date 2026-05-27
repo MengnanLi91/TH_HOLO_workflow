@@ -1,0 +1,27 @@
+name: pre-commit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Runs every hook in .pre-commit-config.yaml against the full repo
+      # (--all-files is implicit when called via this action). Fails the
+      # job on any hook-modified or hook-rejected file, which is what we
+      # want for CI: PRs cannot land with un-formatted or lint-failing
+      # code. The action caches the hook environments between runs.
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.1

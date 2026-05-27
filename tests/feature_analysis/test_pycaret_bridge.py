@@ -13,6 +13,10 @@ import pytest
 np = pytest.importorskip("numpy")
 pd = pytest.importorskip("pandas")
 
+# ALLOWLIST is case-specific; only the allowlist-enforcement tests need
+# it. Imported lazily so the generic bridge tests don't drag in the
+# alpha-D physics modules.
+from cases.alpha_d.feature_data import ALLOWLIST  # noqa: E402
 from feature_selection.data import FeatureAnalysisData
 from feature_selection.pycaret_selection import (  # noqa: E402
     build_dataframe,
@@ -20,11 +24,6 @@ from feature_selection.pycaret_selection import (  # noqa: E402
     enforce_allowlist,
     write_selected_features,
 )
-
-# ALLOWLIST is case-specific; only the allowlist-enforcement tests need
-# it. Imported lazily so the generic bridge tests don't drag in the
-# alpha-D physics modules.
-from cases.alpha_d.feature_data import ALLOWLIST  # noqa: E402
 
 
 def _make_data(n_cases: int = 5, rows_per_case: int = 10) -> FeatureAnalysisData:
@@ -55,17 +54,11 @@ def test_build_dataframe_preserves_names_target_and_row_groups():
     assert list(df.columns) == data.feature_names + [data.target_name, "case_id"]
     assert len(df) == data.X.shape[0]
     # Feature matrix round-trips numerically.
-    np.testing.assert_allclose(
-        df[data.feature_names].to_numpy(dtype=np.float32), data.X
-    )
+    np.testing.assert_allclose(df[data.feature_names].to_numpy(dtype=np.float32), data.X)
     # Target round-trips.
-    np.testing.assert_allclose(
-        df[data.target_name].to_numpy(dtype=np.float32), data.y
-    )
+    np.testing.assert_allclose(df[data.target_name].to_numpy(dtype=np.float32), data.y)
     # Each row's case_id matches the integer group index via case_ids map.
-    expected = np.array(
-        [data.case_ids[int(g)] for g in data.groups], dtype=object
-    )
+    expected = np.array([data.case_ids[int(g)] for g in data.groups], dtype=object)
     assert np.array_equal(df["case_id"].to_numpy(dtype=object), expected)
 
 
@@ -82,7 +75,10 @@ def test_case_level_split_never_crosses_cases():
     data = _make_data(n_cases=10, rows_per_case=8)
     df = build_dataframe(data)
     train_df, test_df = case_level_split(
-        df, case_id_col="case_id", test_ratio=0.3, seed=123,
+        df,
+        case_id_col="case_id",
+        test_ratio=0.3,
+        seed=123,
     )
     train_cases = set(train_df["case_id"].unique())
     test_cases = set(test_df["case_id"].unique())
@@ -117,11 +113,7 @@ def test_selected_features_txt_roundtrips_through_adapter_contract(tmp_path: Pat
     assert "\n\n" not in text, "blank line would corrupt adapter parsing"
     assert not text.startswith("#"), "no header allowed"
 
-    roundtripped = [
-        line.strip()
-        for line in path.read_text().splitlines()
-        if line.strip()
-    ]
+    roundtripped = [line.strip() for line in path.read_text().splitlines() if line.strip()]
     assert roundtripped == selected
 
 
@@ -133,6 +125,7 @@ def test_write_selected_features_rejects_non_allowlisted():
 
 def test_write_selected_features_rejects_whitespace():
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".txt") as tf:
         with pytest.raises(ValueError, match="whitespace"):
             write_selected_features(Path(tf.name), ["log10_Re", " Dr"])

@@ -22,11 +22,7 @@ def _fmt_param(value: float) -> str:
 
 
 def _case_name(re_value: float, dr_value: float, lr_value: float) -> str:
-    return (
-        f"Re_{int(round(re_value))}"
-        f"__Dr_{_fmt_param(dr_value)}"
-        f"__Lr_{_fmt_param(lr_value)}"
-    )
+    return f"Re_{int(round(re_value))}__Dr_{_fmt_param(dr_value)}__Lr_{_fmt_param(lr_value)}"
 
 
 def _delta_p_formula(re_value: float, dr_value: float, lr_value: float) -> float:

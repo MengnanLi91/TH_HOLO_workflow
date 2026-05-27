@@ -26,13 +26,12 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 # Reuse decoding helpers from read_exdous.py
-from read_exdous import ExodusReader
-
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 
 from cases.moose_grid.etl.data_sources.csv_source import CSVProbeSource
 from cases.moose_grid.etl.schemas import MOOSERawData
+from read_exdous import ExodusReader
 
 logger = logging.getLogger(__name__)
 
@@ -168,13 +167,9 @@ class ExodusDataSource(DataSource):
                 if var_name not in ds.variables:
                     var_name = f"vals_elem_var{fi + 1}"
                 if var_name in ds.variables:
-                    fields[:, :, fi] = np.array(
-                        ds.variables[var_name][:], dtype=np.float32
-                    )
+                    fields[:, :, fi] = np.array(ds.variables[var_name][:], dtype=np.float32)
                 else:
-                    logger.warning(
-                        "Element variable index %d not found in %s", fi + 1, sim_name
-                    )
+                    logger.warning("Element variable index %d not found in %s", fi + 1, sim_name)
 
         return MOOSERawData(
             coords=coords,
@@ -182,7 +177,7 @@ class ExodusDataSource(DataSource):
             field_names=elem_field_names,
             fields=fields,
             time_steps=time_steps,
-            probe_data={},       # filled by caller
-            probe_columns=[],    # filled by caller
+            probe_data={},  # filled by caller
+            probe_columns=[],  # filled by caller
             sim_name=sim_name,
         )

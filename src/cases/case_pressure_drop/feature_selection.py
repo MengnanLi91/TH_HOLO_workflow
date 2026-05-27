@@ -13,7 +13,7 @@ from feature_selection.manifest import build_manifest, write_manifest
 
 def _require_sklearn() -> None:
     try:
-        import sklearn
+        import sklearn  # noqa: F401 — availability check only
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
             "scikit-learn is required for case-level feature selection."
@@ -23,9 +23,7 @@ def _require_sklearn() -> None:
 def _effective_n_splits(requested: int, n_cases: int) -> int:
     effective = min(int(requested), int(n_cases))
     if effective < 2:
-        raise ValueError(
-            f"Need at least 2 cases for cross-validation, found {n_cases}."
-        )
+        raise ValueError(f"Need at least 2 cases for cross-validation, found {n_cases}.")
     return effective
 
 
@@ -405,8 +403,7 @@ def run_feature_selection(
             )
             if scores.shape != (len(feature_names),):
                 raise ValueError(
-                    f"{method_name} returned shape {scores.shape}, "
-                    f"expected ({len(feature_names)},)"
+                    f"{method_name} returned shape {scores.shape}, expected ({len(feature_names)},)"
                 )
             per_method_scores[method_name].append(scores)
             per_method_ranks[method_name].append(_scores_to_ranks(scores))
@@ -497,10 +494,11 @@ def run_feature_selection(
         "consensus": {
             "selected": list(selected),
             "borda_order": [feature_names[idx] for idx in order],
-            "borda_score": {feature_names[idx]: float(borda[idx]) for idx in range(len(feature_names))},
+            "borda_score": {
+                feature_names[idx]: float(borda[idx]) for idx in range(len(feature_names))
+            },
             "mean_stability": {
-                feature_names[idx]: float(mean_stability[idx])
-                for idx in range(len(feature_names))
+                feature_names[idx]: float(mean_stability[idx]) for idx in range(len(feature_names))
             },
             "stability_min": float(stability_min),
             "redundancy_threshold": (

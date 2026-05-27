@@ -18,10 +18,9 @@ import logging
 from typing import Any, Optional
 
 import numpy as np
-from scipy.interpolate import griddata
-
 from physicsnemo_curator.etl.data_transformations import DataTransformation
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
+from scipy.interpolate import griddata
 
 from cases.moose_grid.etl.schemas import MOOSEProcessedData, NormStats
 
@@ -63,10 +62,10 @@ class MOOSEDataTransformation(DataTransformation):
         Returns:
             dict of MOOSEProcessedData fields, or None to skip this sample.
         """
-        coords: np.ndarray = data["coords"]           # [N, D]
+        coords: np.ndarray = data["coords"]  # [N, D]
         connectivity: np.ndarray = data["connectivity"]  # [E, K]
         field_names: list[str] = data["field_names"]
-        fields: np.ndarray = data["fields"]           # [T, E, F]
+        fields: np.ndarray = data["fields"]  # [T, E, F]
         time_steps: np.ndarray = data["time_steps"]
         probe_data: dict = data["probe_data"]
         probe_columns: list[str] = data["probe_columns"]
@@ -83,9 +82,7 @@ class MOOSEDataTransformation(DataTransformation):
         edge_src, edge_dst = self._build_edges(connectivity)
 
         # 3. Interpolate to regular grid
-        grid_fields, grid_x, grid_y = self._interpolate_to_grid(
-            coords, connectivity, norm_fields
-        )
+        grid_fields, grid_x, grid_y = self._interpolate_to_grid(coords, connectivity, norm_fields)
 
         processed = MOOSEProcessedData(
             coords=coords,
@@ -149,9 +146,7 @@ class MOOSEDataTransformation(DataTransformation):
 
         return norm_fields, norm_stats
 
-    def _build_edges(
-        self, connectivity: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _build_edges(self, connectivity: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Build undirected graph edges from element-to-node connectivity.
 
         For each element, connect all pairs of its nodes in both directions.
@@ -210,9 +205,7 @@ class MOOSEDataTransformation(DataTransformation):
 
         num_time = fields.shape[0]
         num_fields = fields.shape[2]
-        grid_fields = np.zeros(
-            (num_time, self.grid_nx, self.grid_ny, num_fields), dtype=np.float32
-        )
+        grid_fields = np.zeros((num_time, self.grid_nx, self.grid_ny, num_fields), dtype=np.float32)
 
         for t in range(num_time):
             for fi in range(num_fields):

@@ -118,7 +118,10 @@ def test_baseline_for_plotting_returns_decoded_analytical_baseline(
     # produce the same array — the latter is the former with values=0.
     zero = torch.zeros(n_stations, dtype=torch.float32)
     decoded_from_zero, _ = experiment.decode_for_plotting(
-        zero, dataset=ds, field_name="log_alpha_D", mask=mask,
+        zero,
+        dataset=ds,
+        field_name="log_alpha_D",
+        mask=mask,
     )
     np.testing.assert_allclose(decoded_baseline, decoded_from_zero)
 
@@ -410,12 +413,30 @@ def test_save_delta_p_parity_plot(
     import matplotlib.pyplot as plt
 
     per_case = [
-        {"case": "Re_5000__Dr_0p333__Lr_0p1", "delta_p_gt": 10.0, "delta_p_pred": 12.0,
-         "relative_error": 0.2, "Dr": 0.333, "Re": 5000.0},
-        {"case": "Re_5000__Dr_0p617__Lr_0p1", "delta_p_gt": 25.0, "delta_p_pred": 24.0,
-         "relative_error": 0.04, "Dr": 0.617, "Re": 5000.0},
-        {"case": "Re_104807__Dr_0p9__Lr_0p1", "delta_p_gt": 80.0, "delta_p_pred": 79.5,
-         "relative_error": 0.006, "Dr": 0.9, "Re": 104807.0},
+        {
+            "case": "Re_5000__Dr_0p333__Lr_0p1",
+            "delta_p_gt": 10.0,
+            "delta_p_pred": 12.0,
+            "relative_error": 0.2,
+            "Dr": 0.333,
+            "Re": 5000.0,
+        },
+        {
+            "case": "Re_5000__Dr_0p617__Lr_0p1",
+            "delta_p_gt": 25.0,
+            "delta_p_pred": 24.0,
+            "relative_error": 0.04,
+            "Dr": 0.617,
+            "Re": 5000.0,
+        },
+        {
+            "case": "Re_104807__Dr_0p9__Lr_0p1",
+            "delta_p_gt": 80.0,
+            "delta_p_pred": 79.5,
+            "relative_error": 0.006,
+            "Dr": 0.9,
+            "Re": 104807.0,
+        },
     ]
 
     captured: dict[str, Any] = {}

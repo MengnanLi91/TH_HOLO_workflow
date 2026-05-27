@@ -50,9 +50,7 @@ def resolve_plot_indices(
     deduped: list[int] = []
     for idx in explicit:
         if idx >= num_cases:
-            raise ValueError(
-                f"plot_case_indices contains {idx}, but dataset size is {num_cases}."
-            )
+            raise ValueError(f"plot_case_indices contains {idx}, but dataset size is {num_cases}.")
         if idx not in deduped:
             deduped.append(idx)
     return deduped[:max_cases]
@@ -93,9 +91,7 @@ def select_best_worst_pointwise_cases(
 
     for label, key in (("best", "best_cases"), ("worst", "worst_cases")):
         candidates = [
-            entry
-            for entry in extended_metrics.get(key, [])
-            if entry.get("field") == field_name
+            entry for entry in extended_metrics.get(key, []) if entry.get("field") == field_name
         ]
         if not candidates:
             continue
@@ -285,9 +281,7 @@ def save_profile_prediction_plots(
     if not output_fields:
         raise ValueError("No output fields are available for plotting.")
     if not hasattr(dataset, "_case_ids_unique") or not hasattr(dataset, "_row_case_idx"):
-        raise ValueError(
-            "Profile prediction plotting requires a case-indexed dataset."
-        )
+        raise ValueError("Profile prediction plotting requires a case-indexed dataset.")
 
     plot_dir_path = Path(plot_dir)
     plot_dir_path.mkdir(parents=True, exist_ok=True)
@@ -316,10 +310,10 @@ def save_profile_prediction_plots(
             order = torch.argsort(z_hat_local)
             z_axis = z_hat_local[order].numpy()
 
-            x_sorted = dataset._x[mask][order]              # [S, C]
-            x_in = x_sorted.T.unsqueeze(0).to(device)        # [1, C, S]
-            pred_sorted = model(x_in).detach().cpu()[0, 0]   # [S]
-            target_sorted = dataset._y[mask][order][:, 0]    # [S]
+            x_sorted = dataset._x[mask][order]  # [S, C]
+            x_in = x_sorted.T.unsqueeze(0).to(device)  # [1, C, S]
+            pred_sorted = model(x_in).detach().cpu()[0, 0]  # [S]
+            target_sorted = dataset._y[mask][order][:, 0]  # [S]
 
             # decode_fn / baseline_fn index baseline_encoded[mask] in flat
             # _row_case_idx order, so undo the z_hat sort before calling them,
@@ -439,9 +433,7 @@ def save_parity_plot(
     if cat_preds.dim() == 3:
         case_slices = getattr(dataset, "_case_slices", None)
         if case_slices is None:
-            raise ValueError(
-                "Profile-shaped predictions require dataset._case_slices."
-            )
+            raise ValueError("Profile-shaped predictions require dataset._case_slices.")
         n_rows = sum(len(s) for s in case_slices)
         n_fields = cat_preds.shape[1]
         flat_preds = torch.empty(n_rows, n_fields, dtype=cat_preds.dtype)
@@ -460,9 +452,7 @@ def save_parity_plot(
     region_cols = ("is_upstream", "is_throat", "is_downstream")
     input_columns = list(getattr(dataset, "input_columns", []) or [])
     region_idx_lookup = {
-        name: input_columns.index(name)
-        for name in region_cols
-        if name in input_columns
+        name: input_columns.index(name) for name in region_cols if name in input_columns
     }
 
     output_files: list[str] = []
@@ -526,8 +516,11 @@ def save_parity_plot(
                 if not np.any(sel):
                     continue
                 ax.scatter(
-                    target_all[sel], pred_all[sel],
-                    s=10, alpha=0.5, color=color,
+                    target_all[sel],
+                    pred_all[sel],
+                    s=10,
+                    alpha=0.5,
+                    color=color,
                     label=name.replace("is_", "").capitalize() if name != "other" else "Other",
                 )
         else:
@@ -538,8 +531,22 @@ def save_parity_plot(
         if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
             lo, hi = lo - 1.0, hi + 1.0
         ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
-        ax.plot([lo, hi], [1.1 * lo, 1.1 * hi], color="black", linestyle=":", linewidth=0.8, label="±10%")
-        ax.plot([lo, hi], [0.9 * lo, 0.9 * hi], color="black", linestyle=":", linewidth=0.8, label="_nolegend_")
+        ax.plot(
+            [lo, hi],
+            [1.1 * lo, 1.1 * hi],
+            color="black",
+            linestyle=":",
+            linewidth=0.8,
+            label="±10%",
+        )
+        ax.plot(
+            [lo, hi],
+            [0.9 * lo, 0.9 * hi],
+            color="black",
+            linestyle=":",
+            linewidth=0.8,
+            label="_nolegend_",
+        )
 
         if np.all(target_all > 0.0) and np.all(pred_all > 0.0):
             ax.set_xscale("log")
@@ -548,10 +555,7 @@ def save_parity_plot(
         rmse = float(np.sqrt(np.mean((pred_all - target_all) ** 2)))
         ax.set_xlabel(f"Ground Truth {axis_label}")
         ax.set_ylabel(f"Predicted {axis_label}")
-        ax.set_title(
-            f"Parity Plot — {axis_label}\n"
-            f"N={pred_all.size}, RMSE={rmse:.3e}"
-        )
+        ax.set_title(f"Parity Plot — {axis_label}\nN={pred_all.size}, RMSE={rmse:.3e}")
         ax.grid(True, alpha=0.3)
         ax.set_aspect("equal", adjustable="datalim")
         ax.legend(loc="best", fontsize=9)
@@ -597,19 +601,16 @@ def save_delta_p_parity_plot(
     gt = np.array([float(e["delta_p_gt"]) for e in per_case], dtype=np.float64)
     pred = np.array([float(e["delta_p_pred"]) for e in per_case], dtype=np.float64)
     drs = np.array([float(e.get("Dr", np.nan)) for e in per_case], dtype=np.float64)
-    rel_err = np.array(
-        [float(e.get("relative_error", np.nan)) for e in per_case], dtype=np.float64
-    )
+    rel_err = np.array([float(e.get("relative_error", np.nan)) for e in per_case], dtype=np.float64)
 
     fig, ax = plt.subplots(figsize=(6.8, 6.4), constrained_layout=True)
 
     have_dr = np.isfinite(drs).all() and drs.size > 0
     if have_dr:
         cmap = plt.get_cmap("viridis")
-        dr_min, dr_max = float(drs.min()), float(drs.max())
-        norm_denom = max(dr_max - dr_min, 1e-9)
-        colors = cmap((drs - dr_min) / norm_denom)
-        scatter = ax.scatter(gt, pred, s=30, c=drs, cmap=cmap, alpha=0.85, edgecolors="white", linewidths=0.4)
+        scatter = ax.scatter(
+            gt, pred, s=30, c=drs, cmap=cmap, alpha=0.85, edgecolors="white", linewidths=0.4
+        )
         cbar = fig.colorbar(scatter, ax=ax)
         cbar.set_label("Dr (D_throat / D_big)")
     else:
@@ -620,8 +621,17 @@ def save_delta_p_parity_plot(
     if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
         lo, hi = max(lo, 1e-3), max(hi, 1e-3) * 10.0
     ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
-    ax.plot([lo, hi], [1.1 * lo, 1.1 * hi], color="black", linestyle=":", linewidth=0.8, label="±10%")
-    ax.plot([lo, hi], [0.9 * lo, 0.9 * hi], color="black", linestyle=":", linewidth=0.8, label="_nolegend_")
+    ax.plot(
+        [lo, hi], [1.1 * lo, 1.1 * hi], color="black", linestyle=":", linewidth=0.8, label="±10%"
+    )
+    ax.plot(
+        [lo, hi],
+        [0.9 * lo, 0.9 * hi],
+        color="black",
+        linestyle=":",
+        linewidth=0.8,
+        label="_nolegend_",
+    )
 
     if (gt > 0).all() and (pred > 0).all():
         ax.set_xscale("log")

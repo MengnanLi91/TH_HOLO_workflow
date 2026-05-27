@@ -35,3 +35,43 @@ py-modules = ["read_exdous"]
 where = ["src"]
 include = ["training*", "feature_selection*", "cases*", "dataset*"]
 namespaces = false
+
+# ---------------------------------------------------------------------------
+# Ruff — single tool for linting + formatting. Run from the repo root:
+#   ruff check src/ tests/        → lint
+#   ruff format src/ tests/       → format in place
+#   ruff check --fix src/ tests/  → auto-fix safe issues
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "moose",
+    "physicsnemo",
+    "physicsnemo-curator",
+    "docs/_build",
+    "src/outputs",
+]
+
+[tool.ruff.lint]
+# E/W = pycodestyle (errors + warnings), F = pyflakes (unused imports,
+# undef names), I = isort (import-order). Skip naming/docstring/upgrade
+# rule families on the first pass — they would generate too much churn
+# on a codebase that has never been linted.
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # line-too-long — let the formatter own line length
+    "E731",  # do-not-assign-lambda — common in functional-style code
+    "E402",  # module-import-not-at-top — false-positive for the
+             # pytest.importorskip pattern and for conditional-deps imports
+             # (e.g. torch availability checks in runner.py)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests routinely import fixtures + assertions without naming them; allow.
+"tests/**" = ["F401", "F811"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = false

@@ -13,8 +13,13 @@ zarr = pytest.importorskip("zarr")
 
 
 FEATURE_NAMES = [
-    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-    "V_local_over_V_bulk", "is_throat",
+    "log10_Re",
+    "Dr",
+    "Lr",
+    "z_hat",
+    "d_local_over_D",
+    "V_local_over_V_bulk",
+    "is_throat",
 ]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 6
@@ -36,17 +41,13 @@ def profile_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal(
-            (ROWS_PER_CASE, len(FEATURE_NAMES))
-        ).astype(np.float32)
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
         # Shuffle the z_hat column so the wrapper has work to do
         z_hat_sorted = np.linspace(0.0, 1.0, ROWS_PER_CASE, dtype=np.float32)
         perm = rng.permutation(ROWS_PER_CASE)
         features[:, z_idx] = z_hat_sorted[perm]
 
-        targets = rng.standard_normal(
-            (ROWS_PER_CASE, len(TARGET_NAMES))
-        ).astype(np.float32)
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -136,9 +137,7 @@ class TestProfileDataset:
         z = x[0].numpy()
         assert np.all(np.diff(z) >= -1e-6)
 
-    def test_subset_by_case_indices_isolates_inner(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_subset_by_case_indices_isolates_inner(self, profile_zarr_dir: Path) -> None:
         """The subset wrapper must wrap a real subset of the inner — sharing
         the parent's _inner would silently include all cases in the Phase 7
         delta_p loss path, which iterates ds._case_ids_unique.
@@ -188,9 +187,7 @@ class TestProfileDataset:
         assert ds.local_velocity_normalization is False
         assert ds.exclude_cases == []
 
-    def test_subset_preserves_residual_baseline_alignment(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_subset_preserves_residual_baseline_alignment(self, profile_zarr_dir: Path) -> None:
         from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
@@ -213,8 +210,8 @@ class TestProfileDataset:
 
 class TestProfileAdapter:
     def test_dataset_info_reports_n_stations(self, profile_zarr_dir: Path) -> None:
-        from training.adapters import ProfileAdapter
         from cases.alpha_d.datasets.profile import AlphaDProfileDataset
+        from training.adapters import ProfileAdapter
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -230,8 +227,8 @@ class TestProfileAdapter:
         }
 
     def test_forward_train_emits_4_tuple(self, profile_zarr_dir: Path) -> None:
-        from training.adapters import ProfileAdapter
         from cases.alpha_d.datasets.profile import AlphaDProfileDataset
+        from training.adapters import ProfileAdapter
 
         ds = AlphaDProfileDataset(
             zarr_dir=profile_zarr_dir,
@@ -258,9 +255,7 @@ class TestProfileAdapter:
         assert w.shape == (2, 1, ROWS_PER_CASE)
         assert cidx.shape == (2,)
 
-    def test_accumulate_metrics_uses_b_times_s(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_accumulate_metrics_uses_b_times_s(self, profile_zarr_dir: Path) -> None:
         """RMSE comparable to MLP requires n_samples = batch_cases * stations."""
         from training.adapters import ProfileAdapter
 
@@ -274,9 +269,7 @@ class TestProfileAdapter:
         expected = ((pred - target) ** 2).sum(dim=(0, 2))
         assert torch.allclose(field_se, expected)
 
-    def test_relative_l2_broadcasts_with_profile_weight(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_relative_l2_broadcasts_with_profile_weight(self, profile_zarr_dir: Path) -> None:
         from training.losses import relative_l2_loss
 
         pred = torch.randn(2, 1, ROWS_PER_CASE)
@@ -297,7 +290,6 @@ class TestConv1DModel:
     @pytest.fixture(autouse=True)
     def _need_physicsnemo(self):
         pytest.importorskip("physicsnemo")
-
 
     def _build(self, in_c=4, out_c=1, hidden=16, num_blocks=2):
         from training.models.conv1d_profile import build
@@ -338,7 +330,6 @@ class TestConv1DModel:
         re-imports the class via importlib + getattr(module, name).
         """
         import physicsnemo
-
         from training.models.conv1d_profile import Conv1DProfile
 
         model = self._build(in_c=4, out_c=1, hidden=16, num_blocks=2)
@@ -366,12 +357,16 @@ class TestConv1DModel:
         the migration utility has been run.
         """
         import physicsnemo
-
         from training.models.conv1d_profile import AlphaDConv1D, Conv1DProfile
 
         legacy = AlphaDConv1D(
-            in_channels=4, out_channels=1, hidden=16, num_blocks=2,
-            kernel_size=3, dilations=[1, 2], dropout=0.0,
+            in_channels=4,
+            out_channels=1,
+            hidden=16,
+            num_blocks=2,
+            kernel_size=3,
+            dilations=[1, 2],
+            dropout=0.0,
         )
         legacy.eval()
         x = torch.randn(2, 4, 10)
@@ -401,13 +396,17 @@ class TestConv1DModel:
         import zipfile
 
         import physicsnemo
-
         from training.models._migrate_conv1d_checkpoint import migrate
         from training.models.conv1d_profile import AlphaDConv1D, Conv1DProfile
 
         legacy = AlphaDConv1D(
-            in_channels=4, out_channels=1, hidden=16, num_blocks=2,
-            kernel_size=3, dilations=[1, 2], dropout=0.0,
+            in_channels=4,
+            out_channels=1,
+            hidden=16,
+            num_blocks=2,
+            kernel_size=3,
+            dilations=[1, 2],
+            dropout=0.0,
         )
         ckpt_path = tmp_path / "legacy.mdlus"
         legacy.save(str(ckpt_path))
@@ -436,16 +435,27 @@ class TestConv1DModel:
         from training.models.conv1d_profile import build
 
         default = build(
-            {"hidden_channels": 16, "num_blocks": 2, "kernel_size": 3,
-             "dilations": [1, 2], "dropout": 0.0},
+            {
+                "hidden_channels": 16,
+                "num_blocks": 2,
+                "kernel_size": 3,
+                "dilations": [1, 2],
+                "dropout": 0.0,
+            },
             {"in_channels": 4, "out_channels": 1, "n_stations": 10},
         )
         assert isinstance(default.act, nn.SiLU)
         assert default._resolved_model_params["activation"] == "silu"
 
         gelu = build(
-            {"hidden_channels": 16, "num_blocks": 2, "kernel_size": 3,
-             "dilations": [1, 2], "dropout": 0.0, "activation": "gelu"},
+            {
+                "hidden_channels": 16,
+                "num_blocks": 2,
+                "kernel_size": 3,
+                "dilations": [1, 2],
+                "dropout": 0.0,
+                "activation": "gelu",
+            },
             {"in_channels": 4, "out_channels": 1, "n_stations": 10},
         )
         assert isinstance(gelu.act, nn.GELU)

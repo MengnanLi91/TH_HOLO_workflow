@@ -13,8 +13,13 @@ zarr = pytest.importorskip("zarr")
 optuna = pytest.importorskip("optuna")
 
 FEATURE_NAMES = [
-    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-    "V_local_over_V_bulk", "is_throat",
+    "log10_Re",
+    "Dr",
+    "Lr",
+    "z_hat",
+    "d_local_over_D",
+    "V_local_over_V_bulk",
+    "is_throat",
 ]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 10
@@ -30,8 +35,14 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         case_name = f"case_{i:03d}"
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
-        root.create_array("features", data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32))
-        root.create_array("targets", data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32))
+        root.create_array(
+            "features",
+            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32),
+        )
+        root.create_array(
+            "targets",
+            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32),
+        )
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
         meta.attrs["feature_names"] = json.dumps(FEATURE_NAMES)
@@ -85,7 +96,9 @@ class TestSearchSpace:
 
         base = {"data": {"zarr_dir": "/tmp"}, "training": {"lr": 0.001}}
         with pytest.raises(ValueError, match="not allowed"):
-            validate_search_space({"data.zarr_dir": {"type": "categorical", "choices": ["/a"]}}, base)
+            validate_search_space(
+                {"data.zarr_dir": {"type": "categorical", "choices": ["/a"]}}, base
+            )
 
     def test_validate_rejects_model_name(self) -> None:
         from training.hpo.search_space import validate_search_space
@@ -99,7 +112,9 @@ class TestSearchSpace:
 
         base = {"training": {"lr": 0.001}}
         with pytest.raises(KeyError, match="does not exist"):
-            validate_search_space({"training.lrr": {"type": "float", "low": 0.0, "high": 1.0}}, base)
+            validate_search_space(
+                {"training.lrr": {"type": "float", "low": 0.0, "high": 1.0}}, base
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -109,11 +124,17 @@ class TestSearchSpace:
 
 class TestComputeValLoss:
     def test_empty_loader_raises(self) -> None:
-        from training.runner import compute_val_loss
         from training.experiment import Experiment
+        from training.runner import compute_val_loss
 
         model = torch.nn.Linear(2, 1)
-        exp = Experiment(model=model, optimizer=None, loss_fn=torch.nn.MSELoss(), adapter=None, device=torch.device("cpu"))
+        exp = Experiment(
+            model=model,
+            optimizer=None,
+            loss_fn=torch.nn.MSELoss(),
+            adapter=None,
+            device=torch.device("cpu"),
+        )
         empty_loader = torch.utils.data.DataLoader([], batch_size=1)
         with pytest.raises(RuntimeError, match="zero batches"):
             compute_val_loss(exp, empty_loader)
@@ -151,15 +172,35 @@ class TestMetricsOutPath:
 
 class TestObjective:
     def test_make_objective_returns_float(self, synthetic_zarr_dir: Path) -> None:
-        from training.hpo.objective import make_objective
-        from training.runner import prepare_training, normalize_split_cfg
-        from training.datasets import split_indices
         import random
 
+        from training.datasets import split_indices
+        from training.hpo.objective import make_objective
+        from training.runner import normalize_split_cfg, prepare_training
+
         base_cfg = {
-            "model": {"name": "mlp", "params": {"layer_size": 16, "num_layers": 2, "activation_fn": "silu", "skip_connections": False}},
-            "data": {"zarr_dir": str(synthetic_zarr_dir), "split": {"strategy": "random", "train_ratio": 0.8, "seed": 42}},
-            "training": {"epochs": 1, "batch_size": 32, "lr": 0.001, "seed": 42, "device": "cpu", "loss": "mse", "experiment": None},
+            "model": {
+                "name": "mlp",
+                "params": {
+                    "layer_size": 16,
+                    "num_layers": 2,
+                    "activation_fn": "silu",
+                    "skip_connections": False,
+                },
+            },
+            "data": {
+                "zarr_dir": str(synthetic_zarr_dir),
+                "split": {"strategy": "random", "train_ratio": 0.8, "seed": 42},
+            },
+            "training": {
+                "epochs": 1,
+                "batch_size": 32,
+                "lr": 0.001,
+                "seed": 42,
+                "device": "cpu",
+                "loss": "mse",
+                "experiment": None,
+            },
             "output": {},
         }
 
@@ -167,7 +208,9 @@ class TestObjective:
         dataset = prepared["dataset"]
         split_cfg = normalize_split_cfg(dict(base_cfg["data"]["split"]), default_seed=42)
         train_idx, test_idx, _, _ = split_indices(
-            num_cases=len(dataset.sim_names), split_cfg=split_cfg, sim_names=dataset.sim_names,
+            num_cases=len(dataset.sim_names),
+            split_cfg=split_cfg,
+            sim_names=dataset.sim_names,
         )
 
         rng = random.Random(42)
@@ -210,8 +253,12 @@ class TestTrainPoolGuard:
         for i in range(3):
             sp = small_dir / f"c{i}.zarr"
             root = zarr.open(store=str(sp), mode="w")
-            root.create_array("features", data=rng.standard_normal((5, len(FEATURE_NAMES))).astype(np.float32))
-            root.create_array("targets", data=rng.standard_normal((5, len(TARGET_NAMES))).astype(np.float32))
+            root.create_array(
+                "features", data=rng.standard_normal((5, len(FEATURE_NAMES))).astype(np.float32)
+            )
+            root.create_array(
+                "targets", data=rng.standard_normal((5, len(TARGET_NAMES))).astype(np.float32)
+            )
             meta = root.require_group("metadata")
             meta.attrs["case_id"] = f"c{i}"
             meta.attrs["feature_names"] = json.dumps(FEATURE_NAMES)
@@ -220,9 +267,28 @@ class TestTrainPoolGuard:
         from training.hpo.study import run_hpo
 
         cfg = {
-            "model": {"name": "mlp", "params": {"layer_size": 8, "num_layers": 2, "activation_fn": "silu", "skip_connections": False}},
-            "data": {"zarr_dir": str(small_dir), "split": {"strategy": "sequential", "train_ratio": 0.7, "seed": 42}},
-            "training": {"epochs": 1, "batch_size": 8, "lr": 0.001, "seed": 42, "device": "cpu", "loss": "mse", "experiment": None},
+            "model": {
+                "name": "mlp",
+                "params": {
+                    "layer_size": 8,
+                    "num_layers": 2,
+                    "activation_fn": "silu",
+                    "skip_connections": False,
+                },
+            },
+            "data": {
+                "zarr_dir": str(small_dir),
+                "split": {"strategy": "sequential", "train_ratio": 0.7, "seed": 42},
+            },
+            "training": {
+                "epochs": 1,
+                "batch_size": 8,
+                "lr": 0.001,
+                "seed": 42,
+                "device": "cpu",
+                "loss": "mse",
+                "experiment": None,
+            },
             "output": {},
             "hpo": {
                 "study_name": "guard_test",

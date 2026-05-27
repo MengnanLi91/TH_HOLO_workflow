@@ -1,5 +1,6 @@
 """Generic training/evaluation runners for supervised one-step models."""
 
+import copy
 import importlib
 import json
 import math
@@ -8,9 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import copy
-
 import numpy as np
+
 try:
     import torch
     from torch.utils.data import DataLoader, Subset
@@ -145,9 +145,7 @@ def build_experiment(
     )
 
     if not hasattr(experiment, "training_step") or not hasattr(experiment, "eval_step"):
-        raise TypeError(
-            "Experiment class must define training_step() and eval_step() methods."
-        )
+        raise TypeError("Experiment class must define training_step() and eval_step() methods.")
 
     return experiment
 
@@ -185,7 +183,9 @@ def _collect_resolved_model_params(
     return resolved
 
 
-def _serialize_norm_stats(norm_stats: dict[str, torch.Tensor] | None) -> dict[str, list[float]] | None:
+def _serialize_norm_stats(
+    norm_stats: dict[str, torch.Tensor] | None,
+) -> dict[str, list[float]] | None:
     if not norm_stats:
         return None
     return {
@@ -595,10 +595,7 @@ def _log_hpo_summary(results: dict[str, Any]) -> None:
     print(f"\nHPO complete: {n_complete} finished, {n_pruned} pruned, {n_trials} total")
 
     if n_complete > 0:
-        print(
-            f"Best trial #{results['best_trial_number']}: "
-            f"val_loss={results['best_value']:.6e}"
-        )
+        print(f"Best trial #{results['best_trial_number']}: val_loss={results['best_value']:.6e}")
         print(f"Best params: {json.dumps(results['best_params'], indent=2)}")
         print(f"Artifacts saved to: {results['output_dir']}")
 
@@ -636,9 +633,7 @@ def _indices_for_test_split(
         sim_to_idx = {name: idx for idx, name in enumerate(sim_names)}
         unknown_test = [name for name in test_sims if name not in sim_to_idx]
         if unknown_test:
-            raise ValueError(
-                f"run_meta split contains unknown test sim name(s): {unknown_test}"
-            )
+            raise ValueError(f"run_meta split contains unknown test sim name(s): {unknown_test}")
         test_idx = [sim_to_idx[name] for name in test_sims]
         return test_idx, train_sims, test_sims
 
@@ -747,7 +742,9 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     loss_name = str(run_meta.get("training", {}).get("loss", "mse"))
     loss_fn = get_loss_fn(loss_name if loss_name in {"mse", "l1", "relative_l2"} else "mse")
 
-    experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get("training", {}).get("experiment")
+    experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get("training", {}).get(
+        "experiment"
+    )
     experiment = _build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
@@ -787,7 +784,9 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     # alpha-D and other case experiments override to add per-field R², per-region
     # breakdown, Δp integration error, etc.).
     extended_metrics: dict[str, Any] = experiment.compute_extended_metrics(
-        eval_dataset, all_preds, all_targets,
+        eval_dataset,
+        all_preds,
+        all_targets,
     )
 
     plot_files: list[str] = []

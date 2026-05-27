@@ -15,9 +15,7 @@ def build(model_cfg: dict, dataset_info: dict):
         "depth": int(model_cfg.get("depth", 4)),
         "num_blocks": int(model_cfg.get("num_blocks", 16)),
         "sparsity_threshold": float(model_cfg.get("sparsity_threshold", 0.01)),
-        "hard_thresholding_fraction": float(
-            model_cfg.get("hard_thresholding_fraction", 1.0)
-        ),
+        "hard_thresholding_fraction": float(model_cfg.get("hard_thresholding_fraction", 1.0)),
     }
     model = afno_cls(**resolved)
     model._resolved_model_params = dict(resolved)

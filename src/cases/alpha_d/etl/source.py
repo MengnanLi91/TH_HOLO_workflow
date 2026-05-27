@@ -18,10 +18,10 @@ _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from read_exdous import ExodusReader
-
 from physicsnemo_curator.etl.data_sources import DataSource
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
+
+from read_exdous import ExodusReader
 
 logger = logging.getLogger(__name__)
 

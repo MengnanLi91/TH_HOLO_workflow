@@ -52,9 +52,7 @@ def compute_metrics(
     rmse_pa = math.sqrt(mean_squared_error(y_true_pa, y_pred_pa))
     mae_pa = float(mean_absolute_error(y_true_pa, y_pred_pa))
     r2_pa = float(r2_score(y_true_pa, y_pred_pa))
-    mape = float(
-        np.mean(np.abs((y_pred_pa - y_true_pa) / np.clip(np.abs(y_true_pa), 1e-8, None)))
-    )
+    mape = float(np.mean(np.abs((y_pred_pa - y_true_pa) / np.clip(np.abs(y_true_pa), 1e-8, None))))
 
     payload = {
         "rmse_pa": float(rmse_pa),
@@ -63,9 +61,7 @@ def compute_metrics(
         "mape": float(mape),
     }
     if y_true_log is not None and y_pred_log is not None:
-        payload["rmse_log1p"] = float(
-            math.sqrt(mean_squared_error(y_true_log, y_pred_log))
-        )
+        payload["rmse_log1p"] = float(math.sqrt(mean_squared_error(y_true_log, y_pred_log)))
     return payload
 
 
@@ -88,9 +84,7 @@ def build_estimator(model_name: str, model_cfg: dict[str, Any], seed: int):
         return RandomForestRegressor(
             n_estimators=int(model_cfg.get("n_estimators", 400)),
             max_depth=(
-                int(model_cfg["max_depth"])
-                if model_cfg.get("max_depth") is not None
-                else None
+                int(model_cfg["max_depth"]) if model_cfg.get("max_depth") is not None else None
             ),
             min_samples_leaf=int(model_cfg.get("min_samples_leaf", 1)),
             n_jobs=int(model_cfg.get("n_jobs", -1)),
@@ -107,14 +101,10 @@ def build_estimator(model_name: str, model_cfg: dict[str, Any], seed: int):
                         hidden_layer_sizes=hidden,
                         activation=str(model_cfg.get("activation", "relu")),
                         alpha=float(model_cfg.get("alpha", 1.0e-4)),
-                        learning_rate_init=float(
-                            model_cfg.get("learning_rate_init", 1.0e-3)
-                        ),
+                        learning_rate_init=float(model_cfg.get("learning_rate_init", 1.0e-3)),
                         max_iter=int(model_cfg.get("max_iter", 2000)),
                         early_stopping=bool(model_cfg.get("early_stopping", True)),
-                        validation_fraction=float(
-                            model_cfg.get("validation_fraction", 0.15)
-                        ),
+                        validation_fraction=float(model_cfg.get("validation_fraction", 0.15)),
                         n_iter_no_change=int(model_cfg.get("n_iter_no_change", 30)),
                         random_state=int(seed),
                     ),
@@ -151,7 +141,9 @@ def cross_validate_models(
     for model_name in ("linear_regression", "random_forest", "mlp"):
         per_fold: list[dict[str, float]] = []
         for fold_idx, (tr, va) in enumerate(splitter.split(X, y_log, groups=groups)):
-            estimator = build_estimator(model_name, dict(model_cfg.get(model_name) or {}), seed + fold_idx)
+            estimator = build_estimator(
+                model_name, dict(model_cfg.get(model_name) or {}), seed + fold_idx
+            )
             estimator.fit(X[tr], y_log[tr])
             pred_log = np.asarray(estimator.predict(X[va]), dtype=np.float64)
             pred_pa = inverse_transform_target(pred_log)
@@ -176,9 +168,7 @@ def cross_validate_models(
                 "mae_pa_mean": float(np.mean([row["mae_pa"] for row in per_fold])),
                 "r2_pa_mean": float(np.mean([row["r2_pa"] for row in per_fold])),
                 "mape_mean": float(np.mean([row["mape"] for row in per_fold])),
-                "rmse_log1p_mean": float(
-                    np.mean([row["rmse_log1p"] for row in per_fold])
-                ),
+                "rmse_log1p_mean": float(np.mean([row["rmse_log1p"] for row in per_fold])),
             },
         }
         results[model_name] = summary

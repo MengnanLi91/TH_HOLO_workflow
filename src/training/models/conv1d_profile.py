@@ -36,9 +36,7 @@ _ACTIVATIONS: dict[str, type[nn.Module]] = {
 def _resolve_activation(name: str) -> type[nn.Module]:
     key = str(name).lower()
     if key not in _ACTIVATIONS:
-        raise ValueError(
-            f"Unknown activation '{name}'. Expected one of {sorted(_ACTIVATIONS)}."
-        )
+        raise ValueError(f"Unknown activation '{name}'. Expected one of {sorted(_ACTIVATIONS)}.")
     return _ACTIVATIONS[key]
 
 
@@ -52,14 +50,22 @@ def _make_block(
     pad = dilation * (kernel_size - 1) // 2
     return nn.Sequential(
         nn.Conv1d(
-            channels, channels, kernel_size,
-            padding=pad, dilation=dilation, padding_mode="replicate",
+            channels,
+            channels,
+            kernel_size,
+            padding=pad,
+            dilation=dilation,
+            padding_mode="replicate",
         ),
         activation_cls(),
         nn.Dropout(dropout),
         nn.Conv1d(
-            channels, channels, kernel_size,
-            padding=pad, dilation=dilation, padding_mode="replicate",
+            channels,
+            channels,
+            kernel_size,
+            padding=pad,
+            dilation=dilation,
+            padding_mode="replicate",
         ),
         activation_cls(),
     )
@@ -93,7 +99,8 @@ if _PhysicsNeMoModule is not None:
             self.blocks = nn.ModuleList(
                 [
                     _make_block(
-                        hidden, kernel_size,
+                        hidden,
+                        kernel_size,
                         dilations[i % len(dilations)],
                         dropout,
                         activation_cls,

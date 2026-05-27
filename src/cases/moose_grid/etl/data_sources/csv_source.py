@@ -20,9 +20,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Filename pattern: {prefix}_out_{probe_name}_{timestep:04d}.csv
-_PROBE_PATTERN = re.compile(
-    r"^(?P<prefix>.+)_out_(?P<probe>.+?)_(?P<ts>\d+)\.csv$"
-)
+_PROBE_PATTERN = re.compile(r"^(?P<prefix>.+)_out_(?P<probe>.+?)_(?P<ts>\d+)\.csv$")
 
 
 def find_probe_files(sim_prefix: str, data_dir: Path) -> dict[str, list[Path]]:
@@ -59,9 +57,7 @@ def find_probe_files(sim_prefix: str, data_dir: Path) -> dict[str, list[Path]]:
 
     # Sort each probe's file list by time step index
     for probe_name in probes:
-        probes[probe_name].sort(
-            key=lambda p: int(_PROBE_PATTERN.match(p.name).group("ts"))
-        )
+        probes[probe_name].sort(key=lambda p: int(_PROBE_PATTERN.match(p.name).group("ts")))
 
     return probes
 
@@ -72,9 +68,7 @@ class CSVProbeSource:
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
 
-    def read_all(
-        self, sim_prefix: str
-    ) -> tuple[dict[str, np.ndarray], list[str]]:
+    def read_all(self, sim_prefix: str) -> tuple[dict[str, np.ndarray], list[str]]:
         """Read all probe CSVs for a simulation run.
 
         Returns:

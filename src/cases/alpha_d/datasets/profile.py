@@ -155,14 +155,14 @@ class AlphaDProfileDataset(Dataset):
 
     def subset_by_case_indices(self, case_indices) -> "AlphaDProfileDataset":
         case_indices = [int(i) for i in case_indices]
-        return AlphaDProfileDataset._from_inner(
-            self._inner.subset_by_case_indices(case_indices)
-        )
+        return AlphaDProfileDataset._from_inner(self._inner.subset_by_case_indices(case_indices))
 
     def add_baseline_to_encoded(self, encoded, row_mask=None, field_idx=None):
         """Delegate to the inner TabularPairDataset."""
         return self._inner.add_baseline_to_encoded(
-            encoded, row_mask=row_mask, field_idx=field_idx,
+            encoded,
+            row_mask=row_mask,
+            field_idx=field_idx,
         )
 
 
@@ -197,8 +197,7 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         if not cols_path.exists():
             raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
         input_columns = [
-            line.strip() for line in cols_path.read_text().splitlines()
-            if line.strip()
+            line.strip() for line in cols_path.read_text().splitlines() if line.strip()
         ]
         if not input_columns:
             raise ValueError(f"input_columns_file is empty: {cols_path}")
@@ -224,8 +223,6 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         downstream_weight=_opt_float("downstream_weight"),
         include_case_idx=bool(data_cfg.get("include_case_idx", False)),
         exclude_cases=exclude_cases,
-        local_velocity_normalization=bool(
-            data_cfg.get("local_velocity_normalization", False)
-        ),
+        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
         min_Dr=_opt_float("min_Dr"),
     )

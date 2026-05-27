@@ -48,6 +48,7 @@ import numpy as np
 @dataclass(frozen=True)
 class BaselineGeometry:
     """Per-case geometry constants required to evaluate the baseline."""
+
     Re: float
     Dr: float
     Lr: float
@@ -138,12 +139,12 @@ def integrated_baseline_delta_p(geom: BaselineGeometry) -> float:
 
     K_e is intentionally excluded — see the module docstring.
     """
-    Dr2 = geom.Dr ** 2
+    Dr2 = geom.Dr**2
     K_c = 0.5 * (1.0 - Dr2)
     Re_throat = geom.Re / geom.Dr
     f = _blasius_friction_factor(Re_throat)
     V_throat = geom.V_bulk / Dr2
-    q_throat = 0.5 * geom.rho * V_throat ** 2
+    q_throat = 0.5 * geom.rho * V_throat**2
     L_throat = geom.Lr * geom.outer_height_m
     D_throat = geom.D_big * geom.Dr
     return float((K_c + f * L_throat / D_throat) * q_throat)
