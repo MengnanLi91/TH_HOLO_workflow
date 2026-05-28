@@ -1,6 +1,7 @@
 # MULTIFID-TH
 
 [![pytest](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml/badge.svg)](https://github.com/MengnanLi91/multifid-th/actions/workflows/pytest.yml)
+[![docs](https://github.com/MengnanLi91/multifid-th/actions/workflows/docs.yml/badge.svg)](https://mengnanli91.github.io/multifid-th/)
 
 MULTIFID-TH — **multifidelity surrogates for thermal-hydraulics** — is a
 PhysicsNeMo-based ETL pipeline that converts MOOSE thermal-hydraulics
@@ -101,6 +102,11 @@ docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path
 See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full walkthrough.
 
 ## Documentation
+
+📘 **Rendered site:** <https://mengnanli91.github.io/multifid-th/> — auto-deployed from `main` by [.github/workflows/docs.yml](.github/workflows/docs.yml).
+
+The Markdown files below are the same source the site renders from; they
+read correctly both on GitHub and on the hosted site.
 
 ### User docs
 
