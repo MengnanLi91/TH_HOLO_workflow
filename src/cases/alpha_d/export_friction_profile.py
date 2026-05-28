@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import torch
 import zarr
 
 
@@ -142,6 +143,39 @@ def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
     raw_x = np.stack(columns, axis=0)  # (C, L)
     normed = (raw_x - x_mean[:, None]) / x_std[:, None]
     return normed[None, :, :].astype(np.float32)  # (1, C, L)
+
+
+def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.ndarray:
+    """Load Conv1D checkpoint, run forward pass on normalized input.
+
+    Returns array of shape (n_stations,) — the encoded target prediction
+    (signed_log1p_alpha_D in local-velocity basis if the model was trained
+    with local_velocity_normalization=True).
+    """
+    import physicsnemo  # delayed — heavy import; keep out of module scope
+
+    # Ensure the Conv1DProfile class is defined (it registers itself only
+    # when physicsnemo is importable) so from_checkpoint can find it.
+    import training.models.conv1d_profile  # noqa: F401
+
+    model = physicsnemo.Module.from_checkpoint(str(checkpoint_path))
+    model.eval()
+
+    with torch.no_grad():
+        x_t = torch.from_numpy(x_normed)
+        y_t = model(x_t)  # expected (1, n_outputs, n_stations) for Conv1D NCL
+
+    if y_t.dim() != 3 or y_t.shape[0] != 1:
+        raise RuntimeError(
+            f"Unexpected forward output shape: {tuple(y_t.shape)}; "
+            "expected (1, n_outputs, n_stations)."
+        )
+
+    output_columns = run_meta["data"].get("output_columns", [])
+    if len(output_columns) != 1:
+        raise RuntimeError(f"Phase 1 expects exactly one output column; got {output_columns}.")
+
+    return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
 def main(argv: list[str] | None = None) -> int:

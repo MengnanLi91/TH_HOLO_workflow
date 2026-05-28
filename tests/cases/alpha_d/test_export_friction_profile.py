@@ -137,6 +137,34 @@ def test_build_model_input_uses_run_meta_columns_and_norm_stats(tmp_path):
     np.testing.assert_allclose(x[0, 0, :], expected_ch0, atol=1e-5)
 
 
+TARGET_CKPT = Path(
+    "/data/lim2/projects/multifid-th/worktrees/integration/data/cases/train_conv1d/model.mdlus"
+)
+TARGET_RUN_META = TARGET_CKPT.parent / "run_meta.json"
+
+
+@pytest.mark.skipif(
+    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
+    reason="Checkpoint or target zarr not present.",
+)
+def test_forward_returns_signed_log1p_alpha_d_profile():
+    from cases.alpha_d.export_friction_profile import (
+        build_model_input,
+        forward,
+        load_case_from_zarr,
+    )
+
+    with TARGET_RUN_META.open() as fh:
+        run_meta = json.load(fh)
+    case = load_case_from_zarr(TARGET_ZARR)
+    x = build_model_input(case, run_meta)
+
+    y = forward(TARGET_CKPT, run_meta, x)
+
+    assert y.shape == (50,)  # one target field, 50 stations
+    assert np.all(np.isfinite(y))
+
+
 def test_build_model_input_rejects_unknown_column(tmp_path):
     from cases.alpha_d.export_friction_profile import (
         CaseData,
