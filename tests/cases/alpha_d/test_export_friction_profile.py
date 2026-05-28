@@ -212,3 +212,50 @@ def test_build_model_input_rejects_unknown_column():
 
     with pytest.raises(ValueError, match="totally_not_a_feature"):
         build_model_input(case, bad)
+
+
+def test_decode_to_bulk_alpha_d_inverts_encoder():
+    """For a synthetic case where we know what was encoded, decoding
+    should recover the original alpha_D values."""
+    from cases.alpha_d.export_friction_profile import decode_to_bulk_alpha_d
+
+    n = 50
+    # Synthetic ground-truth alpha_D in bulk basis
+    alpha_bulk_true = np.linspace(0.1, 5.0, n, dtype=np.float64)
+    d_local_over_D = np.full(n, 0.522, dtype=np.float64)
+
+    # Forward path: convert bulk -> local, then encode.
+    # alpha_local = alpha_bulk * (V_bulk / V_local)^2
+    # In ideal incompressible flow V_local/V_bulk = 1/(d_local/D)^2,
+    # so alpha_local = alpha_bulk * (d_local/D)^4
+    alpha_local = alpha_bulk_true * (d_local_over_D**4)
+    encoded = np.sign(alpha_local) * np.log1p(np.abs(alpha_local))
+
+    # Decoder should invert encoder + basis conversion.
+    decoded = decode_to_bulk_alpha_d(
+        encoded,
+        d_local_over_D=d_local_over_D,
+        local_velocity_normalization=True,
+        target_name="signed_log1p_alpha_D",
+    )
+
+    np.testing.assert_allclose(decoded, alpha_bulk_true, rtol=1e-5)
+
+
+def test_decode_to_bulk_alpha_d_without_local_normalization():
+    """When local_velocity_normalization=False, decoding is just the
+    inverse of the encoder, no basis conversion."""
+    from cases.alpha_d.export_friction_profile import decode_to_bulk_alpha_d
+
+    n = 50
+    alpha_true = np.linspace(0.5, 3.0, n, dtype=np.float64)
+    encoded = np.sign(alpha_true) * np.log1p(np.abs(alpha_true))
+
+    decoded = decode_to_bulk_alpha_d(
+        encoded,
+        d_local_over_D=np.full(n, 0.7, dtype=np.float64),  # ignored
+        local_velocity_normalization=False,
+        target_name="signed_log1p_alpha_D",
+    )
+
+    np.testing.assert_allclose(decoded, alpha_true, rtol=1e-6)

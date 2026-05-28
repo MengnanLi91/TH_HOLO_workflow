@@ -178,6 +178,32 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
+def decode_to_bulk_alpha_d(
+    encoded: np.ndarray,
+    *,
+    d_local_over_D: np.ndarray,
+    local_velocity_normalization: bool,
+    target_name: str,
+) -> np.ndarray:
+    """Invert the encoder; convert local-velocity basis to bulk basis if needed.
+
+    ``alpha_d_values_to_bulk`` handles both steps in one call:
+    1. Decodes the encoded target (e.g. signed_log1p) to physical alpha_D.
+    2. If ``local_velocity_normalization`` is True, converts from local-velocity
+       basis to bulk-velocity basis by dividing by ``(d_local/D)^4``.
+    """
+    from cases.alpha_d.physics.targets import alpha_d_values_to_bulk
+
+    encoded = np.asarray(encoded, dtype=np.float64)
+    alpha = alpha_d_values_to_bulk(
+        encoded,
+        target_name=target_name,
+        d_over_D=np.asarray(d_local_over_D, dtype=np.float64),
+        local_velocity_normalization=local_velocity_normalization,
+    )
+    return np.asarray(alpha, dtype=np.float64)
+
+
 def main(argv: list[str] | None = None) -> int:
     _args = parse_args(argv)
     raise NotImplementedError(
