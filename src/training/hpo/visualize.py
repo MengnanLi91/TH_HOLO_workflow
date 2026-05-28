@@ -25,8 +25,7 @@ def save_study_plots(study, output_dir: str | Path) -> list[str]:
         )
     except ImportError:
         logger.warning(
-            "optuna.visualization.matplotlib not available. "
-            "Install matplotlib for HPO plots."
+            "optuna.visualization.matplotlib not available. Install matplotlib for HPO plots."
         )
         return saved
 
@@ -45,6 +44,7 @@ def save_study_plots(study, output_dir: str | Path) -> list[str]:
             fig.savefig(str(path), dpi=150, bbox_inches="tight")
             saved.append(str(path))
             import matplotlib.pyplot as plt
+
             plt.close(fig)
         except Exception as exc:
             logger.warning("Could not generate %s: %s", name, exc)

@@ -90,9 +90,7 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
 
     # --- Outer train/test split (same as normal training) ---
     data_cfg = prepared["data_cfg"]
-    split_cfg = normalize_split_cfg(
-        dict(data_cfg.get("split") or {}), default_seed=seed
-    )
+    split_cfg = normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
     num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=num_cases,
@@ -140,7 +138,9 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
 
     logger.info(
         "HPO splits: %d train_inner, %d val, %d test (held out)",
-        len(train_inner_idx), len(val_idx), len(test_idx),
+        len(train_inner_idx),
+        len(val_idx),
+        len(test_idx),
     )
 
     # --- Create study and objective ---

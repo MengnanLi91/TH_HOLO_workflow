@@ -1,4 +1,4 @@
-"""MooseDataset: PyTorch Dataset over processed Zarr simulation stores.
+"""MOOSEDataset: PyTorch Dataset over processed Zarr simulation stores.
 
 Supports three representation modes for different PhysicsNeMo model families:
 
@@ -31,8 +31,9 @@ If time_idx is given (≥ 0), only that time step is returned (T-dim removed).
 
 Denormalization
 ───────────────
-    dataset.denormalize("pressure", tensor)
-returns a tensor in original physical units.
+
+Call ``dataset.denormalize("pressure", tensor)`` to recover a tensor in
+original physical units.
 """
 
 import json
@@ -46,11 +47,11 @@ from torch.utils.data import Dataset
 logger = logging.getLogger(__name__)
 
 
-class MooseDataset(Dataset):
+class MOOSEDataset(Dataset):
     """Dataset over a directory of processed MOOSE Zarr stores.
 
     Args:
-        zarr_dir  : Path to the directory containing *.zarr stores.
+        zarr_dir  : Path to the directory containing ``*.zarr`` stores.
         mode      : One of "graph", "point_cloud", "grid".
         time_idx  : If ≥ 0, return only this time step (removes T dimension).
                     If -1 (default), return all time steps.
@@ -75,7 +76,7 @@ class MooseDataset(Dataset):
             raise FileNotFoundError(f"No .zarr stores found in {self.zarr_dir}")
 
         logger.info(
-            "MooseDataset: found %d simulation(s), mode='%s'",
+            "MOOSEDataset: found %d simulation(s), mode='%s'",
             len(self.sim_paths),
             mode,
         )
@@ -122,11 +123,9 @@ class MooseDataset(Dataset):
     # Mode-specific loaders
     # ------------------------------------------------------------------
 
-    def _load_graph(
-        self, root, field_names: list[str], probe_columns: list[str]
-    ) -> dict:
+    def _load_graph(self, root, field_names: list[str], probe_columns: list[str]) -> dict:
         mesh = root["mesh"]
-        coords = to_tensor(mesh["coords"])                   # [N, D]
+        coords = to_tensor(mesh["coords"])  # [N, D]
         connectivity = torch.from_numpy(np.array(mesh["connectivity"], dtype=np.int64))
         edge_src = torch.from_numpy(np.array(mesh["edge_src"], dtype=np.int64))
         edge_dst = torch.from_numpy(np.array(mesh["edge_dst"], dtype=np.int64))
@@ -141,10 +140,7 @@ class MooseDataset(Dataset):
 
         # Probes
         probes_grp = root["probes"]
-        probe_data = {
-            name: to_tensor(probes_grp[name])
-            for name in probes_grp.array_keys()
-        }
+        probe_data = {name: to_tensor(probes_grp[name]) for name in probes_grp.array_keys()}
 
         return {
             "coords": coords,
@@ -220,6 +216,7 @@ class MooseDataset(Dataset):
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
+
 def to_tensor(arr) -> torch.Tensor:
     """Convert a zarr array to a float32 torch tensor."""
     return torch.from_numpy(np.array(arr, dtype=np.float32))
@@ -228,7 +225,7 @@ def to_tensor(arr) -> torch.Tensor:
 def load_fields(fields_grp, field_names: list[str]) -> torch.Tensor:
     """Load and stack element fields from a zarr group → [T, E, F]."""
     arrays = [
-        to_tensor(fields_grp[name]).unsqueeze(-1)   # [T, E, 1]
+        to_tensor(fields_grp[name]).unsqueeze(-1)  # [T, E, 1]
         for name in field_names
         if name in fields_grp
     ]
@@ -262,7 +259,7 @@ def elem_to_node(
     K = connectivity.shape[1]
 
     # Flatten leading dims for scatter
-    flat_fields = elem_fields.reshape(-1, E, F)   # [B, E, F]
+    flat_fields = elem_fields.reshape(-1, E, F)  # [B, E, F]
     B = flat_fields.shape[0]
 
     # node_fields accumulator

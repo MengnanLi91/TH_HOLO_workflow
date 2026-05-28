@@ -1,14 +1,14 @@
 """Dataset wrappers and split helpers for training workflows."""
 
-import re as _re
 import random
+import re as _re
 from collections import defaultdict
 from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset
 
-from dataset.moose_dataset import MooseDataset
+from dataset.moose_dataset import MOOSEDataset
 from training import _require_pyg
 
 
@@ -31,14 +31,12 @@ def resolve_time_idx(time_idx: int, num_steps: int, label: str) -> int:
     """Resolve negative time indexing and validate the index."""
     resolved = time_idx if time_idx >= 0 else num_steps + time_idx
     if resolved < 0 or resolved >= num_steps:
-        raise ValueError(
-            f"{label}={time_idx} is out of range for {num_steps} time step(s)."
-        )
+        raise ValueError(f"{label}={time_idx} is out of range for {num_steps} time step(s).")
     return resolved
 
 
 class GridPairDataset(Dataset):
-    """Build supervised grid pairs `(x, y)` from MooseDataset grid samples."""
+    """Build supervised grid pairs `(x, y)` from MOOSEDataset grid samples."""
 
     def __init__(
         self,
@@ -49,7 +47,7 @@ class GridPairDataset(Dataset):
         target_time_idx: int,
     ):
         self.zarr_dir = Path(zarr_dir)
-        self.base = MooseDataset(zarr_dir=self.zarr_dir, mode="grid", time_idx=-1)
+        self.base = MOOSEDataset(zarr_dir=self.zarr_dir, mode="grid", time_idx=-1)
         reference = self.base[0]
 
         self.field_names = list(reference["field_names"])
@@ -59,23 +57,18 @@ class GridPairDataset(Dataset):
         self.input_fields = input_fields or list(self.field_names)
         self.output_fields = output_fields or list(self.input_fields)
 
-        missing_inputs = [
-            name for name in self.input_fields if name not in self.field_to_index
-        ]
+        missing_inputs = [name for name in self.input_fields if name not in self.field_to_index]
         if missing_inputs:
             raise ValueError(f"Unknown input field(s): {missing_inputs}")
 
-        missing_outputs = [
-            name for name in self.output_fields if name not in self.field_to_index
-        ]
+        missing_outputs = [name for name in self.output_fields if name not in self.field_to_index]
         if missing_outputs:
             raise ValueError(f"Unknown output field(s): {missing_outputs}")
 
         grid = reference["grid_fields"]
         if grid.ndim != 4:
             raise ValueError(
-                "Expected grid_fields with shape [T, Nx, Ny, F], "
-                f"got {tuple(grid.shape)}"
+                f"Expected grid_fields with shape [T, Nx, Ny, F], got {tuple(grid.shape)}"
             )
 
         self.num_time_steps = int(grid.shape[0])
@@ -104,8 +97,7 @@ class GridPairDataset(Dataset):
         grid = sample["grid_fields"]
         if grid.ndim != 4:
             raise ValueError(
-                "Expected grid_fields with shape [T, Nx, Ny, F], "
-                f"got {tuple(grid.shape)}"
+                f"Expected grid_fields with shape [T, Nx, Ny, F], got {tuple(grid.shape)}"
             )
 
         spatial_shape = (int(grid.shape[1]), int(grid.shape[2]))
@@ -130,7 +122,7 @@ class GridPairDataset(Dataset):
 
 
 class GraphPairDataset(Dataset):
-    """Build supervised PyG Data objects from MooseDataset graph samples."""
+    """Build supervised PyG Data objects from MOOSEDataset graph samples."""
 
     def __init__(
         self,
@@ -145,7 +137,7 @@ class GraphPairDataset(Dataset):
 
         self._pyg_data_cls = Data
         self.zarr_dir = Path(zarr_dir)
-        self.base = MooseDataset(zarr_dir=self.zarr_dir, mode="graph", time_idx=-1)
+        self.base = MOOSEDataset(zarr_dir=self.zarr_dir, mode="graph", time_idx=-1)
         reference = self.base[0]
 
         self.field_names = list(reference["field_names"])
@@ -155,30 +147,23 @@ class GraphPairDataset(Dataset):
         self.input_fields = input_fields or list(self.field_names)
         self.output_fields = output_fields or list(self.input_fields)
 
-        missing_inputs = [
-            name for name in self.input_fields if name not in self.field_to_index
-        ]
+        missing_inputs = [name for name in self.input_fields if name not in self.field_to_index]
         if missing_inputs:
             raise ValueError(f"Unknown input field(s): {missing_inputs}")
 
-        missing_outputs = [
-            name for name in self.output_fields if name not in self.field_to_index
-        ]
+        missing_outputs = [name for name in self.output_fields if name not in self.field_to_index]
         if missing_outputs:
             raise ValueError(f"Unknown output field(s): {missing_outputs}")
 
         node_fields = reference["node_fields"]
         if node_fields.ndim != 3:
             raise ValueError(
-                "Expected node_fields with shape [T, N, F], "
-                f"got {tuple(node_fields.shape)}"
+                f"Expected node_fields with shape [T, N, F], got {tuple(node_fields.shape)}"
             )
 
         coords = reference["coords"]
         if coords.ndim != 2:
-            raise ValueError(
-                f"Expected coords with shape [N, D], got {tuple(coords.shape)}"
-            )
+            raise ValueError(f"Expected coords with shape [N, D], got {tuple(coords.shape)}")
 
         self.num_time_steps = int(node_fields.shape[0])
         self.coord_dim = int(coords.shape[1])
@@ -208,8 +193,7 @@ class GraphPairDataset(Dataset):
         node_fields = sample["node_fields"]
         if node_fields.ndim != 3:
             raise ValueError(
-                "Expected node_fields with shape [T, N, F], "
-                f"got {tuple(node_fields.shape)}"
+                f"Expected node_fields with shape [T, N, F], got {tuple(node_fields.shape)}"
             )
 
         coords = sample["coords"].float().contiguous()
@@ -304,10 +288,7 @@ def _stratified_split(
         if len(sorted_unique) <= n:
             mapping = {v: i for i, v in enumerate(sorted_unique)}
             return [mapping[v] for v in values]
-        edges = [
-            sorted_unique[int(len(sorted_unique) * i / n)]
-            for i in range(n)
-        ]
+        edges = [sorted_unique[int(len(sorted_unique) * i / n)] for i in range(n)]
         bins = []
         for v in values:
             b = n - 1
@@ -358,13 +339,9 @@ def split_indices(
 ) -> tuple[list[int], list[int], list[str], list[str]]:
     """Return split indices and simulation-name lists."""
     if num_cases != len(sim_names):
-        raise ValueError(
-            f"sim_names length {len(sim_names)} does not match num_cases {num_cases}."
-        )
+        raise ValueError(f"sim_names length {len(sim_names)} does not match num_cases {num_cases}.")
     if num_cases < 2:
-        raise ValueError(
-            f"Need at least 2 cases to split train/test, but found {num_cases}."
-        )
+        raise ValueError(f"Need at least 2 cases to split train/test, but found {num_cases}.")
 
     strategy = str(split_cfg.get("strategy", "sequential"))
 
@@ -420,9 +397,7 @@ def split_indices(
 
         overlap = sorted(set(train_names).intersection(test_names))
         if overlap:
-            raise ValueError(
-                f"Split files overlap on simulation name(s): {overlap}."
-            )
+            raise ValueError(f"Split files overlap on simulation name(s): {overlap}.")
 
         train_idx = sorted({sim_to_idx[name] for name in train_names})
         test_idx = sorted({sim_to_idx[name] for name in test_names})

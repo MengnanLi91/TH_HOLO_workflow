@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 torch = pytest.importorskip("torch")
 _ = torch
 

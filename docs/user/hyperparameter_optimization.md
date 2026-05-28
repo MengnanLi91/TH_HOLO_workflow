@@ -33,20 +33,20 @@ with a non-empty `search_space`, `train.py` automatically runs Optuna
 HPO first, then retrains the best configuration.
 
 ```bash
-# HPO + retrain best (default for alpha_d_mlp)
-cd src && python train.py --config-name alpha_d_mlp
+# HPO + retrain best (default for the alpha-D MLP)
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp
 
 # Skip HPO, train directly (power user)
-cd src && python train.py --config-name alpha_d_mlp hpo=null
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
 
 # Quick HPO test
-cd src && python train.py --config-name alpha_d_mlp hpo.n_trials=3 training.epochs=2
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo.n_trials=3 training.epochs=2
 ```
 
 All commands run from `src/` inside the container.  From the host:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name alpha_d_mlp'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
 ## Add HPO to a training config
@@ -55,7 +55,7 @@ Add an `hpo` section directly to the model's training config.  When the
 section is present, `train.py` runs HPO automatically.  Set `hpo: null`
 on the CLI to bypass it.
 
-### Example: `hpo` section in `src/config/alpha_d_mlp.yaml`
+### Example: `hpo` section in `src/cases/alpha_d/configs/train_mlp.yaml`
 
 ```yaml
 defaults:
@@ -202,26 +202,26 @@ The same validation split is used across all trials for fair comparison.
 ### Default: HPO + retrain best
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp
 ```
 
 ### Skip HPO (power user, direct training)
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp hpo=null
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null
 ```
 
 ### Quick test run
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp \
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
     hpo.n_trials=3 training.epochs=2
 ```
 
 ### HPO only, no retrain
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp hpo.retrain_best=false
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo.retrain_best=false
 ```
 
 ### Resume a previous study
@@ -230,7 +230,7 @@ Studies are automatically resumed when `hpo.load_if_exists` is true
 (default) and the storage file exists.  Simply re-run the same command:
 
 ```bash
-cd src && python train.py --config-name alpha_d_mlp
+cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp
 ```
 
 New trials are added to the existing study.
@@ -271,7 +271,7 @@ No code changes are needed.  Add an `hpo` section to the model's
 training config:
 
 ```yaml
-# src/config/fno.yaml  (add this at the end)
+# src/cases/moose_grid/configs/train_fno.yaml  (add this at the end)
 hpo:
   study_name: fno_hpo
   n_trials: 50
@@ -296,8 +296,8 @@ hpo:
 Then run:
 
 ```bash
-cd src && python train.py --config-name fno          # HPO + retrain
-cd src && python train.py --config-name fno hpo=null # direct training
+cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno          # HPO + retrain
+cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno hpo=null # direct training
 ```
 
 ## Custom experiment classes
@@ -319,9 +319,9 @@ path is used.
   that just need more epochs to converge.
 - If you change the search space definition, start a fresh study by
   choosing a new `hpo.study_name` or deleting the old `.db` file.
-- After finishing an HPO run, use the
-  [version comparison tool](version_comparison.md) to review progress
-  and check for regressions across versions.
+- After finishing an HPO run, review the optimization history and
+  parameter-importance plots in `hpo_results/` to check progress and
+  watch for regressions across studies.
 - Before tuning ``data.min_Dr`` or ``data.exclude_cases``, preview the
   resulting distribution with
   [`analyze_case_distribution.py`](case_distribution_analysis.md) so

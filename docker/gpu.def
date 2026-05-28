@@ -12,18 +12,18 @@ From: python:3.11-slim
     base image is needed.  Works on CPU without --nv; uses NVIDIA GPU with --nv.
 
     Build:
-        apptainer build th-holo-gpu.sif docker/gpu.def
+        apptainer build multifid-th-gpu.sif docker/gpu.def
 
     Run with GPU passthrough:
-        apptainer exec --nv th-holo-gpu.sif python train.py --config-name fno
-        apptainer shell --nv th-holo-gpu.sif
+        apptainer exec --nv multifid-th-gpu.sif python train.py --config-name fno
+        apptainer shell --nv multifid-th-gpu.sif
 
     Run CPU-only (no --nv needed):
-        apptainer exec th-holo-gpu.sif python train.py --config-name fno
-        apptainer shell th-holo-gpu.sif
+        apptainer exec multifid-th-gpu.sif python train.py --config-name fno
+        apptainer shell multifid-th-gpu.sif
 
     Verify GPU access inside the container:
-        apptainer exec --nv th-holo-gpu.sif python -c \
+        apptainer exec --nv multifid-th-gpu.sif python -c \
           "import torch; print(torch.cuda.get_device_name(0))"
 
 %files

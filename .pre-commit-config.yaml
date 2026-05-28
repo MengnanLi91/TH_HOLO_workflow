@@ -1,0 +1,32 @@
+# Pre-commit hooks for MULTIFID-TH.
+#
+# Install once per clone, into a dedicated Conda env (avoids polluting
+# the ETL / training envs; the multifid-th Apptainer image is also a
+# poor fit because it's read-only at runtime):
+#     conda create -n multifid-th-dev python=3.11 -y
+#     conda activate multifid-th-dev
+#     pip install pre-commit ruff==0.14.5
+#     pre-commit install
+#
+# After that, the hooks run automatically on every `git commit`. To run
+# them manually across the whole repo (e.g. after pulling a config bump):
+#     pre-commit run --all-files
+#
+# Skip hooks for one commit only if you really need to:
+#     git commit --no-verify             (avoid as a default)
+#
+# Bump `rev` below to upgrade ruff. The version must match (or be newer
+# than) the local ruff install so behavior is consistent between CLI and
+# hook runs. See docs/dev/code_style.md for the full setup guide.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      # Linter — runs `ruff check --fix` on staged files. Reads config
+      # from [tool.ruff.lint] in pyproject.toml.
+      - id: ruff
+        args: [--fix]
+      # Formatter — runs `ruff format` on staged files. Reads config
+      # from [tool.ruff.format] in pyproject.toml.
+      - id: ruff-format

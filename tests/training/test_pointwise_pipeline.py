@@ -19,8 +19,13 @@ zarr = pytest.importorskip("zarr")
 # ---------------------------------------------------------------------------
 
 FEATURE_NAMES = [
-    "log10_Re", "Dr", "Lr", "z_hat", "d_local_over_D",
-    "V_local_over_V_bulk", "is_throat",
+    "log10_Re",
+    "Dr",
+    "Lr",
+    "z_hat",
+    "d_local_over_D",
+    "V_local_over_V_bulk",
+    "is_throat",
 ]
 TARGET_NAMES = ["log_alpha_D"]
 NUM_CASES = 10
@@ -39,12 +44,8 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-            np.float32
-        )
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-            np.float32
-        )
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -95,17 +96,29 @@ class TestTabularPairDataset:
         assert x.shape == (2,)
 
     def test_engineered_log10_re_local_feature(self, synthetic_zarr_dir: Path) -> None:
+        # Engineered features are case-specific; alpha-D supplies the
+        # (names, builder) pair via cases.alpha_d.feature_data.
+        from cases.alpha_d.feature_data import engineered_features_spec
         from training.datasets_tabular import TabularPairDataset
+
+        eng_names, eng_builder = engineered_features_spec()
 
         ds = TabularPairDataset(
             zarr_dir=synthetic_zarr_dir,
             input_columns=["log10_Re_local"],
+            engineered_feature_names=eng_names,
+            engineered_feature_builder=eng_builder,
         )
 
         # log10_Re_local = log10_Re + log10(V_local/V_bulk) + log10(d_local/D)
         # using local V (from the simulation field) and local D, with
         # nu_molecular constant per case.
-        raw = TabularPairDataset(zarr_dir=synthetic_zarr_dir, normalize=False)
+        raw = TabularPairDataset(
+            zarr_dir=synthetic_zarr_dir,
+            normalize=False,
+            engineered_feature_names=eng_names,
+            engineered_feature_builder=eng_builder,
+        )
         log10_re_idx = raw._all_feature_names.index("log10_Re")
         d_over_d_idx = raw._all_feature_names.index("d_local_over_D")
         v_over_v_idx = raw._all_feature_names.index("V_local_over_V_bulk")
@@ -127,6 +140,19 @@ class TestTabularPairDataset:
         sub = ds.subset_by_case_indices([0, 1, 2])
         assert len(sub) == 3 * ROWS_PER_CASE
         assert len(sub.sim_names) == 3
+
+    def test_default_has_no_engineered_features(self, synthetic_zarr_dir: Path) -> None:
+        """Phase 1.5: TabularPairDataset is engineered-feature-agnostic.
+
+        Without an explicit engineered_feature_names + builder, the dataset
+        must not synthesize any extra columns — `_all_feature_names` equals
+        the raw feature names from the Zarr metadata.
+        """
+        from training.datasets_tabular import TabularPairDataset
+
+        ds = TabularPairDataset(zarr_dir=synthetic_zarr_dir)
+        assert ds._all_feature_names == list(FEATURE_NAMES)
+        assert ds._base_feature_names == list(FEATURE_NAMES)
 
     def test_in_out_features(self, synthetic_zarr_dir: Path) -> None:
         from training.datasets_tabular import TabularPairDataset
@@ -226,7 +252,9 @@ class TestPointwiseAdapter:
         assert ds.normalize is True
         assert torch.is_tensor(ds.norm_stats["x_mean"])
 
-    def test_build_dataset_prefers_input_columns_file(self, synthetic_zarr_dir: Path, tmp_path: Path) -> None:
+    def test_build_dataset_prefers_input_columns_file(
+        self, synthetic_zarr_dir: Path, tmp_path: Path
+    ) -> None:
         from training.adapters import PointwiseAdapter
 
         cols_path = tmp_path / "selected_features.txt"
@@ -263,8 +291,20 @@ class TestPointwisePlotSelection:
         selected = select_best_worst_pointwise_cases(extended, ["log_alpha_D"])
 
         assert selected == [
-            {"label": "best", "case": "case_best", "field": "log_alpha_D", "rmse": 0.1, "median_relative_error": None},
-            {"label": "worst", "case": "case_worst", "field": "log_alpha_D", "rmse": 1.5, "median_relative_error": None},
+            {
+                "label": "best",
+                "case": "case_best",
+                "field": "log_alpha_D",
+                "rmse": 0.1,
+                "median_relative_error": None,
+            },
+            {
+                "label": "worst",
+                "case": "case_worst",
+                "field": "log_alpha_D",
+                "rmse": 1.5,
+                "median_relative_error": None,
+            },
         ]
 
 

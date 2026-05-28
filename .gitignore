@@ -5,6 +5,14 @@ data/
 src/outputs/
 outputs/
 
+# Python build / packaging artifacts
+*.egg-info/
+build/
+dist/
+
+# Sphinx build output
+docs/_build/
+
 # Environment files
 .env
 .env.local
@@ -22,3 +30,4 @@ docker/certs/*.cer
 # agents
 .claude/
 CLAUDE.md
+src/logs.log

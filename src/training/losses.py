@@ -1,9 +1,10 @@
 """Loss registry for supervised one-step training."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 
 import torch
-
 
 LossFn = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 

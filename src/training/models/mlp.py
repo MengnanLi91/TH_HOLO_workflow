@@ -28,9 +28,7 @@ class _InterLayerDropout(torch.nn.Module):
         self.model = model
         self.p = dropout
         n_layers = len(model.layers)
-        self.drops = torch.nn.ModuleList(
-            [torch.nn.Dropout(dropout) for _ in range(n_layers)]
-        )
+        self.drops = torch.nn.ModuleList([torch.nn.Dropout(dropout) for _ in range(n_layers)])
 
     def forward(self, x):
         x_skip = None
@@ -57,9 +55,7 @@ class _InterLayerDropout(torch.nn.Module):
 
 
 def build(model_cfg: dict, dataset_info: dict):
-    fc_cls = import_physicsnemo_attr(
-        "physicsnemo.models.mlp.fully_connected", "FullyConnected"
-    )
+    fc_cls = import_physicsnemo_attr("physicsnemo.models.mlp.fully_connected", "FullyConnected")
     resolved = {
         "in_features": dataset_info["in_features"],
         "out_features": dataset_info["out_features"],

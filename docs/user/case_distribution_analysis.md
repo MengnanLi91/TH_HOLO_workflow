@@ -53,7 +53,7 @@ cd src && python analyze_case_distribution.py \
 From the host with Apptainer:
 
 ```bash
-apptainer exec th-holo-gpu.sif bash -c \
+apptainer exec multifid-th-gpu.sif bash -c \
     'cd src && python analyze_case_distribution.py \
         --run-meta ../data/models/case_pressure_drop/run_meta.json'
 ```
@@ -79,7 +79,7 @@ cd src && python analyze_case_distribution.py \
 ```
 
 Mirrors the filtering logic in ``TabularPairDataset``.  Useful when
-deciding the ``data.min_Dr`` value in ``alpha_d_mlp.yaml``: run it with
+deciding the ``data.min_Dr`` value in ``cases/alpha_d/configs/train_mlp.yaml``: run it with
 different thresholds and see which bins disappear.
 
 ### Exclude specific problematic cases
@@ -147,8 +147,8 @@ One table per axis (``Dr``, ``Re``, ``Lr``).  Columns:
 - **Support** -- coloured marker classifying the training support.
 
 Bins flagged ``⚠ very low`` or ``✗ none`` are likely to show outsized
-evaluation errors.  Cross-reference them with the
-[version comparison tool](version_comparison.md) to confirm.
+evaluation errors.  Cross-reference them with your evaluation-metrics
+review workflow to confirm.
 
 ## Typical workflow
 
@@ -188,6 +188,3 @@ design parameter to the simulation campaign:
 - [Hyperparameter Optimization](hyperparameter_optimization.md) --
   configuring ``data.min_Dr`` and ``data.exclude_cases`` filters that
   this tool previews.
-- [Version Comparison](version_comparison.md) -- review evaluation
-  metrics across versions; cross-reference worst-case lists with the
-  distribution tables produced here.

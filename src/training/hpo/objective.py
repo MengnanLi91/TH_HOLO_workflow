@@ -1,6 +1,5 @@
 """Optuna objective function for hyperparameter optimization."""
 
-import random
 from collections.abc import Callable
 from typing import Any
 
@@ -12,7 +11,6 @@ from training.hpo.search_space import apply_overrides, sample_from_search_space
 from training.losses import get_loss_fn
 from training.models import get_build_fn_and_adapter
 from training.runner import (
-    _build_case_geometry,
     build_experiment,
     compute_val_loss,
     set_seed,
@@ -91,12 +89,6 @@ def make_objective(
 
         # 4. Build experiment (respects training.experiment entrypoint)
         experiment_kwargs: dict[str, Any] = {}
-        consistency_weight = float(training_cfg.get("consistency_weight", 0.0))
-        if consistency_weight > 0:
-            experiment_kwargs["consistency_weight"] = consistency_weight
-        delta_p_weight = float(training_cfg.get("delta_p_weight", 0.0))
-        if delta_p_weight > 0:
-            experiment_kwargs["delta_p_weight"] = delta_p_weight
         experiment = build_experiment(
             experiment_entrypoint=training_cfg.get("experiment"),
             model=model,
@@ -106,24 +98,7 @@ def make_objective(
             device=device,
             **experiment_kwargs,
         )
-        if hasattr(train_ds, "output_columns") and getattr(train_ds, "output_columns", None):
-            experiment.alpha_d_target_name = str(train_ds.output_columns[0])
-
-        # Inject case geometry for delta_p integral loss (training side)
-        if delta_p_weight > 0 and hasattr(train_ds, "_case_meta"):
-            experiment.case_geometry = _build_case_geometry(train_ds, device)
-            experiment.local_velocity_normalization = getattr(
-                train_ds, "local_velocity_normalization", False
-            )
-
-        # Val-side Δp geometry: needed for the HPO objective's Δp term
-        # so a delta_p_weight=0 trial is still penalised for poor Δp.
-        delta_p_obj_weight = float(hpo_cfg["delta_p_objective_weight"])
-        if hasattr(experiment, "val_case_geometry") and hasattr(val_ds, "_case_meta"):
-            experiment.val_case_geometry = _build_case_geometry(val_ds, device)
-            experiment.local_velocity_normalization = getattr(
-                train_ds, "local_velocity_normalization", False
-            )
+        experiment.prepare_for_training(train_ds, val_ds, device)
 
         # 5. Build DataLoaders
         epochs = int(training_cfg.get("epochs", 20))
@@ -171,8 +146,7 @@ def make_objective(
         val_loss = float("nan")
         for epoch in range(1, epochs + 1):
             train_one_epoch(experiment, train_loader)
-            if hasattr(experiment, "compute_delta_p_loss_step"):
-                experiment.compute_delta_p_loss_step()
+            experiment.on_epoch_end_extra_step()
             if scheduler is not None:
                 scheduler.step()
             val_loss = compute_val_loss(experiment, val_loader)
@@ -181,13 +155,7 @@ def make_objective(
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-        # Combined HPO objective: encoded val loss + λ · val Δp metric.
-        # The Δp metric is mean squared log-Δp error on the val set,
-        # independent of training.delta_p_weight so trials at
-        # delta_p_weight=0 are still penalised for poor Δp.
-        val_dp_term = experiment.compute_val_delta_p_metric()
         trial.set_user_attr("val_loss", float(val_loss))
-        trial.set_user_attr("val_delta_p_metric", float(val_dp_term))
-        return float(val_loss) + delta_p_obj_weight * val_dp_term
+        return float(val_loss)
 
     return objective

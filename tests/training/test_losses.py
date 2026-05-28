@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-
 torch = pytest.importorskip("torch")
 
 from training.losses import get_loss_fn

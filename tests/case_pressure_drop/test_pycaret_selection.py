@@ -3,19 +3,20 @@
 PyCaret itself is optional; the bridge tests don't import it. The full
 pipeline test is gated on ``pytest.importorskip('pycaret')``.
 """
+
 import json
 import math
 from pathlib import Path
 
-import numpy as np
 import pytest
 
-from case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
-from case_pressure_drop.pycaret_selection import (
+np = pytest.importorskip("numpy")
+
+from cases.case_pressure_drop.data import CANDIDATE_FEATURES, CasePressureDropDataset
+from cases.case_pressure_drop.pycaret_selection import (
     build_dataframe,
     enforce_candidate_set,
 )
-
 
 # ---------------------------------------------------------------------------
 # Synthetic case zarr fixture (same shape as test_workflow.py)
@@ -28,11 +29,7 @@ def _fmt_param(value: float) -> str:
 
 
 def _case_name(re_value: float, dr_value: float, lr_value: float) -> str:
-    return (
-        f"Re_{int(round(re_value))}"
-        f"__Dr_{_fmt_param(dr_value)}"
-        f"__Lr_{_fmt_param(lr_value)}"
-    )
+    return f"Re_{int(round(re_value))}__Dr_{_fmt_param(dr_value)}__Lr_{_fmt_param(lr_value)}"
 
 
 def _delta_p_formula(re_value: float, dr_value: float, lr_value: float) -> float:
@@ -144,7 +141,7 @@ def test_enforce_candidate_set_rejects_out_of_pool():
 
 def test_workflow_dispatch_rejects_unknown_method(synthetic_case_dataset: Path) -> None:
     """Workflow should raise when feature_selection.method is unknown."""
-    from case_pressure_drop.workflow import train_case_pressure_drop
+    from cases.case_pressure_drop.workflow import train_case_pressure_drop
 
     cfg = {
         "data": {"zarr_dir": str(synthetic_case_dataset)},

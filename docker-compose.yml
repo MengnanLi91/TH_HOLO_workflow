@@ -13,7 +13,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: th-holo-physicsnemo:dev
+    image: multifid-th-physicsnemo:dev
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     working_dir: /workspace
     volumes:
@@ -37,7 +37,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: th-holo-physicsnemo:cpu
+    image: multifid-th-physicsnemo:cpu
     platform: ${DOCKER_PLATFORM:-linux/arm64}
     working_dir: /workspace
     volumes:
@@ -63,7 +63,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: th-holo-physicsnemo:gpu
+    image: multifid-th-physicsnemo:gpu
     platform: linux/amd64
     working_dir: /workspace
     volumes:
@@ -96,7 +96,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    image: th-holo-physicsnemo:ngc
+    image: multifid-th-physicsnemo:ngc
     platform: linux/amd64
     working_dir: /workspace
     volumes:

@@ -53,16 +53,24 @@ in the [Apptainer section](#build-and-run-with-apptainer-hpc) below.
 `etl-dev` and `etl` run on Apple Silicon (`arm64`) and Intel (`amd64`) without a GPU.
 `etl-gpu` and `etl-ngc` are `amd64`-only and support NVIDIA GPUs.
 
+```{note}
+None of these images include MOOSE itself — they ship the Python /
+PhysicsNeMo stack used to consume MOOSE outputs. To produce the `.e`
+files the ETL reads, see [Running MOOSE Simulations](running_moose.md),
+which documents the separate `moose-dev-openmpi-x86_64.sif` Apptainer
+image and links to MOOSE's official install paths.
+```
+
 ## Build and run with Docker Compose
 
 ### Option A: direct run from host terminal
 
 ```bash
 docker compose build etl-dev
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name lid_driven'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py'
 ```
 
-Replace `etl-dev` with `etl` or `etl-ngc` if needed.
+`cases/moose_grid/run_etl.py` defaults to `cases/moose_grid/configs/etl.yaml` (the lid-driven flow). Replace `etl-dev` with `etl` or `etl-ngc` if needed.
 
 ## Build and run with Apptainer (HPC)
 
@@ -83,16 +91,16 @@ This loads `APPTAINER_BIND` and any proxy settings into your shell so subsequent
 
 ```bash
 # Minimal dev image (ETL only, ~300 MB)
-apptainer build th-holo-dev.sif docker/dev.def
+apptainer build multifid-th-dev.sif docker/dev.def
 
 # Full CPU image with PhysicsNeMo (~1 GB)
-apptainer build th-holo-cpu.sif docker/physicsnemo-cpu.def
+apptainer build multifid-th-cpu.sif docker/physicsnemo-cpu.def
 
 # CUDA 12.4 GPU image — CPU-only without --nv, GPU with --nv (~5 GB)
-apptainer build th-holo-gpu.sif docker/gpu.def
+apptainer build multifid-th-gpu.sif docker/gpu.def
 
 # NGC image — CPU-only without --nv, GPU with --nv (~13 GB)
-apptainer build th-holo-ngc.sif docker/ngc.def
+apptainer build multifid-th-ngc.sif docker/ngc.def
 ```
 
 ### Step 3: Run with project folder bound
@@ -103,12 +111,12 @@ Bind your project directory so the container can read inputs and write outputs:
 # CPU-only
 apptainer run \
   --bind /path/to/project:/path/to/project \
-  th-holo-cpu.sif
+  multifid-th-cpu.sif
 
 # GPU (--nv exposes host NVIDIA drivers to the container)
 apptainer run --nv \
   --bind /path/to/project:/path/to/project \
-  th-holo-gpu.sif
+  multifid-th-gpu.sif
 ```
 
 Your `$HOME` directory is auto-bound by Apptainer, so files under `$HOME` are
@@ -120,20 +128,20 @@ always accessible without an explicit `--bind`.
 # CPU
 apptainer exec \
   --bind /path/to/project:/path/to/project \
-  th-holo-cpu.sif \
-  bash -c 'cd /path/to/src && python run_etl.py --config-name lid_driven'
+  multifid-th-cpu.sif \
+  bash -c 'cd /path/to/src && python cases/moose_grid/run_etl.py'
 
 # GPU
 apptainer exec --nv \
   --bind /path/to/project:/path/to/project \
-  th-holo-gpu.sif \
-  bash -c 'cd /path/to/src && python train.py --config-name fno'
+  multifid-th-gpu.sif \
+  bash -c 'cd /path/to/src && python train.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 ### Verify GPU access inside the container
 
 ```bash
-apptainer exec --nv th-holo-gpu.sif python -c \
+apptainer exec --nv multifid-th-gpu.sif python -c \
   "import torch; print(torch.cuda.get_device_name(0))"
 ```
 
@@ -148,14 +156,14 @@ export APPTAINER_BIND="/path/to/project:/path/to/project"
 Then run without `--bind`:
 
 ```bash
-apptainer run th-holo-cpu.sif
+apptainer run multifid-th-cpu.sif
 ```
 
-The `lid_driven` config is defined in `src/moose_etl/config/lid_driven.yaml`:
+The lid-driven flow config lives at `src/cases/moose_grid/configs/etl.yaml`:
 
 ```yaml
 defaults:
-  - moose_etl
+  - etl_base
   - _self_
 
 etl:
@@ -171,7 +179,7 @@ etl:
 ### Option A2: same run with CLI overrides (no dedicated yaml)
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py \
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py \
   etl.source.input_dir=../data/lid-driven \
   etl.source.data_dir=../data/lid-driven \
   etl.sink.output_dir=../data/processed/lid-driven \
@@ -180,13 +188,13 @@ docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py \
 
 ### Create your own config
 
-Use `lid_driven.yaml` as a template for a new dataset:
+Use the lid-driven config as a template for a new dataset:
 
 ```bash
-cp src/moose_etl/config/lid_driven.yaml src/moose_etl/config/my_case.yaml
+cp src/cases/moose_grid/configs/etl.yaml src/cases/moose_grid/configs/my_case.yaml
 ```
 
-Edit these keys in `src/moose_etl/config/my_case.yaml`:
+Edit these keys in `src/cases/moose_grid/configs/my_case.yaml`:
 
 - `etl.source.input_dir`
 - `etl.source.data_dir`
@@ -196,7 +204,7 @@ Edit these keys in `src/moose_etl/config/my_case.yaml`:
 Run with your new config name:
 
 ```bash
-docker compose run --rm etl-dev bash -lc 'cd src && python run_etl.py --config-name my_case'
+docker compose run --rm etl-dev bash -lc 'cd src && python cases/moose_grid/run_etl.py --config-name my_case'
 ```
 
 ### Option B: interactive shell
@@ -209,7 +217,7 @@ Then inside the container:
 
 ```bash
 cd src
-python run_etl.py --config-name lid_driven
+python cases/moose_grid/run_etl.py
 ```
 
 ## Input and output conventions
@@ -219,7 +227,7 @@ python run_etl.py --config-name lid_driven
 | `{sim_name}.e` | Exodus II mesh + element fields |
 | `{sim_prefix}_out_{probe_name}_{timestep:04d}.csv` | CSV line probes |
 
-- Output directory (with `--config-name lid_driven`): `data/processed/lid-driven/`
+- Output directory (with the default lid-driven config): `data/processed/lid-driven/`
 - Output format: one `{sim_name}.zarr` per simulation
 - Exodus and CSV prefixes do not need to match
 
@@ -228,34 +236,35 @@ python run_etl.py --config-name lid_driven
 Use the `etl` or `etl-ngc` service for PhysicsNeMo + PyTorch scripts.
 Edit this template first:
 
-- `src/config/fno.yaml`
+- `src/cases/moose_grid/configs/train_fno.yaml`
 
-`fno.yaml` is a Hydra config that inherits `src/config/default.yaml` and sets
-an FNO example for train/evaluate.
+`train_fno.yaml` is a Hydra config that inherits `src/training/config/default.yaml`
+(via `hydra.searchpath: pkg://training.config`) and sets an FNO example for
+train/evaluate.
 
 ### Train
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 ### Evaluate
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno'
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/moose_grid/configs --config-name train_fno'
 ```
 
 Generate velocity-field comparison plots during evaluation:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-name fno \
+docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/moose_grid/configs --config-name train_fno \
   output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
 CLI flags override YAML values:
 
 ```bash
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-name fno training.epochs=50'
+docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/moose_grid/configs --config-name train_fno training.epochs=50'
 ```
 
 ## Logs
@@ -275,6 +284,38 @@ docker compose logs --tail=100 etl-ngc
 
 `docker compose run --rm ...` removes the container when it exits, including its
 stored logs. Omit `--rm` if you need to inspect logs after a run.
+
+## Build the documentation
+
+The site you're reading is built with Sphinx + MyST + Furo. The
+`multifid-th-cpu.sif` image already has the full Sphinx stack installed,
+so no extra install step is required.
+
+From the repository root:
+
+```bash
+# Apptainer (preferred on HPC)
+apptainer exec --bind "$PWD:$PWD" --pwd "$PWD" multifid-th-cpu.sif \
+    make -C docs html
+
+# Docker (workstation)
+docker compose run --rm etl bash -lc 'make -C docs html'
+```
+
+Open `docs/_build/html/index.html` in a browser to preview.
+
+Rebuild after:
+
+- editing any `.md` file under `docs/`,
+- editing module / class / function docstrings (autodoc pulls them into
+  the API pages), or
+- adding / removing classes or functions exposed via `automodule`
+  directives in `docs/api/`.
+
+For live reload, the nitpicky `strict` target (warnings-fatal,
+matching CI), and the full list of make targets, see
+[Building the documentation](../dev/building_docs.md). `docs/_build/`
+is git-ignored — don't commit anything under it.
 
 ## Troubleshooting builds
 

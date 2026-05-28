@@ -7,10 +7,18 @@ import types
 
 import pytest
 
+# Importing training.models triggers _load_builtins(), which imports
+# training.models.mlp -> torch. Skip collection when torch is absent so
+# the no-deps CI install can still collect the rest of the suite.
+pytest.importorskip("torch")
+
 from training.models import MODEL_REGISTRY, get_build_fn_and_adapter
 
 
-@pytest.mark.parametrize("name,adapter", [("fno", "grid"), ("afno", "grid"), ("pix2pix", "grid"), ("meshgraphnet", "graph")])
+@pytest.mark.parametrize(
+    "name,adapter",
+    [("fno", "grid"), ("afno", "grid"), ("pix2pix", "grid"), ("meshgraphnet", "graph")],
+)
 def test_builtin_models_registered(name: str, adapter: str) -> None:
     assert name in MODEL_REGISTRY
     build_fn, adapter_name = get_build_fn_and_adapter({"name": name})
@@ -46,9 +54,7 @@ def test_custom_entrypoint_signature_validation(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setitem(sys.modules, "tmp_bad_signature", module)
 
     with pytest.raises(TypeError, match=r"must accept \(model_cfg, dataset_info\)"):
-        get_build_fn_and_adapter(
-            {"entrypoint": "tmp_bad_signature:build", "adapter": "grid"}
-        )
+        get_build_fn_and_adapter({"entrypoint": "tmp_bad_signature:build", "adapter": "grid"})
 
 
 def test_custom_entrypoint_valid(monkeypatch: pytest.MonkeyPatch) -> None:

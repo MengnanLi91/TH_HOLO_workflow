@@ -16,12 +16,8 @@ def build(model_cfg: dict, dataset_info: dict):
         "processor_size": int(model_cfg.get("processor_size", 15)),
         "hidden_dim_processor": int(model_cfg.get("hidden_dim_processor", 128)),
         "hidden_dim_node_encoder": int(model_cfg.get("hidden_dim_node_encoder", 128)),
-        "num_layers_node_processor": int(
-            model_cfg.get("num_layers_node_processor", 2)
-        ),
-        "num_layers_edge_processor": int(
-            model_cfg.get("num_layers_edge_processor", 2)
-        ),
+        "num_layers_node_processor": int(model_cfg.get("num_layers_node_processor", 2)),
+        "num_layers_edge_processor": int(model_cfg.get("num_layers_edge_processor", 2)),
     }
     model = mesh_graph_net_cls(**resolved)
     model._resolved_model_params = dict(resolved)

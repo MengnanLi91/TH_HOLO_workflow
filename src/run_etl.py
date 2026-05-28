@@ -1,8 +1,10 @@
-"""MOOSE Simulation ETL pipeline entry point.
+"""MOOSE-grid ETL pipeline entry point.
 
 Reads Exodus + CSV simulation outputs, normalizes fields, builds graph
 connectivity and regular-grid interpolations, and writes Zarr stores
-ready for PhysicsNeMo ML training.
+ready for PhysicsNeMo ML training. Default config is the lid-driven
+flow; override via ``--config-name`` or ``--config-path`` to swap in
+other variants under the same case dir.
 
 Usage (from the src/ directory):
     python run_etl.py \\
@@ -18,19 +20,18 @@ Override any Hydra config key on the CLI, e.g.:
 import os
 import sys
 
-# Ensure src/ is importable so moose_etl and read_exdous are found.
+# Ensure src/ is importable so cases.moose_grid.* and read_exdous are found.
 sys.path.insert(0, os.path.dirname(__file__))
 
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
-
 from physicsnemo_curator.etl.etl_orchestrator import ETLOrchestrator
 from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from physicsnemo_curator.utils import utils as curator_utils
 
 
-@hydra.main(version_base="1.3", config_path="moose_etl/config", config_name="moose_etl")
+@hydra.main(version_base="1.3", config_path="cases/moose_grid/configs", config_name="etl")
 def main(cfg: DictConfig) -> None:
     """Run the MOOSE ETL pipeline."""
 
@@ -48,7 +49,7 @@ def main(cfg: DictConfig) -> None:
     # Instantiate source (ExodusDataSource)
     source = instantiate(cfg.etl.source, processing_config)
 
-    # Instantiate sink (MooseZarrSink)
+    # Instantiate sink (MOOSEZarrSink)
     sink = instantiate(cfg.etl.sink, processing_config)
 
     # Instantiate transformations — curator pattern passes cfg as positional arg

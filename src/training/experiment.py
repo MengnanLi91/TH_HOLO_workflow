@@ -1,6 +1,9 @@
 """Experiment abstraction for optional custom training/eval steps."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import Any
 
 import torch
 
@@ -78,10 +81,81 @@ class Experiment:
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)
 
-    def compute_val_delta_p_metric(self) -> float:
-        """HPO-side Δp metric (mean squared log-Δp error on val).
+    def compute_extended_metrics(
+        self,
+        eval_dataset,
+        all_preds: list[torch.Tensor],
+        all_targets: list[torch.Tensor],
+    ) -> dict[str, Any]:
+        """Per-experiment extended evaluation metrics.
 
-        Default no-op for experiments without a Δp integral.  Override in
-        Δp-aware subclasses (e.g. ``AlphaDExperiment``).
+        Receives per-batch CPU tensor lists (uncatted because graph adapters
+        have variable shapes) and the eval dataset. Subclasses concatenate
+        as needed and produce a metrics dict the runner merges into the
+        ``extended`` block of the metrics JSON. Default: empty.
         """
-        return 0.0
+        _ = (eval_dataset, all_preds, all_targets)
+        return {}
+
+    def print_extended_metrics(self, metrics: dict[str, Any]) -> None:
+        """Pretty-print the dict returned by ``compute_extended_metrics``.
+
+        Default: no-op (the generic runner already prints overall + per-field
+        MSE/RMSE). Subclasses override to format case-specific blocks.
+        """
+        _ = metrics
+
+    def decode_for_plotting(
+        self,
+        values: torch.Tensor,
+        dataset,
+        field_name: str,
+        mask,
+    ):
+        """Decode encoded model output to physical/labelled space for plotting.
+
+        Returns ``(decoded_ndarray, label)`` or ``None``. When ``None``, the
+        plotter shows raw encoded values with ``field_name`` as the y-axis
+        label and skips the physical-RMSE subtitle. Case experiments override
+        to apply baseline re-add, unit conversion, etc.
+        """
+        _ = (values, dataset, field_name, mask)
+        return None
+
+    def baseline_for_plotting(
+        self,
+        dataset,
+        field_name: str,
+        mask,
+    ):
+        """Return ``(decoded_baseline_ndarray, label)`` or ``None``.
+
+        Case experiments that train a residual on top of an analytical
+        baseline override this so the plotter can overlay the baseline as a
+        third curve next to ground truth and prediction. Default: no baseline.
+        """
+        _ = (dataset, field_name, mask)
+        return None
+
+    def prepare_for_training(
+        self,
+        train_dataset,
+        val_dataset,
+        device: torch.device,
+    ) -> None:
+        """Bind dataset-derived state onto the experiment before training.
+
+        Called once after datasets are subsetted but before the training loop.
+        Case experiments override to capture per-case geometry, target names,
+        normalisation statistics, etc. that the generic core would otherwise
+        have to read by name. Default: no-op.
+        """
+        _ = (train_dataset, val_dataset, device)
+
+    def on_epoch_end_extra_step(self) -> None:
+        """Optional extra gradient step run once per epoch.
+
+        Case experiments override to apply secondary objectives that aren't
+        well-expressed as per-batch losses (e.g. integral-of-profile losses
+        that need a full case at a time). Default: no-op.
+        """

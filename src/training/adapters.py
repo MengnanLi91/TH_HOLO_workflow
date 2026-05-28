@@ -1,5 +1,6 @@
 """Adapter layer to unify grid and graph model families."""
 
+import importlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -206,8 +207,7 @@ class PointwiseAdapter(ModelAdapter):
             if not cols_path.exists():
                 raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
             input_columns = [
-                line.strip() for line in cols_path.read_text().splitlines()
-                if line.strip()
+                line.strip() for line in cols_path.read_text().splitlines() if line.strip()
             ]
             if not input_columns:
                 raise ValueError(f"input_columns_file is empty: {cols_path}")
@@ -222,6 +222,19 @@ class PointwiseAdapter(ModelAdapter):
         if exclude_cases is not None:
             exclude_cases = [str(c) for c in exclude_cases]
 
+        eng_ep = data_cfg.get("engineered_features_entrypoint")
+        eng_names = None
+        eng_builder = None
+        if eng_ep is not None:
+            module_name, fn_name = str(eng_ep).split(":", 1)
+            eng_names, eng_builder = getattr(importlib.import_module(module_name), fn_name)()
+
+        tt_ep = data_cfg.get("target_transform")
+        target_transform = None
+        if tt_ep is not None:
+            module_name, fn_name = str(tt_ep).split(":", 1)
+            target_transform = getattr(importlib.import_module(module_name), fn_name)
+
         return TabularPairDataset(
             zarr_dir=data_cfg["zarr_dir"],
             input_columns=input_columns,
@@ -233,13 +246,11 @@ class PointwiseAdapter(ModelAdapter):
             downstream_weight=_opt_float("downstream_weight"),
             include_case_idx=bool(data_cfg.get("include_case_idx", False)),
             exclude_cases=exclude_cases,
-            local_velocity_normalization=bool(
-                data_cfg.get("local_velocity_normalization", False)
-            ),
+            local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
             min_Dr=_opt_float("min_Dr"),
-            target_residual_baseline=bool(
-                data_cfg.get("target_residual_baseline", False)
-            ),
+            target_transform=target_transform,
+            engineered_feature_names=eng_names,
+            engineered_feature_builder=eng_builder,
         )
 
     def dataset_info(self, dataset) -> dict:
@@ -317,60 +328,24 @@ class ProfileAdapter(ModelAdapter):
     ``[C, S]``, ``[O, S]``, ``[1, S]``, scalar. After default collation
     the batch is ``[B, C, S]``, ``[B, O, S]``, ``[B, 1, S]``, ``[B]``.
 
-    The 4-tuple from :meth:`forward_train` is consumed by
-    :class:`AlphaDExperiment.training_step` exactly as the pointwise
-    adapter's 4-tuple is.
+    Dataset construction is delegated to a case-side callable resolved from
+    ``data.dataset_entrypoint`` (mirrors ``model.entrypoint``); the adapter
+    itself knows nothing about specific cases.
     """
 
     family = "profile"
 
     def build_dataset(self, data_cfg: dict):
-        from training.datasets_profile import AlphaDProfileDataset
-
-        norm_from_case_indices = data_cfg.get("norm_from_case_indices")
-        if norm_from_case_indices is not None:
-            norm_from_case_indices = [int(i) for i in norm_from_case_indices]
-
-        if data_cfg.get("input_columns_file") is not None:
-            cols_path = Path(str(data_cfg["input_columns_file"]))
-            if not cols_path.exists():
-                raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
-            input_columns = [
-                line.strip() for line in cols_path.read_text().splitlines()
-                if line.strip()
-            ]
-            if not input_columns:
-                raise ValueError(f"input_columns_file is empty: {cols_path}")
-        else:
-            input_columns = parse_field_list(data_cfg.get("input_columns"))
-
-        def _opt_float(key: str) -> float | None:
-            v = data_cfg.get(key)
-            return float(v) if v is not None else None
-
-        exclude_cases = data_cfg.get("exclude_cases")
-        if exclude_cases is not None:
-            exclude_cases = [str(c) for c in exclude_cases]
-
-        return AlphaDProfileDataset(
-            zarr_dir=data_cfg["zarr_dir"],
-            input_columns=input_columns,
-            output_columns=parse_field_list(data_cfg.get("output_columns")),
-            normalize=bool(data_cfg.get("normalize", False)),
-            norm_stats=data_cfg.get("norm_stats"),
-            norm_from_case_indices=norm_from_case_indices,
-            throat_weight=_opt_float("throat_weight"),
-            downstream_weight=_opt_float("downstream_weight"),
-            include_case_idx=bool(data_cfg.get("include_case_idx", False)),
-            exclude_cases=exclude_cases,
-            local_velocity_normalization=bool(
-                data_cfg.get("local_velocity_normalization", False)
-            ),
-            min_Dr=_opt_float("min_Dr"),
-            target_residual_baseline=bool(
-                data_cfg.get("target_residual_baseline", False)
-            ),
-        )
+        ep = data_cfg.get("dataset_entrypoint")
+        if ep is None:
+            raise ValueError(
+                "Profile adapter requires data.dataset_entrypoint "
+                "in the format '<module>:<callable>' where the callable "
+                "accepts a data_cfg dict and returns a profile dataset."
+            )
+        module_name, fn_name = str(ep).split(":", 1)
+        build = getattr(importlib.import_module(module_name), fn_name)
+        return build(data_cfg)
 
     def dataset_info(self, dataset) -> dict:
         x, _, _, _ = dataset[0]

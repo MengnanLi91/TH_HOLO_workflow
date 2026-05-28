@@ -9,7 +9,7 @@ The pipeline follows the [PhysicsNeMo Curator](https://github.com/NVIDIA/physics
 ETL pattern:
 
 ```
-ExodusDataSource ──► MooseDataTransformation ──► MooseZarrSink
+ExodusDataSource ──► MOOSEDataTransformation ──► MOOSEZarrSink
      │                                                  │
      │ reads .e + CSV                     writes .zarr  │
      └──────────────────────────────────────────────────┘
@@ -18,11 +18,11 @@ ExodusDataSource ──► MooseDataTransformation ──► MooseZarrSink
 
 | Component | Class | File |
 |---|---|---|
-| Source | `ExodusDataSource` | `src/moose_etl/data_sources/exodus_source.py` |
-| CSV reader | `CSVProbeSource` | `src/moose_etl/data_sources/csv_source.py` |
-| Transform | `MooseDataTransformation` | `src/moose_etl/transformations/moose_transform.py` |
-| Sink | `MooseZarrSink` | `src/moose_etl/data_sources/zarr_sink.py` |
-| Schemas | `MooseRawData`, `MooseProcessedData` | `src/moose_etl/schemas.py` |
+| Source | `ExodusDataSource` | `src/cases/moose_grid/etl/data_sources/exodus_source.py` |
+| CSV reader | `CSVProbeSource` | `src/cases/moose_grid/etl/data_sources/csv_source.py` |
+| Transform | `MOOSEDataTransformation` | `src/cases/moose_grid/etl/transformations/moose_transform.py` |
+| Sink | `MOOSEZarrSink` | `src/cases/moose_grid/etl/data_sources/zarr_sink.py` |
+| Schemas | `MOOSERawData`, `MOOSEProcessedData` | `src/cases/moose_grid/etl/schemas.py` |
 
 ## Pipeline stages
 
@@ -47,7 +47,7 @@ configured data directory. Each probe file is read into a `[Np, C]` array where
 The Exodus and CSV files use independent filename prefixes and are not required
 to match.
 
-### Stage 2 — MooseDataTransformation
+### Stage 2 — MOOSEDataTransformation
 
 Three sub-steps applied in order:
 
@@ -75,7 +75,7 @@ Element centroids (mean of node positions) are scattered onto a uniform
 `Nx × Ny` grid using `scipy.interpolate.griddata` (linear method, `fill_value=0`).
 The default resolution is 64 × 64.
 
-### Stage 3 — MooseZarrSink
+### Stage 3 — MOOSEZarrSink
 
 Writes one Zarr store per simulation with Blosc/zstd compression (level 3,
 shuffle enabled). Chunk sizes target ~1 MB per chunk.
@@ -112,11 +112,12 @@ shuffle enabled). Chunk sizes target ~1 MB per chunk.
 
 ## Configuration
 
-The pipeline is configured via Hydra. The base config lives at
-`src/moose_etl/config/moose_etl.yaml`. Any key can be overridden on the CLI.
+The pipeline is configured via Hydra. The shared base template lives at
+`src/cases/moose_grid/configs/etl_base.yaml` and the canonical lid-driven
+variant at `src/cases/moose_grid/configs/etl.yaml`. Any key can be overridden on the CLI.
 
 ```bash
-python run_etl.py \
+python cases/moose_grid/run_etl.py \
     etl.source.input_dir=../data \
     etl.source.data_dir=../data \
     etl.sink.output_dir=../data/processed \

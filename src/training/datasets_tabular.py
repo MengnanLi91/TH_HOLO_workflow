@@ -12,25 +12,14 @@ All cases are loaded and concatenated row-wise.  Splitting is done at
 the case level via ``subset_by_case_indices``.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-
-from feature_analysis.data_loader import (
-    ENGINEERED_FEATURES,
-    build_engineered_feature_map,
-)
-from training.alpha_d_targets import (
-    alpha_d_bulk_to_values,
-    convert_alpha_d_values_between_bases,
-    is_alpha_d_target,
-)
-from training.alpha_d_baseline import (
-    BaselineGeometry,
-    alpha_d_baseline_profile,
-)
 
 
 class TabularPairDataset(Dataset):
@@ -63,6 +52,22 @@ class TabularPairDataset(Dataset):
     min_Dr : float or None
         If set, exclude cases whose diameter ratio Dr is below this value.
         Dr is parsed from the case name (``Re_*__Dr_XpXXX__Lr_*``).
+    engineered_feature_names : list[str] or None
+        Names of synthesized columns appended to each row in the order given.
+        If *None*, no engineered columns are synthesized. Caller-supplied
+        because engineered-feature schemas are case-specific.
+    engineered_feature_builder : callable or None
+        ``(features, raw_feature_names) -> dict[name, ndarray[N]]`` mapping
+        each name in ``engineered_feature_names`` to a 1-D column. Required
+        when ``engineered_feature_names`` is set.
+    target_transform : callable or None
+        Case-specific transform applied to ``full_y`` after local-velocity
+        normalisation. Receives ``(full_y, full_x)`` plus keyword context
+        (``target_names``, ``feature_names``, ``case_meta_list``,
+        ``rows_per_case``, ``local_velocity_normalization``) and returns
+        ``(transformed_y, extras)``. When extras contains ``baseline_encoded``,
+        it is stashed as ``self._baseline_encoded`` and ``self.has_target_baseline``
+        is set to True so consumers can re-add the baseline at decode time.
     """
 
     def __init__(
@@ -79,7 +84,9 @@ class TabularPairDataset(Dataset):
         exclude_cases: list[str] | None = None,
         local_velocity_normalization: bool = False,
         min_Dr: float | None = None,
-        target_residual_baseline: bool = False,
+        target_transform: Callable[..., tuple] | None = None,
+        engineered_feature_names: list[str] | None = None,
+        engineered_feature_builder: Callable[..., dict] | None = None,
     ):
         import json
 
@@ -106,7 +113,13 @@ class TabularPairDataset(Dataset):
         rows_per_case: list[int] = []
         case_meta_list: list[dict] = []
         has_weights = False
-        engineered_feature_names = list(ENGINEERED_FEATURES)
+        eng_names: list[str] = (
+            list(engineered_feature_names) if engineered_feature_names is not None else []
+        )
+        if eng_names and engineered_feature_builder is None:
+            raise ValueError(
+                "engineered_feature_builder is required when engineered_feature_names is set."
+            )
 
         for sp in sim_paths:
             root = zarr.open(store=str(sp), mode="r")
@@ -127,9 +140,7 @@ class TabularPairDataset(Dataset):
                 raw_target_names = json.loads(meta.attrs.get("target_names", "[]"))
 
                 self._base_feature_names = list(raw_feature_names)
-                self._all_feature_names = (
-                    list(raw_feature_names) + engineered_feature_names
-                )
+                self._all_feature_names = list(raw_feature_names) + eng_names
                 self._all_target_names = list(raw_target_names)
 
                 if output_columns is not None:
@@ -143,32 +154,21 @@ class TabularPairDataset(Dataset):
                     self._tgt_idx = list(range(targets.shape[1]))
                     self.output_columns = list(raw_target_names)
 
-            # Per-case metadata for physics-informed losses.  Geometry
-            # constants are written by the AlphaD ETL sink; older zarrs
-            # produced before that change fall back to the historical
-            # defaults (pipe_radius=0.1, outer_height=1.0, buffer=1.0,
-            # rho=1.0, V_bulk=1.0).
-            case_meta_list.append({
-                "delta_p_case": float(meta.attrs.get("delta_p_case", 0.0)),
-                "Re": float(meta.attrs.get("Re", 0.0)),
-                "Lr": float(meta.attrs.get("Lr", 0.0)),
-                "Dr": float(meta.attrs.get("Dr", 0.0)),
-                "D_big": float(meta.attrs.get("D_big", 0.2)),
-                "outer_height_m": float(meta.attrs.get("outer_height_m", 1.0)),
-                "buffer_diams": float(meta.attrs.get("buffer_diams", 1.0)),
-                "rho": float(meta.attrs.get("rho", 1.0)),
-                "V_bulk": float(meta.attrs.get("V_bulk", 1.0)),
-            })
+            # Pass the case's metadata through verbatim. Case code reads
+            # whatever keys it needs (with its own ``.get`` defaults); the
+            # generic dataset doesn't know which keys are physics-relevant.
+            case_meta_list.append(dict(meta.attrs))
 
             # Load ALL base features (derived columns need access to
             # source columns that may not be in input_columns).
-            engineered = build_engineered_feature_map(features, raw_feature_names)
-            engineered_cols = [
-                engineered[name].reshape(-1, 1) for name in engineered_feature_names
-            ]
-            all_x.append(
-                np.concatenate([features] + engineered_cols, axis=1).astype(np.float32)
-            )
+            if eng_names:
+                engineered = engineered_feature_builder(features, raw_feature_names)
+                engineered_cols = [engineered[name].reshape(-1, 1) for name in eng_names]
+                all_x.append(
+                    np.concatenate([features] + engineered_cols, axis=1).astype(np.float32)
+                )
+            else:
+                all_x.append(features.astype(np.float32))
             all_y.append(targets[:, self._tgt_idx])
             all_w.append(weights)
             case_ids.append(case_id)
@@ -178,95 +178,56 @@ class TabularPairDataset(Dataset):
         # Concatenate
         # ----------------------------------------------------------
         full_x = np.concatenate(all_x, axis=0)  # [N, D_base]
-        full_y = np.concatenate(all_y, axis=0)   # [N, D_out]
+        full_y = np.concatenate(all_y, axis=0)  # [N, D_out]
 
         # Store per-case metadata
         self._case_meta = case_meta_list
-        self.local_velocity_normalization = False
         self.exclude_cases = list(exclude_cases) if exclude_cases else []
 
         # Store raw geometry columns (before normalization) for delta_p loss
         z_hat_col = (
-            self._all_feature_names.index("z_hat")
-            if "z_hat" in self._all_feature_names else None
+            self._all_feature_names.index("z_hat") if "z_hat" in self._all_feature_names else None
         )
         d_over_D_col = (
             self._all_feature_names.index("d_local_over_D")
-            if "d_local_over_D" in self._all_feature_names else None
+            if "d_local_over_D" in self._all_feature_names
+            else None
         )
         self._raw_z_hat = (
-            torch.from_numpy(full_x[:, z_hat_col].copy())
-            if z_hat_col is not None else None
+            torch.from_numpy(full_x[:, z_hat_col].copy()) if z_hat_col is not None else None
         )
         self._raw_d_local_over_D = (
-            torch.from_numpy(full_x[:, d_over_D_col].copy())
-            if d_over_D_col is not None else None
+            torch.from_numpy(full_x[:, d_over_D_col].copy()) if d_over_D_col is not None else None
         )
 
-        # Apply local-velocity normalization to alpha_D-family targets.
-        if local_velocity_normalization and d_over_D_col is not None:
-            d_over_D = full_x[:, d_over_D_col].astype(np.float64)
-            transformed_any = False
-            for j, tgt_name in enumerate(self.output_columns):
-                if is_alpha_d_target(tgt_name):
-                    full_y[:, j] = convert_alpha_d_values_between_bases(
-                        full_y[:, j].astype(np.float64),
-                        target_name=tgt_name,
-                        d_over_D=d_over_D,
-                        from_local_velocity_normalization=False,
-                        to_local_velocity_normalization=True,
-                    ).astype(np.float32)
-                    transformed_any = True
-            self.local_velocity_normalization = transformed_any
-
         # ----------------------------------------------------------
-        # Closed-form alpha_D residual target.  When enabled, replace
-        # the encoded target with (encoded_truth − encoded_baseline)
-        # and stash the per-row encoded baseline so callers can
-        # reconstruct the full encoded prediction at decode time.
+        # Optional case-supplied target transform. Extras keys consumed by
+        # the dataset: ``baseline_encoded`` (stashed on
+        # ``self._baseline_encoded`` for downstream consumers — metrics,
+        # plotting, the Δp integral) and ``local_velocity_normalization``
+        # (propagated onto ``self.local_velocity_normalization``).
         # ----------------------------------------------------------
         self._baseline_encoded: torch.Tensor | None = None
-        self.target_residual_baseline = False
-        if (
-            target_residual_baseline
-            and z_hat_col is not None
-            and d_over_D_col is not None
-            and any(is_alpha_d_target(c) for c in self.output_columns)
-        ):
-            d_over_D = full_x[:, d_over_D_col].astype(np.float64)
-            z_hat_all = full_x[:, z_hat_col].astype(np.float64)
-            baseline_encoded = np.zeros_like(full_y, dtype=np.float64)
-            row_offset = 0
-            for case_idx, n_rows in enumerate(rows_per_case):
-                cm = case_meta_list[case_idx]
-                geom = BaselineGeometry(
-                    Re=cm["Re"],
-                    Dr=cm["Dr"],
-                    Lr=cm["Lr"],
-                    D_big=cm["D_big"],
-                    outer_height_m=cm["outer_height_m"],
-                    buffer_diams=cm["buffer_diams"],
-                    rho=cm["rho"],
-                    V_bulk=cm["V_bulk"],
-                    n_stations=int(n_rows),
-                )
-                end = row_offset + n_rows
-                baseline_bulk = alpha_d_baseline_profile(z_hat_all[row_offset:end], geom)
-                d_local = d_over_D[row_offset:end]
-                for j, tgt_name in enumerate(self.output_columns):
-                    if is_alpha_d_target(tgt_name):
-                        baseline_encoded[row_offset:end, j] = alpha_d_bulk_to_values(
-                            baseline_bulk,
-                            target_name=tgt_name,
-                            d_over_D=d_local,
-                            local_velocity_normalization=self.local_velocity_normalization,
-                        )
-                row_offset = end
-            full_y = (full_y.astype(np.float64) - baseline_encoded).astype(np.float32)
-            self._baseline_encoded = torch.from_numpy(
-                baseline_encoded.astype(np.float32)
+        self.has_target_baseline = False
+        self.local_velocity_normalization = False
+        if target_transform is not None:
+            full_y, extras = target_transform(
+                full_y,
+                full_x,
+                target_names=self.output_columns,
+                feature_names=self._all_feature_names,
+                case_meta_list=case_meta_list,
+                rows_per_case=rows_per_case,
+                local_velocity_normalization=local_velocity_normalization,
             )
-            self.target_residual_baseline = True
+            extras = extras or {}
+            baseline = extras.get("baseline_encoded")
+            if baseline is not None:
+                self._baseline_encoded = torch.from_numpy(np.asarray(baseline, dtype=np.float32))
+                self.has_target_baseline = True
+            self.local_velocity_normalization = bool(
+                extras.get("local_velocity_normalization", False)
+            )
 
         # Resolve input columns
         if input_columns is not None:
@@ -297,7 +258,8 @@ class TabularPairDataset(Dataset):
         # ----------------------------------------------------------
         throat_col_full = (
             self._all_feature_names.index("is_throat")
-            if "is_throat" in self._all_feature_names else None
+            if "is_throat" in self._all_feature_names
+            else None
         )
 
         self.throat_weight = throat_weight
@@ -310,9 +272,14 @@ class TabularPairDataset(Dataset):
         # Region weights (downstream)
         downstream_col_full = (
             self._all_feature_names.index("is_downstream")
-            if "is_downstream" in self._all_feature_names else None
+            if "is_downstream" in self._all_feature_names
+            else None
         )
-        if downstream_weight is not None and downstream_weight > 0 and downstream_col_full is not None:
+        if (
+            downstream_weight is not None
+            and downstream_weight > 0
+            and downstream_col_full is not None
+        ):
             if self._w is not None:
                 # Multiply with existing weights (e.g. throat weights)
                 ds_mask = full_x[:, downstream_col_full] > 0.5
@@ -340,8 +307,7 @@ class TabularPairDataset(Dataset):
                 invalid = [i for i in keep if i < 0 or i >= len(self._case_ids_unique)]
                 if invalid:
                     raise ValueError(
-                        "norm_from_case_indices contains out-of-range case index(es): "
-                        f"{invalid}"
+                        f"norm_from_case_indices contains out-of-range case index(es): {invalid}"
                     )
                 mask = np.isin(self._row_case_idx, keep)
                 if not np.any(mask):
@@ -469,8 +435,7 @@ class TabularPairDataset(Dataset):
         new._case_meta = [self._case_meta[i] for i in case_indices]
         new._raw_z_hat = self._raw_z_hat[mask] if self._raw_z_hat is not None else None
         new._raw_d_local_over_D = (
-            self._raw_d_local_over_D[mask]
-            if self._raw_d_local_over_D is not None else None
+            self._raw_d_local_over_D[mask] if self._raw_d_local_over_D is not None else None
         )
 
         # Rebuild rows_per_case and row_case_idx for the subset
@@ -479,7 +444,7 @@ class TabularPairDataset(Dataset):
             [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]
         )
         new._case_idx_tensor = torch.from_numpy(new._row_case_idx).long()
-        new.target_residual_baseline = self.target_residual_baseline
+        new.has_target_baseline = self.has_target_baseline
         new._baseline_encoded = (
             self._baseline_encoded[mask] if self._baseline_encoded is not None else None
         )
@@ -493,20 +458,36 @@ class TabularPairDataset(Dataset):
         self,
         encoded: torch.Tensor,
         row_mask: np.ndarray | torch.Tensor | None = None,
+        field_idx: int | None = None,
     ) -> torch.Tensor:
-        """Re-add the per-row encoded baseline to a residual-mode tensor.
+        """Re-add the per-row encoded baseline to an encoded tensor.
 
-        When ``target_residual_baseline`` is False this is a no-op so
-        callers can use it unconditionally at decode boundaries.
+        No-op when no target baseline was attached (``has_target_baseline``
+        is False) so callers can use it unconditionally at decode boundaries.
+
+        Parameters
+        ----------
+        encoded
+            Encoded tensor in residual space (e.g. a model prediction).
+        row_mask
+            Optional row selector — numpy boolean / integer array or torch
+            tensor — to slice the baseline before adding.
+        field_idx
+            Output-field index when the dataset has multiple target
+            columns. When ``None``, falls back to auto-squeezing a
+            single-field baseline so 1-D ``encoded`` tensors broadcast
+            correctly.
         """
-        if not self.target_residual_baseline or self._baseline_encoded is None:
+        if not self.has_target_baseline or self._baseline_encoded is None:
             return encoded
         bl = self._baseline_encoded
         if row_mask is not None:
             if isinstance(row_mask, np.ndarray):
                 row_mask = torch.as_tensor(row_mask)
             bl = bl[row_mask]
-        # Allow callers to pass a 1-D field-slice; broadcast accordingly.
-        if encoded.dim() == 1 and bl.dim() == 2 and bl.shape[1] == 1:
+        if field_idx is not None:
+            bl = bl[..., field_idx]
+        elif encoded.dim() == 1 and bl.dim() == 2 and bl.shape[1] == 1:
+            # Allow callers to pass a 1-D field-slice; broadcast accordingly.
             bl = bl.squeeze(-1)
         return encoded + bl.to(encoded.dtype).to(encoded.device)

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multifid-th"
+version = "0.1.0"
+description = "Multifidelity surrogates for thermal-hydraulics on MOOSE outputs"
+requires-python = ">=3.11"
+# Runtime deps (torch, physicsnemo, zarr, hydra-core, …) are pinned in
+# the Dockerfiles in docker/. Keep this list empty so `pip install -e .`
+# inside the existing images is a no-op for dependency resolution.
+dependencies = []
+
+[project.optional-dependencies]
+# Documentation build deps. Install with `pip install -e ".[docs]"`, then
+# `make -C docs html`. Kept unpinned to match the project convention of
+# pinning runtime versions inside the Dockerfiles, not in pyproject.
+docs = [
+    "sphinx",
+    "furo",
+    "myst-parser",
+    "sphinxcontrib-mermaid",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["read_exdous"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["training*", "feature_selection*", "cases*", "dataset*"]
+namespaces = false
+
+# ---------------------------------------------------------------------------
+# Ruff — single tool for linting + formatting. Run from the repo root:
+#   ruff check src/ tests/        → lint
+#   ruff format src/ tests/       → format in place
+#   ruff check --fix src/ tests/  → auto-fix safe issues
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "moose",
+    "physicsnemo",
+    "physicsnemo-curator",
+    "docs/_build",
+    "src/outputs",
+]
+
+[tool.ruff.lint]
+# E/W = pycodestyle (errors + warnings), F = pyflakes (unused imports,
+# undef names), I = isort (import-order). Skip naming/docstring/upgrade
+# rule families on the first pass — they would generate too much churn
+# on a codebase that has never been linted.
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",  # line-too-long — let the formatter own line length
+    "E731",  # do-not-assign-lambda — common in functional-style code
+    "E402",  # module-import-not-at-top — false-positive for the
+             # pytest.importorskip pattern and for conditional-deps imports
+             # (e.g. torch availability checks in runner.py)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests routinely import fixtures + assertions without naming them; allow.
+"tests/**" = ["F401", "F811"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = false
