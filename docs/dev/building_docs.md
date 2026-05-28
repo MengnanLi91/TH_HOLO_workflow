@@ -117,13 +117,10 @@ work because `docs/conf.py` lists those heavy runtime deps under
 dep not yet mocked, the CI build will fail with an `ImportError`; add
 the dep to the `autodoc_mock_imports` list in `conf.py`.
 
-### One-time setup (maintainer only)
+The workflow's `actions/configure-pages` step has `enablement: true`,
+which turns Pages on (with Actions as the source) the first time the
+deploy job runs — no manual repo-settings click required. The setting
+becomes a no-op on subsequent runs. No `gh-pages` branch is involved.
 
-Pages must be enabled with the Actions source the first time this
-workflow runs:
-
-1. Repo Settings → **Pages**
-2. Build and deployment → Source → **GitHub Actions**
-
-After that the workflow handles everything. No `gh-pages` branch is
-involved.
+If you ever want to confirm or override the Pages source by hand, it's
+at: Repo Settings → **Pages** → Build and deployment → Source.
