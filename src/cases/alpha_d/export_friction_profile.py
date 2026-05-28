@@ -343,6 +343,14 @@ def main(argv: list[str] | None = None) -> int:
         values=alpha_d_bulk,
         throat_length=throat_length_m,
     )
+
+    # MOOSE mesh x is measured from the inlet; the throat starts at
+    # end_length = buffer_diams * D_big. PiecewiseLinear has no built-in
+    # x-offset and this MOOSE checkout's ParsedFunction can't compose
+    # functor inputs, so we pre-shift the CSV here.
+    end_length_m = case.buffer_diams * case.D_big
+    z_moose_mesh = z_moose + end_length_m
+
     cf_throat = alpha_d_to_forchheimer(alpha_throat, Dr=case.Dr, D_outer=case.D_big)
 
     # ---- Write outputs ----
@@ -356,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
         "D_big": case.D_big,
         "outer_height_m": case.outer_height_m,
         "buffer_diams": case.buffer_diams,
+        "end_length_m": end_length_m,
         "throat_length_m": throat_length_m,
         "roi_length_m": roi_length_m,
         "rho": case.rho,
@@ -367,10 +376,10 @@ def main(argv: list[str] | None = None) -> int:
         "alpha_D_bulk_roi": alpha_d_bulk.tolist(),
         "z_phys_roi": z_phys.tolist(),
     }
-    write_outputs(csv_path=args.output_csv, z=z_moose, cf=cf_throat, sidecar=sidecar)
+    write_outputs(csv_path=args.output_csv, z=z_moose_mesh, cf=cf_throat, sidecar=sidecar)
 
     print(
-        f"Wrote {args.output_csv} ({len(z_moose)} throat stations); "
+        f"Wrote {args.output_csv} ({len(z_moose_mesh)} throat stations); "
         f"delta_p_truth={case.delta_p_truth:.6g}, "
         f"delta_p_surrogate={delta_p_surrogate:.6g}."
     )

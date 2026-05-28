@@ -9,18 +9,14 @@
 # functors in MOOSE, so a function name is a valid prop_values entry.
 # (framework/src/functormaterials/GenericVectorFunctorMaterial.C, line 69)
 #
-# CSV coordinate convention (DONE_WITH_CONCERNS):
-# The exporter (export_friction_profile.py, Task 8) writes z in throat-local
-# coordinates (z=0 at throat inlet). However, PiecewiseLinear with axis=x
-# evaluates at the raw mesh x-coordinate. ParsedFunction cannot compose
-# another Function at a shifted coordinate (symbol_values evaluates the
-# referenced function at the current point and binds it as a scalar).
-# PiecewiseLinear has no built-in x-offset parameter.
-# Therefore the CSV consumed here must have its x column expressed in MOOSE
-# mesh coordinates (x = z_throat_local + end_length = z_throat_local + 0.2).
-# The controller must decide whether Task 8's exporter should add end_length
-# to the CSV's x column before writing, or whether this file needs another
-# approach.
+# CSV coordinate convention:
+# The exporter (export_friction_profile.py) writes z in MOOSE mesh
+# coordinates: z_csv = z_throat_local + end_length, where
+# end_length = buffer_diams * D_big = 1.0 * 0.2 = 0.2 m.
+# This means the CSV x column spans [0.2, 0.273] for this case,
+# matching the throat block's mesh coordinates directly.
+# PiecewiseLinear (axis=x) therefore evaluates correctly without any
+# coordinate shift in this file.
 
 mu = 2.376e-6
 rho = 1
@@ -109,8 +105,8 @@ outlet_pressure = 0
 
 [Functions]
   # Reads the axial Forchheimer profile produced by export_friction_profile.py.
-  # IMPORTANT: the CSV x column must be in MOOSE mesh coordinates
-  # (x_mesh = z_throat_local + end_length). See header comment.
+  # The CSV x column is already in MOOSE mesh coordinates (pre-shifted by the
+  # exporter); see header comment.
   [forchheimer_profile_fn]
     type = PiecewiseLinear
     data_file = forchheimer_profile.csv

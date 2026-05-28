@@ -374,8 +374,37 @@ def test_end_to_end_run(tmp_path):
     parsed = np.loadtxt(out_csv, delimiter=",", skiprows=1)
     z, cf = parsed[:, 0], parsed[:, 1]
     assert len(z) >= 2 and len(z) <= 50
-    assert z[0] == pytest.approx(0.0, abs=1e-9)
-    assert z[-1] == pytest.approx(0.073, rel=1e-2)
+    # CSV z is in MOOSE mesh coordinates: throat starts at end_length =
+    # buffer_diams * D_big = 1.0 * 0.2 = 0.2 m for this case.
+    assert z[0] == pytest.approx(0.2, abs=1e-9)
+    assert z[-1] == pytest.approx(0.2 + 0.073, rel=1e-2)
     # C_F should be positive somewhere in the throat for this case.
     # (Surrogate may emit negative values in recovery; we only require any positive.)
     assert np.any(cf > 0)
+
+
+@pytest.mark.skipif(
+    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
+    reason="Checkpoint or target zarr not present.",
+)
+def test_end_to_end_sidecar_records_end_length(tmp_path):
+    from cases.alpha_d.export_friction_profile import main
+
+    out_csv = tmp_path / "forchheimer_profile.csv"
+    rc = main(
+        [
+            "--zarr",
+            str(TARGET_ZARR),
+            "--checkpoint",
+            str(TARGET_CKPT),
+            "--run-meta",
+            str(TARGET_RUN_META),
+            "--output-csv",
+            str(out_csv),
+        ]
+    )
+    assert rc == 0
+
+    meta = json.loads(out_csv.with_suffix(".meta.json").read_text())
+    assert meta["end_length_m"] == pytest.approx(0.2, abs=1e-9)
+    assert meta["throat_length_m"] == pytest.approx(0.0733, rel=1e-2)
