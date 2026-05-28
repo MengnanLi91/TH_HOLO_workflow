@@ -66,3 +66,121 @@ def test_load_case_from_zarr_missing_path_raises(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         load_case_from_zarr(tmp_path / "does-not-exist.zarr")
+
+
+def test_build_model_input_uses_run_meta_columns_and_norm_stats(tmp_path):
+    from cases.alpha_d.export_friction_profile import (
+        CaseData,
+        build_model_input,
+    )
+
+    feat_names = [
+        "log10_Re",
+        "Dr",
+        "Lr",
+        "z_hat",
+        "d_local_over_D",
+        "A_local_over_A",
+        "V_local_over_V_bulk",
+        "is_upstream",
+        "is_throat",
+        "is_downstream",
+        "dD_dz_local",
+        "dist_to_throat_start",
+        "dist_to_throat_end",
+    ]
+    n = 50
+    raw = np.zeros((n, len(feat_names)), dtype=np.float32)
+    raw[:, feat_names.index("log10_Re")] = np.log10(43938.0)
+    raw[:, feat_names.index("Dr")] = 0.522
+    raw[:, feat_names.index("Lr")] = 0.073
+    raw[:, feat_names.index("z_hat")] = np.linspace(0, 1, n, dtype=np.float32)
+    # V_local_over_V_bulk is required by build_engineered_feature_map
+    raw[:, feat_names.index("V_local_over_V_bulk")] = 1.0
+    # d_local_over_D required by engineered features
+    raw[:, feat_names.index("d_local_over_D")] = 0.522
+    raw[:, feat_names.index("is_throat")] = 1.0
+
+    case = CaseData(
+        case_id="dummy",
+        features=raw,
+        targets=np.zeros((n, 2), dtype=np.float32),
+        feature_names=feat_names,
+        target_names=["signed_log1p_alpha_D"],
+        Re=43938.0,
+        Dr=0.522,
+        Lr=0.073,
+        D_big=0.2,
+        outer_height_m=1.0,
+        buffer_diams=1.0,
+        rho=1.0,
+        V_bulk=1.0,
+    )
+
+    run_meta = {
+        "data": {
+            "input_columns": ["z_hat", "log10_Re_throat"],
+            "norm_stats": {
+                "x_mean": [0.5, 4.7],
+                "x_std": [0.3, 0.5],
+            },
+        }
+    }
+
+    x = build_model_input(case, run_meta)
+
+    # Conv1D expects (B, C, L). B=1, C=2 (input_columns), L=50 (stations).
+    assert x.shape == (1, 2, n)
+    # First channel is z_hat, normalized: (z_hat - 0.5) / 0.3
+    z_hat = np.linspace(0, 1, n, dtype=np.float32)
+    expected_ch0 = (z_hat - 0.5) / 0.3
+    np.testing.assert_allclose(x[0, 0, :], expected_ch0, atol=1e-5)
+
+
+def test_build_model_input_rejects_unknown_column(tmp_path):
+    from cases.alpha_d.export_friction_profile import (
+        CaseData,
+        build_model_input,
+    )
+
+    n = 50
+    raw = np.zeros((n, 13), dtype=np.float32)
+    case = CaseData(
+        case_id="dummy",
+        features=raw,
+        targets=np.zeros((n, 2), dtype=np.float32),
+        feature_names=[
+            "log10_Re",
+            "Dr",
+            "Lr",
+            "z_hat",
+            "d_local_over_D",
+            "A_local_over_A",
+            "V_local_over_V_bulk",
+            "is_upstream",
+            "is_throat",
+            "is_downstream",
+            "dD_dz_local",
+            "dist_to_throat_start",
+            "dist_to_throat_end",
+        ],
+        target_names=["signed_log1p_alpha_D"],
+        Re=1.0,
+        Dr=0.5,
+        Lr=0.1,
+        D_big=0.2,
+        outer_height_m=1.0,
+        buffer_diams=1.0,
+        rho=1.0,
+        V_bulk=1.0,
+    )
+
+    bad = {
+        "data": {
+            "input_columns": ["totally_not_a_feature"],
+            "norm_stats": {"x_mean": [0.0], "x_std": [1.0]},
+        }
+    }
+
+    with pytest.raises(ValueError, match="totally_not_a_feature"):
+        build_model_input(case, bad)

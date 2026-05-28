@@ -104,6 +104,46 @@ def load_case_from_zarr(zarr_path: Path) -> CaseData:
     )
 
 
+def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
+    """Project zarr features into the model's input_columns + normalize.
+
+    Returns array of shape (1, n_features, n_stations) — Conv1D NCL.
+    Reuses `cases.alpha_d.feature_data.build_engineered_feature_map` for
+    engineered columns to match training-time feature synthesis exactly.
+    """
+    from cases.alpha_d.feature_data import build_engineered_feature_map
+
+    input_columns: list[str] = list(run_meta["data"]["input_columns"])
+    x_mean = np.asarray(run_meta["data"]["norm_stats"]["x_mean"], dtype=np.float32)
+    x_std = np.asarray(run_meta["data"]["norm_stats"]["x_std"], dtype=np.float32)
+    if len(x_mean) != len(input_columns) or len(x_std) != len(input_columns):
+        raise ValueError(
+            f"norm_stats length mismatch: {len(x_mean)} mean / "
+            f"{len(x_std)} std vs {len(input_columns)} input_columns"
+        )
+
+    raw_name_to_idx = {n: i for i, n in enumerate(case.feature_names)}
+    engineered = build_engineered_feature_map(case.features, case.feature_names)
+
+    columns: list[np.ndarray] = []
+    for name in input_columns:
+        if name in raw_name_to_idx:
+            col = case.features[:, raw_name_to_idx[name]].astype(np.float32)
+        elif name in engineered:
+            col = engineered[name].astype(np.float32)
+        else:
+            raise ValueError(
+                f"input_column {name!r} not found in zarr feature_names "
+                f"nor engineered set. zarr columns: {case.feature_names}; "
+                f"engineered: {list(engineered.keys())}."
+            )
+        columns.append(col)
+
+    raw_x = np.stack(columns, axis=0)  # (C, L)
+    normed = (raw_x - x_mean[:, None]) / x_std[:, None]
+    return normed[None, :, :].astype(np.float32)  # (1, C, L)
+
+
 def main(argv: list[str] | None = None) -> int:
     _args = parse_args(argv)
     raise NotImplementedError(
