@@ -178,6 +178,49 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
+def alpha_d_to_forchheimer(alpha_d_bulk: np.ndarray, *, Dr: float, D_outer: float) -> np.ndarray:
+    """Spec section 4.3 mapping: C_F = alpha_D / (2 * Dr^5 * D_outer).
+
+    Throat-only 1D plug-flow equivalence with V_bulk = V_interstitial,
+    D_h = D_throat = Dr * D_outer, porosity = Dr^2.
+    """
+    if Dr <= 0.0 or D_outer <= 0.0:
+        raise ValueError(f"Dr and D_outer must be positive; got Dr={Dr}, D_outer={D_outer}.")
+    denom = 2.0 * (Dr**5) * D_outer
+    return np.asarray(alpha_d_bulk, dtype=np.float64) / denom
+
+
+def restrict_to_throat(
+    *,
+    z_hat: np.ndarray,
+    is_throat: np.ndarray,
+    values: np.ndarray,
+    throat_length: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Keep only throat stations; remap z_hat to MOOSE throat coords.
+
+    Returns (z_moose, values_at_throat). z_moose spans [0, throat_length].
+    """
+    mask = np.asarray(is_throat).astype(np.float64) > 0.5
+    if not mask.any():
+        raise ValueError("No throat stations found (is_throat all zero).")
+
+    z_hat_throat = np.asarray(z_hat, dtype=np.float64)[mask]
+    vals_throat = np.asarray(values, dtype=np.float64)[mask]
+
+    order = np.argsort(z_hat_throat)
+    z_hat_throat = z_hat_throat[order]
+    vals_throat = vals_throat[order]
+
+    z_start = z_hat_throat[0]
+    z_end = z_hat_throat[-1]
+    if z_end <= z_start:
+        raise ValueError("Throat z_hat span is zero or negative; check inputs.")
+
+    z_moose = (z_hat_throat - z_start) / (z_end - z_start) * float(throat_length)
+    return z_moose, vals_throat
+
+
 def decode_to_bulk_alpha_d(
     encoded: np.ndarray,
     *,

@@ -259,3 +259,55 @@ def test_decode_to_bulk_alpha_d_without_local_normalization():
     )
 
     np.testing.assert_allclose(decoded, alpha_true, rtol=1e-6)
+
+
+def test_alpha_d_to_forchheimer_synthetic():
+    """With alpha_D = 1, Dr = 0.5, D_outer = 1, the spec gives
+    C_F = 1 / (2 * 0.5**5 * 1) = 16."""
+    from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
+
+    alpha = np.array([1.0])
+    cf = alpha_d_to_forchheimer(alpha, Dr=0.5, D_outer=1.0)
+    np.testing.assert_allclose(cf, [16.0], rtol=1e-9)
+
+
+def test_alpha_d_to_forchheimer_target_case():
+    """For Dr=0.522, D_outer=0.2, denominator = 2*0.522^5*0.2."""
+    from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
+
+    alpha = np.array([1.0, 2.0, 3.0])
+    cf = alpha_d_to_forchheimer(alpha, Dr=0.522, D_outer=0.2)
+
+    denom = 2.0 * (0.522**5) * 0.2
+    np.testing.assert_allclose(cf, alpha / denom, rtol=1e-9)
+
+
+def test_restrict_to_throat_extracts_central_segment():
+    """Given a 50-station ROI alpha_D profile, restrict_to_throat returns
+    only the rows where is_throat=1, and remaps z_hat to local throat
+    axial coordinate [0, throat_length]."""
+    from cases.alpha_d.export_friction_profile import restrict_to_throat
+
+    n = 50
+    z_hat = np.linspace(0, 1, n, dtype=np.float64)
+    is_throat = np.zeros(n, dtype=np.float32)
+    # Throat occupies z_hat in [0.4, 0.6] in this synthetic case.
+    is_throat[(z_hat >= 0.4) & (z_hat <= 0.6)] = 1.0
+
+    alpha = np.arange(n, dtype=np.float64)
+    throat_length = 0.073
+
+    z_throat, alpha_throat = restrict_to_throat(
+        z_hat=z_hat,
+        is_throat=is_throat,
+        values=alpha,
+        throat_length=throat_length,
+    )
+
+    # All returned stations should originally have been throat stations.
+    assert len(z_throat) > 0
+    assert len(z_throat) == len(alpha_throat)
+    assert z_throat[0] == pytest.approx(0.0)
+    assert z_throat[-1] == pytest.approx(throat_length)
+    # Monotone increasing
+    assert np.all(np.diff(z_throat) > 0)
