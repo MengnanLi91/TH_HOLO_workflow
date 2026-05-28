@@ -41,8 +41,15 @@ jobs:
         run: make -C docs html SPHINXOPTS="-q"
 
       - name: Configure Pages
+        # enablement: true asks the action to turn Pages on (with Actions
+        # as the source) the first time it runs, instead of failing with
+        # "Get Pages site: Not Found". Requires the workflow's pages:write
+        # permission, which is set above. Becomes a no-op once Pages is
+        # already enabled, so it's safe to leave in place permanently.
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload Pages artifact (deploy-eligible)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
