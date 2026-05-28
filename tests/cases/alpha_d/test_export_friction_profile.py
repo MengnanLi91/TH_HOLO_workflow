@@ -68,7 +68,7 @@ def test_load_case_from_zarr_missing_path_raises(tmp_path):
         load_case_from_zarr(tmp_path / "does-not-exist.zarr")
 
 
-def test_build_model_input_uses_run_meta_columns_and_norm_stats(tmp_path):
+def test_build_model_input_uses_run_meta_columns_and_norm_stats():
     from cases.alpha_d.export_friction_profile import (
         CaseData,
         build_model_input,
@@ -165,7 +165,7 @@ def test_forward_returns_signed_log1p_alpha_d_profile():
     assert np.all(np.isfinite(y))
 
 
-def test_build_model_input_rejects_unknown_column(tmp_path):
+def test_build_model_input_rejects_unknown_column():
     from cases.alpha_d.export_friction_profile import (
         CaseData,
         build_model_input,
