@@ -247,12 +247,134 @@ def decode_to_bulk_alpha_d(
     return np.asarray(alpha, dtype=np.float64)
 
 
+def write_outputs(*, csv_path: Path, z: np.ndarray, cf: np.ndarray, sidecar: dict) -> None:
+    """Write z/F CSV plus a sidecar JSON with metadata."""
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w") as fh:
+        fh.write("z,F\n")
+        for zi, ci in zip(z, cf):
+            fh.write(f"{zi:.9e},{ci:.9e}\n")
+    sidecar_path = csv_path.with_suffix(".meta.json")
+    sidecar_path.write_text(json.dumps(sidecar, indent=2))
+
+
+def _integrate_delta_p_with_z_phys(
+    alpha_d_bulk: np.ndarray,
+    z_phys: np.ndarray,
+    D_h: np.ndarray,
+    rho: float,
+    V_bulk: float,
+) -> float:
+    """Trapezoidal integral of -dP/dz over ROI.
+
+    -dP/dz = alpha_D * rho * V_bulk**2 / (2 * D_h)
+    delta_p = integral of (-dP/dz) dz over [z_start, z_end] (ROI)
+    """
+    integrand = alpha_d_bulk * rho * V_bulk**2 / (2.0 * D_h)
+    return float(np.trapz(integrand, x=z_phys))
+
+
 def main(argv: list[str] | None = None) -> int:
-    _args = parse_args(argv)
-    raise NotImplementedError(
-        "export_friction_profile pipeline not yet implemented; "
-        "see plan docs/superpowers/plans/2026-05-28-alpha-d-moose-coupling.md."
+    args = parse_args(argv)
+
+    # ---- Load + sanity-check inputs ----
+    if not args.zarr.exists():
+        raise FileNotFoundError(f"Case zarr not found: {args.zarr}")
+    if not args.checkpoint.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
+    if not args.run_meta.exists():
+        raise FileNotFoundError(f"run_meta.json not found: {args.run_meta}")
+
+    case = load_case_from_zarr(args.zarr)
+    with args.run_meta.open() as fh:
+        run_meta = json.load(fh)
+
+    # ---- Model inference ----
+    x = build_model_input(case, run_meta)
+    y_encoded = forward(args.checkpoint, run_meta, x)
+
+    # ---- Decode to bulk-basis alpha_D ----
+    feat_idx = case.feature_names.index("d_local_over_D")
+    d_local_over_D = case.features[:, feat_idx].astype(np.float64)
+    output_columns = run_meta["data"]["output_columns"]
+    local_norm = bool(run_meta["data"].get("local_velocity_normalization", False))
+
+    alpha_d_bulk = decode_to_bulk_alpha_d(
+        y_encoded,
+        d_local_over_D=d_local_over_D,
+        local_velocity_normalization=local_norm,
+        target_name=output_columns[0],
     )
+    if not np.all(np.isfinite(alpha_d_bulk)):
+        raise RuntimeError("Decoded alpha_D contains non-finite values.")
+    if np.any(alpha_d_bulk <= 0.0):
+        # Surrogate may legitimately predict negative alpha_D in recovery
+        # regions; this is informational only.
+        print(
+            f"[warn] {np.sum(alpha_d_bulk <= 0)} of {len(alpha_d_bulk)} "
+            "stations have non-positive alpha_D (recovery region or noise)."
+        )
+
+    # ---- ROI -> throat axial mapping ----
+    feat_idx_z = case.feature_names.index("z_hat")
+    feat_idx_throat = case.feature_names.index("is_throat")
+    z_hat = case.features[:, feat_idx_z].astype(np.float64)
+    is_throat = case.features[:, feat_idx_throat].astype(np.float64)
+
+    throat_length_m = case.outer_height_m * case.Lr
+    roi_length_m = throat_length_m + 2.0 * case.buffer_diams * case.D_big
+    z_phys = z_hat * roi_length_m  # ROI-local axial coordinate, in meters
+
+    # Local hydraulic diameter at each ROI station: D_big outside throat,
+    # Dr*D_big inside throat. Use d_local_over_D directly.
+    D_h_roi = d_local_over_D * case.D_big
+
+    delta_p_surrogate = _integrate_delta_p_with_z_phys(
+        alpha_d_bulk=alpha_d_bulk,
+        z_phys=z_phys,
+        D_h=D_h_roi,
+        rho=case.rho,
+        V_bulk=case.V_bulk,
+    )
+
+    z_moose, alpha_throat = restrict_to_throat(
+        z_hat=z_hat,
+        is_throat=is_throat,
+        values=alpha_d_bulk,
+        throat_length=throat_length_m,
+    )
+    cf_throat = alpha_d_to_forchheimer(alpha_throat, Dr=case.Dr, D_outer=case.D_big)
+
+    # ---- Write outputs ----
+    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
+    sidecar = {
+        "case_id": case.case_id,
+        "checkpoint": str(args.checkpoint),
+        "Re": case.Re,
+        "Dr": case.Dr,
+        "Lr": case.Lr,
+        "D_big": case.D_big,
+        "outer_height_m": case.outer_height_m,
+        "buffer_diams": case.buffer_diams,
+        "throat_length_m": throat_length_m,
+        "roi_length_m": roi_length_m,
+        "rho": case.rho,
+        "V_bulk": case.V_bulk,
+        "denom_2_Dr5_Douter": 2.0 * (case.Dr**5) * case.D_big,
+        "delta_p_truth": case.delta_p_truth,
+        "delta_p_surrogate": delta_p_surrogate,
+        "v_local_over_v_bulk_was_in_input_columns": v_local_in_inputs,
+        "alpha_D_bulk_roi": alpha_d_bulk.tolist(),
+        "z_phys_roi": z_phys.tolist(),
+    }
+    write_outputs(csv_path=args.output_csv, z=z_moose, cf=cf_throat, sidecar=sidecar)
+
+    print(
+        f"Wrote {args.output_csv} ({len(z_moose)} throat stations); "
+        f"delta_p_truth={case.delta_p_truth:.6g}, "
+        f"delta_p_surrogate={delta_p_surrogate:.6g}."
+    )
+    return 0
 
 
 if __name__ == "__main__":

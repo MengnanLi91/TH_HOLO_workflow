@@ -311,3 +311,71 @@ def test_restrict_to_throat_extracts_central_segment():
     assert z_throat[-1] == pytest.approx(throat_length)
     # Monotone increasing
     assert np.all(np.diff(z_throat) > 0)
+
+
+def test_write_csv_and_sidecar(tmp_path):
+    from cases.alpha_d.export_friction_profile import write_outputs
+
+    z = np.array([0.0, 0.05, 0.073], dtype=np.float64)
+    cf = np.array([100.0, 200.0, 150.0], dtype=np.float64)
+    sidecar = {
+        "case_id": "Re_43938__Dr_0p522__Lr_0p073",
+        "Re": 43938.0,
+        "Dr": 0.522,
+        "Lr": 0.073,
+        "delta_p_truth": 1.234,
+        "delta_p_surrogate": 1.111,
+        "throat_length_m": 0.073,
+    }
+
+    csv_path = tmp_path / "forchheimer_profile.csv"
+    write_outputs(csv_path=csv_path, z=z, cf=cf, sidecar=sidecar)
+
+    meta_path = csv_path.with_suffix(".meta.json")
+    assert csv_path.exists()
+    assert meta_path.exists()
+
+    rows = csv_path.read_text().strip().splitlines()
+    assert rows[0] == "z,F"
+    parsed = np.loadtxt(csv_path, delimiter=",", skiprows=1)
+    np.testing.assert_allclose(parsed[:, 0], z)
+    np.testing.assert_allclose(parsed[:, 1], cf)
+
+    loaded = json.loads(meta_path.read_text())
+    assert loaded["case_id"] == "Re_43938__Dr_0p522__Lr_0p073"
+    assert loaded["delta_p_surrogate"] == pytest.approx(1.111)
+
+
+@pytest.mark.skipif(
+    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
+    reason="Checkpoint or target zarr not present.",
+)
+def test_end_to_end_run(tmp_path):
+    from cases.alpha_d.export_friction_profile import main
+
+    out_csv = tmp_path / "forchheimer_profile.csv"
+
+    rc = main(
+        [
+            "--zarr",
+            str(TARGET_ZARR),
+            "--checkpoint",
+            str(TARGET_CKPT),
+            "--run-meta",
+            str(TARGET_RUN_META),
+            "--output-csv",
+            str(out_csv),
+        ]
+    )
+    assert rc == 0
+    assert out_csv.exists()
+    assert out_csv.with_suffix(".meta.json").exists()
+
+    parsed = np.loadtxt(out_csv, delimiter=",", skiprows=1)
+    z, cf = parsed[:, 0], parsed[:, 1]
+    assert len(z) >= 2 and len(z) <= 50
+    assert z[0] == pytest.approx(0.0, abs=1e-9)
+    assert z[-1] == pytest.approx(0.073, rel=1e-2)
+    # C_F should be positive somewhere in the throat for this case.
+    # (Surrogate may emit negative values in recovery; we only require any positive.)
+    assert np.any(cf > 0)
