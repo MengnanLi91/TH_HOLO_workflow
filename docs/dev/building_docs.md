@@ -94,3 +94,36 @@ make -C docs html SPHINXOPTS="-W --keep-going"
 | `docs/superpowers/` | Internal planning; **excluded from the rendered site** via `exclude_patterns` in `conf.py` |
 
 `docs/_build/` is git-ignored. Don't commit anything under it.
+
+## Hosted site (GitHub Pages)
+
+The rendered site is auto-deployed from `main` to GitHub Pages at:
+
+<https://mengnanli91.github.io/multifid-th/>
+
+The deploy job lives in `.github/workflows/docs.yml`:
+
+- **Every PR** builds the docs and uploads the HTML as a `docs-preview`
+  artifact (downloadable from the PR's Actions tab for 14 days). The PR
+  build is a status check — broken docs fail the PR.
+- **Every push to `main`** rebuilds and deploys the result to Pages via
+  `actions/deploy-pages@v4`. Deploys are queued via the `pages`
+  concurrency group so two pushes in quick succession don't race.
+
+The build runs in a stock Python 3.11 GitHub-hosted runner with just
+`pip install -e ".[docs]"` — no torch, no physicsnemo. Autodoc imports
+work because `docs/conf.py` lists those heavy runtime deps under
+`autodoc_mock_imports`. If you add a new module that imports a runtime
+dep not yet mocked, the CI build will fail with an `ImportError`; add
+the dep to the `autodoc_mock_imports` list in `conf.py`.
+
+### One-time setup (maintainer only)
+
+Pages must be enabled with the Actions source the first time this
+workflow runs:
+
+1. Repo Settings → **Pages**
+2. Build and deployment → Source → **GitHub Actions**
+
+After that the workflow handles everything. No `gh-pages` branch is
+involved.
