@@ -76,6 +76,15 @@ RUN if [ "${INSTALL_PHYSICSNEMO}" = "1" ]; then \
     "zarr" \
     "pytest>=9.0" \
     "pycaret>=3.3" \
-    && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system -e /workspace/physicsnemo-curator
+    && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system -e /workspace/physicsnemo-curator \
+    && uv --native-tls ${UV_ALLOW_INSECURE_HOST_FLAGS} pip install --system \
+        "sphinx" \
+        "furo" \
+        "myst-parser" \
+        "sphinxcontrib-mermaid" \
+        "sphinx-copybutton" \
+        "sphinx-design" \
+        "sphinx-autodoc-typehints" \
+        "sphinx-autobuild"
 
 CMD ["bash"]

@@ -49,13 +49,25 @@ the container SIFs, or the ``apptainer`` binary itself isn't available.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-REPO = Path("/data/lim2/projects/multifid-th/worktrees/integration")
+# Resolve the repo root from this file's location:
+#   tests/case_pressure_drop/<this>.py → parents[2] is the repo root,
+# so the test works in any worktree without hardcoded user paths.
+REPO = Path(__file__).resolve().parents[2]
+
+# Apptainer bind path: by default, bind the directory that contains all
+# multifid-th worktrees (assumed to be REPO's grandparent — i.e., the
+# `<...>/multifid-th/` shared root above `worktrees/<branch>/`). Override
+# with MULTIFID_BIND when the SIFs live outside that subtree.
+BIND_PATH = Path(os.environ.get("MULTIFID_BIND", str(REPO.parents[1])))
+BIND = f"{BIND_PATH}:{BIND_PATH}"
+
 TARGET_ZARR = (
     REPO
     / "data/flow_contraction_expansion/parametric_study/processed/Re_43938__Dr_0p522__Lr_0p073.zarr"
@@ -64,8 +76,24 @@ CKPT = REPO / "data/cases/train_conv1d/model.mdlus"
 META = REPO / "data/cases/train_conv1d/run_meta.json"
 MOOSE_DIR = REPO / "src/cases/alpha_d/moose"
 NS_EXE = REPO / "moose/modules/navier_stokes/navier_stokes-opt"
-MOOSE_SIF = Path("/data/lim2/containers/moose-dev-openmpi-x86_64_latest.sif")
-PY_SIF = Path("/data/lim2/projects/multifid-th/worktrees/refactor/multifid-th-cpu.sif")
+
+# Container locations: defaults match the sibling `worktrees/refactor`
+# layout this repo ships with; override via MULTIFID_MOOSE_SIF /
+# MULTIFID_PY_SIF when those .sif files live elsewhere on a given host.
+MOOSE_SIF = Path(
+    os.environ.get(
+        "MULTIFID_MOOSE_SIF",
+        # The MOOSE SIF is typically distributed centrally, not in-repo.
+        # No portable default; an empty path makes the skipif gate trigger.
+        "",
+    )
+)
+PY_SIF = Path(
+    os.environ.get(
+        "MULTIFID_PY_SIF",
+        str(REPO.parent / "refactor" / "multifid-th-cpu.sif"),
+    )
+)
 
 # Set against the observed coupling_fidelity_relerr of +0.560, with a
 # ~0.20 margin. Tighten once the surrogate model is retrained or the
@@ -98,7 +126,7 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
             "apptainer",
             "exec",
             "--bind",
-            "/data/lim2/projects/multifid-th:/data/lim2/projects/multifid-th",
+            BIND,
             str(PY_SIF),
             "bash",
             "-lc",
@@ -123,7 +151,7 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
             "apptainer",
             "exec",
             "--bind",
-            "/data/lim2/projects/multifid-th:/data/lim2/projects/multifid-th",
+            BIND,
             str(MOOSE_SIF),
             "bash",
             "-lc",

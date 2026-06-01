@@ -10,7 +10,9 @@ import pytest
 
 
 def test_module_imports():
-    from cases.alpha_d import export_friction_profile  # noqa: F401
+    from cases.alpha_d import export_friction_profile
+
+    assert export_friction_profile is not None
 
 
 def test_cli_parses_required_args(tmp_path):
@@ -34,10 +36,12 @@ def test_cli_parses_required_args(tmp_path):
     assert args.output_csv == tmp_path / "out.csv"
 
 
-TARGET_ZARR = Path(
-    "/data/lim2/projects/multifid-th/worktrees/integration/data/"
-    "flow_contraction_expansion/parametric_study/processed/"
-    "Re_43938__Dr_0p522__Lr_0p073.zarr"
+# Resolve the repo root from this file's location:
+#   tests/cases/alpha_d/<this>.py → parents[3] is the repo root.
+_REPO = Path(__file__).resolve().parents[3]
+TARGET_ZARR = (
+    _REPO
+    / "data/flow_contraction_expansion/parametric_study/processed/Re_43938__Dr_0p522__Lr_0p073.zarr"
 )
 
 
@@ -137,9 +141,7 @@ def test_build_model_input_uses_run_meta_columns_and_norm_stats():
     np.testing.assert_allclose(x[0, 0, :], expected_ch0, atol=1e-5)
 
 
-TARGET_CKPT = Path(
-    "/data/lim2/projects/multifid-th/worktrees/integration/data/cases/train_conv1d/model.mdlus"
-)
+TARGET_CKPT = _REPO / "data/cases/train_conv1d/model.mdlus"
 TARGET_RUN_META = TARGET_CKPT.parent / "run_meta.json"
 
 
