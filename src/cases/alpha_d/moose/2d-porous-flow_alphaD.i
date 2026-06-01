@@ -9,11 +9,12 @@
 #
 # ─── How to run (full pipeline) ─────────────────────────────────────────
 #
-# Two apptainer SIFs are needed:
-#   PY_SIF=/data/lim2/projects/multifid-th/worktrees/refactor/multifid-th-cpu.sif
-#   MOOSE_SIF=/data/lim2/containers/moose-dev-openmpi-x86_64_latest.sif
-#   REPO=/data/lim2/projects/multifid-th/worktrees/integration
-#   BIND="--bind /data/lim2/projects/multifid-th:/data/lim2/projects/multifid-th"
+# Set these three paths once for your environment, then the recipe below
+# is identical on every machine:
+#   REPO=<your checkout of multifid-th>
+#   PY_SIF=<path to multifid-th-cpu.sif>
+#   MOOSE_SIF=<path to moose-dev SIF that bundles libwasphit, libvtk, etc.>
+#   BIND="--bind $REPO:$REPO"   # add more --bind entries if SIFs live outside $REPO
 #
 # 1) Run the exporter to generate forchheimer_profile.csv + sidecar:
 #   apptainer exec $BIND $PY_SIF bash -lc "

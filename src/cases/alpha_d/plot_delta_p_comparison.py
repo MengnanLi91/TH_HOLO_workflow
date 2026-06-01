@@ -13,7 +13,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-REPO = Path("/data/lim2/projects/multifid-th/worktrees/integration")
+# Resolve repo root from this file's location: src/cases/alpha_d/<this>.py
+# → parents[3] is the repo root regardless of where the worktree lives.
+REPO = Path(__file__).resolve().parents[3]
 CASE = "Re_43938__Dr_0p522__Lr_0p073"
 SIDECAR = REPO / f"data/cases/train_conv1d/{CASE}/forchheimer_profile.meta.json"
 CSV = REPO / "src/cases/alpha_d/moose/forchheimer_profile.csv"

@@ -109,5 +109,18 @@ From: python:3.11-slim
 
     uv --native-tls pip install --system -e /workspace/physicsnemo-curator
 
+    # Documentation build stack (Sphinx + MyST + Furo + extensions).
+    # Mirrors pyproject.toml's [project.optional-dependencies] docs = [...]
+    # so `make -C docs html` works without any host-side install.
+    uv --native-tls pip install --system \
+        "sphinx" \
+        "furo" \
+        "myst-parser" \
+        "sphinxcontrib-mermaid" \
+        "sphinx-copybutton" \
+        "sphinx-design" \
+        "sphinx-autodoc-typehints" \
+        "sphinx-autobuild"
+
 %runscript
     exec bash "$@"

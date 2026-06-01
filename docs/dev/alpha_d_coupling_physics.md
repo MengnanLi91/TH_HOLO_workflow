@@ -585,10 +585,7 @@ by the PiecewiseLinear smearing at the porosity step (§5.4), which adds
 does not include.
 
 ```{figure} ../_static/alpha_d_coupling_delta_p.png
-:alt: Four-panel comparison of the alpha_D → MOOSE coupling pipeline for
-  Re_43938__Dr_0p522__Lr_0p073: ΔP bar chart, fidelity vs truth, surrogate
-  α_D(z) profile with the vena-contracta peak annotated, and the
-  Forchheimer profile fed to MOOSE split by block.
+:alt: Four-panel comparison of the alpha_D to MOOSE coupling pipeline for Re_43938__Dr_0p522__Lr_0p073.
 :width: 100%
 :align: center
 
@@ -615,9 +612,10 @@ After re-running the exporter + MOOSE pipeline (see the Usage block in
 with:
 
 ```bash
-SIF=/data/lim2/projects/multifid-th/worktrees/refactor/multifid-th-cpu.sif
-apptainer exec --bind /data/lim2/projects/multifid-th:/data/lim2/projects/multifid-th "$SIF" \
-  python /data/lim2/projects/multifid-th/worktrees/integration/src/cases/alpha_d/plot_delta_p_comparison.py
+REPO=<your checkout of multifid-th>
+SIF=<your multifid-th-cpu.sif>
+apptainer exec --bind "$REPO:$REPO" "$SIF" \
+  python "$REPO/src/cases/alpha_d/plot_delta_p_comparison.py"
 ```
 
 The script reads numbers from the sidecar JSON, regenerates the
