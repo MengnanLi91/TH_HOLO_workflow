@@ -16,13 +16,24 @@ from pathlib import Path
 
 import numpy as np
 
+INLET_AREA_M2 = 0.0314159265  # = pi * (outer_radius=0.1)^2, RZ axisymmetric
+# Hardcoded for this case. The right thing for the long term is to read
+# outer_radius from the .i file or pass it as an arg; left as a TODO.
+
 
 def read_moose_inlet_pressure(csv_path: Path) -> float:
-    """Read inlet-p from a MOOSE postprocessor CSV (steady, single row)."""
+    """Read inlet-p (pressure × inlet_area integral) and divide by area.
+
+    The MOOSE SideIntegralVariablePostprocessor returns ∫ pressure dA;
+    we want the actual pressure for comparison with the surrogate's α_D
+    integral, which has units of Pa.
+    """
     data = np.genfromtxt(str(csv_path), delimiter=",", names=True)
     if data.ndim == 0:
-        return float(data["inletp"])  # genfromtxt sanitises '-' to ''
-    return float(np.atleast_1d(data["inletp"])[-1])
+        integral = float(data["inletp"])
+    else:
+        integral = float(np.atleast_1d(data["inletp"])[-1])
+    return integral / INLET_AREA_M2
 
 
 def compare(*, sidecar_path: Path, delta_p_moose: float) -> dict:

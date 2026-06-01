@@ -4,18 +4,34 @@ Runs the exporter -> MOOSE -> verifier pipeline on
 Re_43938__Dr_0p522__Lr_0p073 and asserts the coupling-fidelity error
 stays within tolerance.
 
-Observed when this test was added (2026-05-28):
-  delta_p_truth     = 11.832  Pa  (training CFD direct)
-  delta_p_surrogate =  8.186  Pa  (alpha_D ROI integral)
-  delta_p_moose     =  2.106  Pa  (PINSFV with surrogate-driven C_F)
+Observed at landing (2026-05-28, porosity² block-aware mapping + unit-corrected
+verifier):
+  delta_p_truth     = 11.832 Pa  (training CFD direct)
+  delta_p_surrogate =  8.186 Pa  (alpha_D ROI trapz integral)
+  delta_p_moose     = 12.77  Pa  (PINSFV pressure = postprocessor / inlet_area)
   surrogate_fidelity_relerr = -0.308  (surrogate vs truth)
-  coupling_fidelity_relerr  = -0.743  (MOOSE vs surrogate)
+  coupling_fidelity_relerr  = +0.560  (MOOSE vs surrogate, MOOSE over-predicts)
 
-The large coupling gap reflects the physical-model mismatch the design
-spec already documented in Section 2 (homogenized PINSFV with a Forchheimer
-closure is a different PDE from resolved CFD). The tolerance here just
-guards the *baseline coupling number from regressing further*; it is not
-a physics-quality bound.
+The coupled MOOSE pressure is only +7.9% off training truth — substantially
+better than the surrogate integral alone (-30.8% off truth) or vanilla MOOSE
+with a constant Forchheimer coefficient (-96% off truth at C_F=1).
+
+Forchheimer mapping (corrected derivation against PINSFVMomentumFriction.C
+empirical behavior):
+  F = α_D · porosity² / D_h
+  Block 1/3 (buffer, porosity=1):  F = α_D / D_outer
+  Block 2 (throat, porosity=Dr²):  F = α_D · Dr³ / D_outer
+
+The kernel comment in PINSFVMomentumFriction.C:102-104 states
+``∇p = (ρ/2) F |v| v`` with v=superficial, but constant-F=1 throat
+verification gives ΔP = F · throat_length / (2 · porosity²) — an extra
+1/porosity factor relative to that comment. The mapping above matches the
+empirical behavior to within 1.5%.
+
+The verifier reports ``delta_p_moose`` as ``inlet-p / inlet_area`` where
+``inlet_area = π · outer_radius²`` for the 2-D axisymmetric (RZ) mesh.
+SideIntegralVariablePostprocessor returns ``∫ pressure · 2πr dr``, not the
+pressure itself.
 
 Execution environment note (2026-05-28):
   This test drives apptainer subprocesses for the Python-SIF (exporter)
@@ -51,8 +67,10 @@ NS_EXE = REPO / "moose/modules/navier_stokes/navier_stokes-opt"
 MOOSE_SIF = Path("/data/lim2/containers/moose-dev-openmpi-x86_64_latest.sif")
 PY_SIF = Path("/data/lim2/projects/multifid-th/worktrees/refactor/multifid-th-cpu.sif")
 
-# Calibrated against the observed value at landing time. See module
-# docstring for the reasoning behind the wide bound.
+# Calibrated against the observed coupling_fidelity_relerr of +0.560 at
+# landing time. ~0.20 buffer; tighten once the surrogate model is retrained
+# or the contraction-edge spike is repositioned. See module docstring for
+# the reasoning behind a non-zero bound.
 COUPLING_TOL = 0.80
 
 

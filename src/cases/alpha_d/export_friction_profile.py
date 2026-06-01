@@ -5,11 +5,22 @@ For a single target case, this script:
   2. Loads the trained Conv1D checkpoint.
   3. Runs forward inference to get the per-station alpha_D profile.
   4. Maps alpha_D(z) to MOOSE PINSFV Forchheimer coefficient C_F(z) using
-     the throat-only 1D plug-flow equivalence.
+     the full-ROI block-aware empirical equivalence (see spec Section 4.3
+     and the constant-F=1 verification tests, 2026-05-28).
   5. Writes forchheimer_profile.csv (z, F) plus a sidecar metadata.json.
 
 The CSV is consumed by MOOSE's PiecewiseLinear function backing the
-ADGenericVectorFunctorMaterial on block 2 (the throat).
+ADGenericVectorFunctorMaterial applied on all blocks (full ROI).
+
+Block-specific Forchheimer mapping (empirical, constant-F=1 verified):
+  MOOSE PINSFV empirically computes -dP/dz = F / (2 · porosity²)
+  (not F / (2 · porosity) as the kernel comment suggests; the extra 1/ε
+  factor likely arises because the kernel uses interstitial² not
+  interstitial·superficial velocity internally.)
+  Equating to training α_D / (2 · D_h) gives F = α_D · porosity² / D_h:
+  - Block 1 (upstream buffer): porosity = 1,   D_h = D_outer → F = α_D / D_outer
+  - Block 2 (throat):          porosity = Dr², D_h = Dr·D_outer → F = α_D · Dr³ / D_outer
+  - Block 3 (downstream buffer): porosity = 1, D_h = D_outer → F = α_D / D_outer
 """
 
 from __future__ import annotations
@@ -178,16 +189,35 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
-def alpha_d_to_forchheimer(alpha_d_bulk: np.ndarray, *, Dr: float, D_outer: float) -> np.ndarray:
-    """Spec section 4.3 mapping: C_F = alpha_D / (2 * Dr^5 * D_outer).
+def alpha_d_to_forchheimer(
+    alpha_d_bulk: np.ndarray,
+    *,
+    porosity: np.ndarray | float,
+    D_h: np.ndarray | float,
+) -> np.ndarray:
+    """Map bulk-basis Darcy-Weisbach α_D(z) to MOOSE PINSFV Forchheimer C_F.
 
-    Throat-only 1D plug-flow equivalence with V_bulk = V_interstitial,
-    D_h = D_throat = Dr * D_outer, porosity = Dr^2.
+    Empirical PINSFV behavior (constant-F=1 verification tests 2026-05-28):
+      MOOSE PINSFVMomentumFriction with PINSFVSpeedFunctorMaterial gives
+        -dP/dz_MOOSE = F / (2 · porosity²)    (for ρ = U_super = 1)
+      [The kernel comment in PINSFVMomentumFriction.C says U_super² but
+      the empirical behavior has an extra 1/porosity factor. The kernel
+      appears to use interstitial² rather than interstitial·superficial
+      velocity internally, giving the extra 1/ε factor at ε < 1.]
+      Training α_D is defined by -dP/dz = α_D / (2 · D_h)  (for ρ = V_bulk = 1).
+      Equate: F = α_D · porosity² / D_h.
+
+    Block-specific values for our 3-block PINSFV mesh:
+      blocks 1, 3 (non-porous buffer):  porosity = 1,   D_h = D_outer
+                                         → F = α_D / D_outer
+      block 2 (porous throat):          porosity = Dr², D_h = Dr · D_outer
+                                         → F = α_D · Dr³ / D_outer
     """
-    if Dr <= 0.0 or D_outer <= 0.0:
-        raise ValueError(f"Dr and D_outer must be positive; got Dr={Dr}, D_outer={D_outer}.")
-    denom = 2.0 * (Dr**5) * D_outer
-    return np.asarray(alpha_d_bulk, dtype=np.float64) / denom
+    porosity_arr = np.asarray(porosity, dtype=np.float64)
+    D_h_arr = np.asarray(D_h, dtype=np.float64)
+    if np.any(porosity_arr <= 0) or np.any(D_h_arr <= 0):
+        raise ValueError("porosity and D_h must be positive everywhere.")
+    return np.asarray(alpha_d_bulk, dtype=np.float64) * (porosity_arr**2) / D_h_arr
 
 
 def restrict_to_throat(
@@ -315,14 +345,15 @@ def main(argv: list[str] | None = None) -> int:
             "stations have non-positive alpha_D (recovery region or noise)."
         )
 
-    # ---- ROI -> throat axial mapping ----
+    # ---- ROI axial coordinates ----
     feat_idx_z = case.feature_names.index("z_hat")
     feat_idx_throat = case.feature_names.index("is_throat")
     z_hat = case.features[:, feat_idx_z].astype(np.float64)
     is_throat = case.features[:, feat_idx_throat].astype(np.float64)
 
     throat_length_m = case.outer_height_m * case.Lr
-    roi_length_m = throat_length_m + 2.0 * case.buffer_diams * case.D_big
+    end_length_m = case.buffer_diams * case.D_big
+    roi_length_m = throat_length_m + 2.0 * end_length_m
     z_phys = z_hat * roi_length_m  # ROI-local axial coordinate, in meters
 
     # Local hydraulic diameter at each ROI station: D_big outside throat,
@@ -337,23 +368,19 @@ def main(argv: list[str] | None = None) -> int:
         V_bulk=case.V_bulk,
     )
 
-    z_moose, alpha_throat = restrict_to_throat(
-        z_hat=z_hat,
-        is_throat=is_throat,
-        values=alpha_d_bulk,
-        throat_length=throat_length_m,
+    # ---- Block-aware full-ROI Forchheimer mapping ----
+    # Per-station porosity: Dr² in throat, 1.0 in buffers
+    porosity_per_station = np.where(is_throat > 0.5, case.Dr**2, 1.0)
+    # D_h_roi already computed above (d_local_over_D * D_big)
+    cf_all = alpha_d_to_forchheimer(
+        alpha_d_bulk,
+        porosity=porosity_per_station,
+        D_h=D_h_roi,
     )
 
-    # MOOSE mesh x is measured from the inlet; the throat starts at
-    # end_length = buffer_diams * D_big. PiecewiseLinear has no built-in
-    # x-offset and this MOOSE checkout's ParsedFunction can't compose
-    # functor inputs, so we pre-shift the CSV here.
-    end_length_m = case.buffer_diams * case.D_big
-    z_moose_mesh = z_moose + end_length_m
-
-    cf_throat = alpha_d_to_forchheimer(alpha_throat, Dr=case.Dr, D_outer=case.D_big)
-
     # ---- Write outputs ----
+    # z_phys is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
+    # No pre-shift needed; PiecewiseLinear spans [0, roi_length].
     v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
     sidecar = {
         "case_id": case.case_id,
@@ -369,17 +396,18 @@ def main(argv: list[str] | None = None) -> int:
         "roi_length_m": roi_length_m,
         "rho": case.rho,
         "V_bulk": case.V_bulk,
-        "denom_2_Dr5_Douter": 2.0 * (case.Dr**5) * case.D_big,
+        "forchheimer_multiplier_throat": (case.Dr**3) / case.D_big,
+        "forchheimer_multiplier_buffer": 1.0 / case.D_big,
         "delta_p_truth": case.delta_p_truth,
         "delta_p_surrogate": delta_p_surrogate,
         "v_local_over_v_bulk_was_in_input_columns": v_local_in_inputs,
         "alpha_D_bulk_roi": alpha_d_bulk.tolist(),
         "z_phys_roi": z_phys.tolist(),
     }
-    write_outputs(csv_path=args.output_csv, z=z_moose_mesh, cf=cf_throat, sidecar=sidecar)
+    write_outputs(csv_path=args.output_csv, z=z_phys, cf=cf_all, sidecar=sidecar)
 
     print(
-        f"Wrote {args.output_csv} ({len(z_moose_mesh)} throat stations); "
+        f"Wrote {args.output_csv} ({len(z_phys)} full-ROI stations); "
         f"delta_p_truth={case.delta_p_truth:.6g}, "
         f"delta_p_surrogate={delta_p_surrogate:.6g}."
     )

@@ -9,13 +9,14 @@ import pytest
 
 
 def test_read_moose_inlet_pressure(tmp_path):
-    from cases.alpha_d.verify_delta_p import read_moose_inlet_pressure
+    """Postprocessor stores integral; verifier divides by RZ inlet area."""
+    from cases.alpha_d.verify_delta_p import INLET_AREA_M2, read_moose_inlet_pressure
 
     csv_path = tmp_path / "out.csv"
     csv_path.write_text("time,inlet-p,outlet-u\n0,1.2345,1.0\n")
 
     p = read_moose_inlet_pressure(csv_path)
-    assert p == pytest.approx(1.2345)
+    assert p == pytest.approx(1.2345 / INLET_AREA_M2)
 
 
 def test_compare_emits_two_relative_errors(tmp_path):

@@ -261,25 +261,52 @@ def test_decode_to_bulk_alpha_d_without_local_normalization():
     np.testing.assert_allclose(decoded, alpha_true, rtol=1e-6)
 
 
-def test_alpha_d_to_forchheimer_synthetic():
-    """With alpha_D = 1, Dr = 0.5, D_outer = 1, the spec gives
-    C_F = 1 / (2 * 0.5**5 * 1) = 16."""
+def test_alpha_d_to_forchheimer_throat_synthetic():
+    """Throat (porous): porosity = Dr², D_h = Dr·D_outer.
+    α_D=1, Dr=0.5, D_outer=1 → F = α_D · porosity² / D_h = α_D · Dr⁴ / (Dr·D_outer) = α_D · Dr³ / D_outer = 0.125."""
     from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
 
-    alpha = np.array([1.0])
-    cf = alpha_d_to_forchheimer(alpha, Dr=0.5, D_outer=1.0)
-    np.testing.assert_allclose(cf, [16.0], rtol=1e-9)
+    cf = alpha_d_to_forchheimer(np.array([1.0]), porosity=0.5**2, D_h=0.5 * 1.0)
+    np.testing.assert_allclose(cf, [0.125], rtol=1e-9)
 
 
-def test_alpha_d_to_forchheimer_target_case():
-    """For Dr=0.522, D_outer=0.2, denominator = 2*0.522^5*0.2."""
+def test_alpha_d_to_forchheimer_buffer_synthetic():
+    """Buffer (non-porous): porosity = 1, D_h = D_outer.
+    α_D=1, D_outer=1 → F = α_D / D_outer = 1.0."""
+    from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
+
+    cf = alpha_d_to_forchheimer(np.array([1.0]), porosity=1.0, D_h=1.0)
+    np.testing.assert_allclose(cf, [1.0], rtol=1e-9)
+
+
+def test_alpha_d_to_forchheimer_target_case_throat():
+    """For Dr=0.522, D_outer=0.2 throat: F = α_D · 0.522³/0.2."""
     from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
 
     alpha = np.array([1.0, 2.0, 3.0])
-    cf = alpha_d_to_forchheimer(alpha, Dr=0.522, D_outer=0.2)
+    cf = alpha_d_to_forchheimer(alpha, porosity=0.522**2, D_h=0.522 * 0.2)
+    np.testing.assert_allclose(cf, alpha * (0.522**3 / 0.2), rtol=1e-9)
 
-    denom = 2.0 * (0.522**5) * 0.2
-    np.testing.assert_allclose(cf, alpha / denom, rtol=1e-9)
+
+def test_alpha_d_to_forchheimer_blockwise_per_station():
+    """Vector inputs: each station gets its own porosity and D_h.
+
+    Formula: F = α_D · porosity² / D_h. Buffer (porosity=1) reduces to
+    α_D / D_h; throat (porosity=Dr²) gives α_D · Dr⁴ / D_h."""
+    from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
+
+    alpha = np.array([1.0, 2.0, 3.0])
+    porosity = np.array([1.0, 0.272, 1.0])
+    D_h = np.array([0.2, 0.1044, 0.2])
+    cf = alpha_d_to_forchheimer(alpha, porosity=porosity, D_h=D_h)
+    expected = np.array(
+        [
+            1.0 * 1.0**2 / 0.2,
+            2.0 * 0.272**2 / 0.1044,
+            3.0 * 1.0**2 / 0.2,
+        ]
+    )
+    np.testing.assert_allclose(cf, expected, rtol=1e-6)
 
 
 def test_restrict_to_throat_extracts_central_segment():
@@ -373,13 +400,11 @@ def test_end_to_end_run(tmp_path):
 
     parsed = np.loadtxt(out_csv, delimiter=",", skiprows=1)
     z, cf = parsed[:, 0], parsed[:, 1]
-    assert len(z) >= 2 and len(z) <= 50
-    # CSV z is in MOOSE mesh coordinates: throat starts at end_length =
-    # buffer_diams * D_big = 1.0 * 0.2 = 0.2 m for this case.
-    assert z[0] == pytest.approx(0.2, abs=1e-9)
-    assert z[-1] == pytest.approx(0.2 + 0.073, rel=1e-2)
-    # C_F should be positive somewhere in the throat for this case.
-    # (Surrogate may emit negative values in recovery; we only require any positive.)
+    assert len(z) == 50  # full ROI, not throat-only
+    assert z[0] == pytest.approx(0.0, abs=0.01)  # first station near inlet
+    assert z[-1] == pytest.approx(0.473, abs=0.01)  # last station near outlet
+    # C_F should be positive somewhere in the ROI for this case.
+    # (Surrogate may emit negative values in recovery regions; only require any positive.)
     assert np.any(cf > 0)
 
 
@@ -406,5 +431,9 @@ def test_end_to_end_sidecar_records_end_length(tmp_path):
     assert rc == 0
 
     meta = json.loads(out_csv.with_suffix(".meta.json").read_text())
-    assert meta["end_length_m"] == pytest.approx(0.2, abs=1e-9)
+    # F = α_D · porosity² / D_h:
+    #   throat:  porosity=Dr², D_h=Dr·D_outer → multiplier = Dr³/D_outer
+    #   buffer:  porosity=1,   D_h=D_outer    → multiplier = 1/D_outer
+    assert meta["forchheimer_multiplier_throat"] == pytest.approx(0.522**3 / 0.2, rel=1e-2)
+    assert meta["forchheimer_multiplier_buffer"] == pytest.approx(1.0 / 0.2, rel=1e-3)
     assert meta["throat_length_m"] == pytest.approx(0.0733, rel=1e-2)
