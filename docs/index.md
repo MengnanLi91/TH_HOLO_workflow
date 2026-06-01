@@ -50,7 +50,7 @@ through four adapters**. The deeper structure is on the
 
 ## Where do I start?
 
-::::{grid} 1 2 2 2
+::::{grid} 1 2 2 4
 :gutter: 3
 
 :::{grid-item-card} {octicon}`rocket` First time
@@ -78,6 +78,16 @@ Open the Alpha-D Surrogate tutorial.
 How adapters, datasets, and the runner fit together when adding a model.
 
 Open the Architecture page.
+:::
+
+:::{grid-item-card} {octicon}`beaker` Coupling physics
+:link: dev/alpha_d_coupling_physics
+:link-type: doc
+
+Equations, averaging conventions, and the α_D → MOOSE Forchheimer
+mapping with the resolved CFD vs PINSFV verification.
+
+Open the Physics Reference.
 :::
 
 ::::
@@ -162,11 +172,23 @@ The full walkthrough is in the
 
 ```{toctree}
 :maxdepth: 2
-:caption: Navigation
+:caption: Overview
 
 architecture
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Guides
+
 user/index
 cases/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Reference
+
 dev/index
 api/index
 ```
