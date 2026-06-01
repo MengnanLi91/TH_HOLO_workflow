@@ -8,10 +8,24 @@ together.
 
 ```{toctree}
 :maxdepth: 1
+:caption: Pipeline internals
 
 etl_pipeline
 dataset
 fno_train_eval
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Physics & coupling
+
+alpha_d_coupling_physics
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Contributor reference
+
 code_style
 building_docs
 ```
