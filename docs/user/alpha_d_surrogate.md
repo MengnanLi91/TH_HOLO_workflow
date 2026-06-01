@@ -470,6 +470,17 @@ PhysicsNeMo and matches the `etl-gpu` Docker service; it runs CPU-only without
 `--nv`. For a smaller CPU-only image, build `multifid-th-cpu.sif` from
 `docker/physicsnemo-cpu.def`.
 
+## Coupling the surrogate back into MOOSE
+
+Once a model is trained, its per-station `α_D(z)` predictions can drive
+a porous-medium Forchheimer closure inside a PINSFV simulation. The
+end-to-end pipeline (exporter → MOOSE input → verifier) lives under
+`src/cases/alpha_d/` and is described in
+[Coupling Physics Reference](../dev/alpha_d_coupling_physics.md), which
+covers the volume-averaged momentum equation, the α_D → C_F mapping
+`F = α_D · ε² / D_h`, and a quantitative comparison of the coupled
+MOOSE pressure drop against the resolved-CFD ground truth.
+
 ## Architecture notes
 
 The alpha_D pipeline integrates with the existing generic training framework:
