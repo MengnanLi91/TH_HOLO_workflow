@@ -184,7 +184,9 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
 
     output_columns = run_meta["data"].get("output_columns", [])
     if len(output_columns) != 1:
-        raise RuntimeError(f"Phase 1 expects exactly one output column; got {output_columns}.")
+        raise RuntimeError(
+            f"This exporter expects exactly one output column; got {output_columns}."
+        )
 
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 

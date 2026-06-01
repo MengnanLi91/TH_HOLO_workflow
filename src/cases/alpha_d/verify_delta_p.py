@@ -16,9 +16,10 @@ from pathlib import Path
 
 import numpy as np
 
-INLET_AREA_M2 = 0.0314159265  # = pi * (outer_radius=0.1)^2, RZ axisymmetric
-# Hardcoded for this case. The right thing for the long term is to read
-# outer_radius from the .i file or pass it as an arg; left as a TODO.
+# Inlet area of the 2-D RZ axisymmetric mesh used by 2d-porous-flow_alphaD.i,
+# = pi * outer_radius^2 with outer_radius = 0.1 m. Override here when adapting
+# this verifier to a different mesh radius.
+INLET_AREA_M2 = 0.0314159265
 
 
 def read_moose_inlet_pressure(csv_path: Path) -> float:

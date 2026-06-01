@@ -197,7 +197,7 @@ $$\alpha_{D,\text{local}} = \alpha_{D,\text{bulk}} \cdot \left(\frac{d_{\text{lo
 
 ### 3.3. Training-time vs inference-time usage
 
-| Stage | Where | What is used |
+| Step | Where | What is used |
 |---|---|---|
 | ETL | `transform.py:241` | `V_local_over_V_bulk = ⟨v_z⟩(z) / V_bulk` (simulation-derived, **not** round-pipe identity) |
 | Training | `targets.py::alpha_d_bulk_to_values` | Encoder applies `α_D_local = α_D_bulk · (d_local/D)⁴` (round-pipe identity) on the way IN |
@@ -499,10 +499,11 @@ The `inlet-p` `SideIntegralVariablePostprocessor` returns
 
 $$\int p\,dA \;=\; p_{\text{inlet}} \cdot \pi \cdot R_{\text{outer}}^2 \;=\; p_{\text{inlet}} \cdot 0.0314 \,\text{m}^2 \,\text{(for } R = 0.1 \text{m)}$$
 
-Dividing by `inlet_area = π · R²` recovers the actual pressure. **This
-unit conversion was missed in early Phase 1 iterations** — the verifier
-originally reported `inlet-p` itself as the pressure, off by a factor of
-~32 for `outer_radius = 0.1 m`.
+Dividing by `inlet_area = π · R²` recovers the actual pressure. **Skipping
+this division** — i.e., reporting `inlet-p` itself as the pressure —
+reads as a factor of ~32 high for `outer_radius = 0.1 m`, so any future
+adaptation of the verifier to a different mesh radius needs to update
+`INLET_AREA_M2` accordingly.
 
 ### 6.4. Two fidelity metrics
 
@@ -626,10 +627,10 @@ under `data/cases/`) and to `docs/_static/alpha_d_coupling_delta_p.png`
 
 ### 7.5. Out-of-distribution risk
 
-The original `2d-porous-flow.i` shipped with MOOSE used `Re ≈ 2 × 10⁶`
+The original `2d-porous-flow.i` shipped with MOOSE uses `Re ≈ 2 × 10⁶`
 and `Lr ≈ 0.333`, both outside the surrogate's training range
-(`Re ∈ [5×10³, 2.5×10⁵]`, `Lr ∈ [0.01, 0.20]`). Phase 1 of this work
-**re-parameterizes the MOOSE input** to `Re_43938__Dr_0p522__Lr_0p073`,
+(`Re ∈ [5×10³, 2.5×10⁵]`, `Lr ∈ [0.01, 0.20]`). `2d-porous-flow_alphaD.i`
+therefore re-parameterizes the input to `Re_43938__Dr_0p522__Lr_0p073`,
 which sits comfortably in distribution.
 
 For other target cases, verify that `(Re, Dr, Lr)` lie within the trained

@@ -23,7 +23,7 @@
 #       --run-meta   ../data/cases/train_conv1d/run_meta.json \
 #       --output-csv ../data/cases/train_conv1d/Re_43938__Dr_0p522__Lr_0p073/forchheimer_profile.csv"
 #
-# 2) Stage the CSV next to this .i file (MOOSE resolves data_file relatively):
+# 2) Place the CSV next to this .i file (MOOSE resolves data_file relatively):
 #   cp $REPO/data/cases/train_conv1d/Re_43938__Dr_0p522__Lr_0p073/forchheimer_profile.csv \
 #      $REPO/src/cases/alpha_d/moose/forchheimer_profile.csv
 #
@@ -45,30 +45,31 @@
 #
 # ─── Forchheimer mapping ────────────────────────────────────────────────
 #
-# Derived 2026-05-28, full derivation in
-# docs/dev/alpha_d_coupling_physics.md §5):
+# Full derivation in docs/dev/alpha_d_coupling_physics.md §5:
 #
 #   F(z) = α_D(z) · ε(z)² / D_h(z)
 #
-# Specializing per block:
+# Per block:
 #   Block 1/3 (buffer, ε=1,   D_h=D_outer):    F = α_D / D_outer
 #   Block 2   (throat, ε=Dr², D_h=Dr·D_outer): F = α_D · Dr³ / D_outer
 #
-# Derivation: PINSFV's combined momentum balance for 1D steady plug flow
-# in a porous block is -ε∇p = (ρ/2)·F·|v_inter|·v_super, where the ε on
-# the pressure gradient comes from PINSFVMomentumPressure.C:41-44 and the
+# PINSFV's combined momentum balance for 1D steady plug flow in a porous
+# block is -ε∇p = (ρ/2)·F·|v_inter|·v_super. The ε on the pressure
+# gradient comes from PINSFVMomentumPressure.C:41-44; the
 # speed = |v_super|/ε = |v_inter| comes from PINSFVSpeedFunctorMaterial.C
 # lines 69-82. Solving for the effective ∇p and using v_super = V_bulk
 # (mass conservation in incompressible PINSFV) gives
 #   -dP/dz_MOOSE = ρ·F·V_bulk² / (2·ε²).
 # Equating to the training-data Darcy-Weisbach definition
 #   -dP/dz = α_D · ρ·V_bulk² / (2·D_h)
-# yields F = α_D·ε²/D_h. Verified empirically: constant-F=1 throat run
-# gives 0.484 Pa vs analytical 0.493 Pa (within finite-volume error).
+# yields F = α_D·ε²/D_h. A constant-F=1 throat run gives 0.484 Pa vs the
+# analytical 0.493 Pa, confirming the derivation to within finite-volume
+# discretization error.
 #
-# Full-ROI application (not throat-only) captures the upstream
-# vena-contracta spikes the surrogate predicts at z ≈ 0.185-0.194 m,
-# which account for ~64% of the surrogate's predicted ΔP.
+# F is applied across all three blocks so the upstream vena-contracta
+# spikes the surrogate predicts at z ≈ 0.185-0.194 m — about 64% of the
+# surrogate's predicted ΔP — land in the buffer block where they
+# physically belong.
 #
 # Material class used: ADGenericVectorFunctorMaterial
 # Justification: prop_values is typed MooseFunctorName and resolved via

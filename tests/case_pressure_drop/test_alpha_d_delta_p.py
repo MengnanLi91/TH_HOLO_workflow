@@ -4,8 +4,7 @@ Runs the exporter -> MOOSE -> verifier pipeline on
 Re_43938__Dr_0p522__Lr_0p073 and asserts the coupling-fidelity error
 stays within tolerance.
 
-Observed at landing (2026-05-28, porosity² block-aware mapping + unit-corrected
-verifier):
+Reference values for `Re_43938__Dr_0p522__Lr_0p073`:
   delta_p_truth     = 11.832 Pa  (training CFD direct)
   delta_p_surrogate =  8.186 Pa  (alpha_D ROI trapz integral)
   delta_p_moose     = 12.77  Pa  (PINSFV pressure = postprocessor / inlet_area)
@@ -33,12 +32,13 @@ The verifier reports ``delta_p_moose`` as ``inlet-p / inlet_area`` where
 SideIntegralVariablePostprocessor returns ``∫ pressure · 2πr dr``, not the
 pressure itself.
 
-Execution environment note (2026-05-28):
-  This test drives apptainer subprocesses for the Python-SIF (exporter)
-  and MOOSE-SIF steps. It must be run from a host shell where ``apptainer``
-  is on PATH — **not** from inside the Python SIF, because the SIF does not
-  bundle apptainer. The test gates on ``shutil.which("apptainer")`` so it
-  skips cleanly when launched from within the SIF instead of crashing.
+Execution environment:
+  The test drives apptainer subprocesses for the Python-SIF (exporter)
+  and MOOSE-SIF steps, so it must run from a host shell where
+  ``apptainer`` is on PATH — **not** from inside the Python SIF, because
+  the SIF does not bundle apptainer. The test gates on
+  ``shutil.which("apptainer")`` and skips cleanly when launched from
+  within the SIF instead of crashing.
 
   To run manually:
     PYTHONPATH=src pytest tests/case_pressure_drop/test_alpha_d_delta_p.py -v -s
@@ -67,10 +67,10 @@ NS_EXE = REPO / "moose/modules/navier_stokes/navier_stokes-opt"
 MOOSE_SIF = Path("/data/lim2/containers/moose-dev-openmpi-x86_64_latest.sif")
 PY_SIF = Path("/data/lim2/projects/multifid-th/worktrees/refactor/multifid-th-cpu.sif")
 
-# Calibrated against the observed coupling_fidelity_relerr of +0.560 at
-# landing time. ~0.20 buffer; tighten once the surrogate model is retrained
-# or the contraction-edge spike is repositioned. See module docstring for
-# the reasoning behind a non-zero bound.
+# Set against the observed coupling_fidelity_relerr of +0.560, with a
+# ~0.20 margin. Tighten once the surrogate model is retrained or the
+# contraction-edge spike is repositioned. See module docstring for why
+# the bound is non-zero.
 COUPLING_TOL = 0.80
 
 
@@ -111,7 +111,7 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
     sidecar = out_csv.with_suffix(".meta.json")
     assert sidecar.exists(), "Exporter did not produce sidecar JSON"
 
-    # 2) Stage CSV in the MOOSE input directory (MOOSE resolves data_file
+    # 2) Place CSV in the MOOSE input directory (MOOSE resolves data_file
     # relative to the .i file's directory)
     staged_csv = MOOSE_DIR / "forchheimer_profile.csv"
     shutil.copyfile(out_csv, staged_csv)
