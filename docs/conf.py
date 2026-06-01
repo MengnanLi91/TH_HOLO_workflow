@@ -73,6 +73,8 @@ myst_enable_extensions = [
     "attrs_inline",
     "substitution",
     "smartquotes",
+    "dollarmath",  # $...$ (inline) and $$...$$ (block) LaTeX math
+    "amsmath",  # \begin{align}, \boxed{}, and other AMS math environments
 ]
 
 myst_heading_anchors = 3
