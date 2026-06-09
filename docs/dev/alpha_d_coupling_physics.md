@@ -625,7 +625,7 @@ the CSV; this collapses MOOSE's interpolation slope to a near-step and
 restores per-region integration.
 
 ```{figure} ../_static/alpha_d_coupling_delta_p.png
-:alt: Four-panel comparison of the alpha_D to MOOSE coupling pipeline for Re_43938__Dr_0p522__Lr_0p073.
+:alt: Three-panel comparison of the alpha_D to MOOSE coupling pipeline for Re_43938__Dr_0p522__Lr_0p073.
 :width: 100%
 :align: center
 
@@ -660,7 +660,7 @@ apptainer exec --bind "$REPO:$REPO" "$SIF" \
 ```
 
 The script reads numbers from the sidecar JSON, regenerates the
-four-panel PNG, and writes it both to its source location (gitignored,
+three-panel PNG, and writes it both to its source location (gitignored,
 under `data/cases/`) and to `docs/_static/alpha_d_coupling_delta_p.png`
 (tracked, embedded above).
 
