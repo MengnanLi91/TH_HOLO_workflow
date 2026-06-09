@@ -153,6 +153,16 @@ def split_case_indices(
     else:
         raise ValueError("split.strategy must be one of {'sequential', 'random', 'stratified'}.")
 
+    force_test = [str(name) for name in (split_cfg.get("force_test") or [])]
+    if force_test:
+        name_to_idx = {name: idx for idx, name in enumerate(sim_names)}
+        unknown = [name for name in force_test if name not in name_to_idx]
+        if unknown:
+            raise ValueError(f"force_test names not present in dataset: {unknown}")
+        forced_idx = {name_to_idx[name] for name in force_test}
+        train_idx = sorted(idx for idx in train_idx if idx not in forced_idx)
+        test_idx = sorted(set(test_idx) | forced_idx)
+
     train_sims = [sim_names[idx] for idx in train_idx]
     test_sims = [sim_names[idx] for idx in test_idx]
     return train_idx, test_idx, train_sims, test_sims
@@ -618,6 +628,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
             "train_ratio": float(split_cfg.get("train_ratio", 0.8)),
             "seed": int(split_cfg.get("seed", split_seed)),
             "n_bins": int(split_cfg.get("n_bins", 3)),
+            "force_test": [str(name) for name in (split_cfg.get("force_test") or [])],
             "train_sims": train_sims,
             "test_sims": test_sims,
         },

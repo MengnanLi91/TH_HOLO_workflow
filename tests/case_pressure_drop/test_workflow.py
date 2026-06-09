@@ -257,3 +257,48 @@ def test_training_and_evaluation_smoke(
     assert Path(eval_payload["artifacts"]["metrics_json"]).exists()
     assert Path(eval_payload["artifacts"]["comparison_table"]).exists()
     assert eval_payload["artifacts"]["plots"] == []
+
+
+def test_force_test_moves_case_into_test(synthetic_case_dataset: Path) -> None:
+    dataset = CasePressureDropDataset.from_zarr_dir(synthetic_case_dataset)
+    forced = dataset.sim_names[0]
+    for seed in (1, 7, 42):
+        split_cfg = {
+            "strategy": "stratified",
+            "train_ratio": 0.75,
+            "seed": seed,
+            "n_bins": 3,
+            "force_test": [forced],
+        }
+        train_idx, test_idx, train_sims, test_sims = split_case_indices(
+            dataset.sim_names, split_cfg
+        )
+        assert forced in test_sims
+        assert forced not in train_sims
+        assert set(train_idx).isdisjoint(test_idx)
+        assert sorted(train_idx + test_idx) == list(range(len(dataset)))
+
+
+def test_force_test_idempotent_when_already_test(synthetic_case_dataset: Path) -> None:
+    dataset = CasePressureDropDataset.from_zarr_dir(synthetic_case_dataset)
+    base = {"strategy": "stratified", "train_ratio": 0.75, "seed": 7, "n_bins": 3}
+    _, _, _, test_sims = split_case_indices(dataset.sim_names, base)
+    already = test_sims[0]
+    forced_cfg = {**base, "force_test": [already]}
+    t_idx, te_idx, t_sims, te_sims = split_case_indices(dataset.sim_names, forced_cfg)
+    assert already in te_sims and already not in t_sims
+    assert set(t_idx).isdisjoint(te_idx)
+    assert sorted(t_idx + te_idx) == list(range(len(dataset)))
+
+
+def test_force_test_unknown_name_raises(synthetic_case_dataset: Path) -> None:
+    dataset = CasePressureDropDataset.from_zarr_dir(synthetic_case_dataset)
+    split_cfg = {
+        "strategy": "stratified",
+        "train_ratio": 0.75,
+        "seed": 7,
+        "n_bins": 3,
+        "force_test": ["Re_999__Dr_0p9__Lr_0p9"],
+    }
+    with pytest.raises(ValueError, match="force_test"):
+        split_case_indices(dataset.sim_names, split_cfg)
