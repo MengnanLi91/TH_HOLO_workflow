@@ -68,7 +68,7 @@
 # discretization error.
 #
 # F is applied across all three blocks so the upstream vena-contracta
-# spikes the surrogate predicts at z ≈ 0.185-0.194 m — about 64% of the
+# spikes the surrogate predicts at z ≈ 0.185-0.194 m — about 46% of the
 # surrogate's predicted ΔP — land in the buffer block where they
 # physically belong.
 #

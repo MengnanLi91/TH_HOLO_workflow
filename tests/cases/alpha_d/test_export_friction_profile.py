@@ -311,6 +311,57 @@ def test_alpha_d_to_forchheimer_blockwise_per_station():
     np.testing.assert_allclose(cf, expected, rtol=1e-6)
 
 
+def test_stepfence_inserts_duplicate_z_around_each_boundary():
+    """Step-fencing at z=0.2 (between two stations, no exact match) should
+    insert (0.2-eps, F_left) and (0.2+eps, F_right) between the bracketing
+    stations, leaving every other station alone."""
+    from cases.alpha_d.export_friction_profile import _stepfence_porosity_boundaries
+
+    # Stations chosen so 0.20 falls between 0.18 and 0.22 — not on a station,
+    # matching the real surrogate case where the porosity step at 0.2 sits
+    # between stations 20 (z=0.194) and 21 (z=0.204).
+    z = np.array([0.05, 0.18, 0.22, 0.30, 0.40], dtype=np.float64)
+    cf = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
+    eps = 1e-4
+    z_out, cf_out = _stepfence_porosity_boundaries(z, cf, boundaries=(0.20,), step_eps=eps)
+    assert np.all(np.diff(z_out) > 0)
+    assert len(z_out) == len(z) + 2
+    assert (0.20 - eps) in z_out
+    assert (0.20 + eps) in z_out
+    # The fence values copy the bracketing F values: left=2.0 (from z=0.18),
+    # right=3.0 (from z=0.22).
+    idx_left = list(z_out).index(0.20 - eps)
+    idx_right = list(z_out).index(0.20 + eps)
+    assert cf_out[idx_left] == 2.0
+    assert cf_out[idx_right] == 3.0
+
+
+def test_stepfence_handles_two_boundaries():
+    """Two porosity steps (block 1→2 and block 2→3) both get fenced."""
+    from cases.alpha_d.export_friction_profile import _stepfence_porosity_boundaries
+
+    z = np.array([0.0, 0.1, 0.18, 0.22, 0.265, 0.28, 0.4], dtype=np.float64)
+    cf = np.array([1.0, 1.5, 5.0, 0.7, 1.0, 0.5, 0.2], dtype=np.float64)
+    eps = 1e-4
+    z_out, _ = _stepfence_porosity_boundaries(z, cf, boundaries=(0.20, 0.27), step_eps=eps)
+    assert np.all(np.diff(z_out) > 0)
+    assert len(z_out) == len(z) + 4  # two fences × two new rows each
+    assert (0.20 - eps) in z_out and (0.20 + eps) in z_out
+    assert (0.27 - eps) in z_out and (0.27 + eps) in z_out
+
+
+def test_stepfence_skips_boundary_outside_csv_range():
+    """If a boundary lies outside the CSV's z span, the helper should
+    leave the data untouched."""
+    from cases.alpha_d.export_friction_profile import _stepfence_porosity_boundaries
+
+    z = np.array([0.1, 0.2, 0.3], dtype=np.float64)
+    cf = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    z_out, cf_out = _stepfence_porosity_boundaries(z, cf, boundaries=(0.05, 0.50), step_eps=1e-4)
+    np.testing.assert_array_equal(z_out, z)
+    np.testing.assert_array_equal(cf_out, cf)
+
+
 def test_restrict_to_throat_extracts_central_segment():
     """Given a 50-station ROI alpha_D profile, restrict_to_throat returns
     only the rows where is_throat=1, and remaps z_hat to local throat
@@ -402,9 +453,11 @@ def test_end_to_end_run(tmp_path):
 
     parsed = np.loadtxt(out_csv, delimiter=",", skiprows=1)
     z, cf = parsed[:, 0], parsed[:, 1]
-    assert len(z) == 50  # full ROI, not throat-only
+    # 50 surrogate stations + 4 step-fence rows (two boundaries × two rows each).
+    assert len(z) == 54
     assert z[0] == pytest.approx(0.0, abs=0.01)  # first station near inlet
     assert z[-1] == pytest.approx(0.473, abs=0.01)  # last station near outlet
+    assert np.all(np.diff(z) > 0)  # strictly increasing — required by PiecewiseLinear
     # C_F should be positive somewhere in the ROI for this case.
     # (Surrogate may emit negative values in recovery regions; only require any positive.)
     assert np.any(cf > 0)
