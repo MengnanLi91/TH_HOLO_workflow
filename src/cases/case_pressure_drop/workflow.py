@@ -628,6 +628,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
             "train_ratio": float(split_cfg.get("train_ratio", 0.8)),
             "seed": int(split_cfg.get("seed", split_seed)),
             "n_bins": int(split_cfg.get("n_bins", 3)),
+            "force_test": [str(name) for name in (split_cfg.get("force_test") or [])],
             "train_sims": train_sims,
             "test_sims": test_sims,
         },

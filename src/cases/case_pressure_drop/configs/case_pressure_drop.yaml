@@ -12,6 +12,11 @@ data:
     train_ratio: 0.8
     seed: 42
     n_bins: 3
+    # Case names listed here are forced into the TEST set (never used for
+    # feature selection or fitting), guaranteeing an out-of-sample prediction
+    # regardless of the random split. Override on the CLI, e.g.:
+    #   data.split.force_test='[Re_43938__Dr_0p522__Lr_0p073]'
+    force_test: []
 
 feature_selection:
   enabled: true
