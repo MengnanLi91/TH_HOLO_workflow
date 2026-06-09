@@ -69,7 +69,7 @@ dp_truth = float(row["delta_p_true"])
 # Cross-check the truth baseline against the alpha_d sidecar — both should be
 # case_metadata.delta_p_case. Bail if the two halves of the chart disagree.
 dp_truth_sidecar = float(json.loads(SIDECAR.read_text())["delta_p_truth"])
-if abs(dp_truth - dp_truth_sidecar) / dp_truth_sidecar > 0.01:
+if dp_truth_sidecar == 0 or abs(dp_truth - dp_truth_sidecar) / dp_truth_sidecar > 0.01:
     raise SystemExit(
         f"Truth baseline mismatch: eval delta_p_true={dp_truth:.4f} vs "
         f"sidecar delta_p_truth={dp_truth_sidecar:.4f} (>1%)."
