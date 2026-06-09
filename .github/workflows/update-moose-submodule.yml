@@ -1,0 +1,58 @@
+name: update-moose-submodule
+
+on:
+  schedule:
+    # Weekly, Mondays at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-moose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        # Submodules are intentionally NOT cloned: we only need to move the
+        # gitlink pointer, not MOOSE's (very large) history.
+
+      - name: Resolve latest moose devel commit
+        id: resolve
+        run: |
+          # Use the public HTTPS URL explicitly: .gitmodules pins an SSH URL
+          # (git@github.com:...) which cannot authenticate on a runner.
+          sha=$(git ls-remote https://github.com/idaholab/moose.git refs/heads/devel | cut -f1)
+          if [ -z "$sha" ]; then
+            echo "Failed to resolve moose devel HEAD" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${sha:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Update moose submodule pointer
+        run: |
+          # Move the gitlink without fetching the submodule's objects.
+          git update-index --cacheinfo 160000,${{ steps.resolve.outputs.sha }},moose
+
+      - name: Create or update pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          # Default GITHUB_TOKEN: the PR opens but will NOT trigger other
+          # workflows (pytest/pre-commit). Re-run those manually if needed.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto/update-moose-submodule
+          delete-branch: true
+          commit-message: "chore: bump moose submodule to ${{ steps.resolve.outputs.short_sha }}"
+          title: "chore: bump moose submodule to ${{ steps.resolve.outputs.short_sha }}"
+          body: |
+            Automated weekly bump of the `moose` submodule to the latest
+            `devel` commit.
+
+            - Upstream: https://github.com/idaholab/moose/commit/${{ steps.resolve.outputs.sha }}
+
+            Note: CI does not run automatically on token-created PRs. Re-run
+            `pytest` / `pre-commit` manually if you want checks before merging.
