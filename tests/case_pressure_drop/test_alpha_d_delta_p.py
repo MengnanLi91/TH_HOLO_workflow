@@ -6,14 +6,18 @@ stays within tolerance.
 
 Reference values for `Re_43938__Dr_0p522__Lr_0p073`:
   delta_p_truth     = 11.832 Pa  (training CFD direct)
-  delta_p_surrogate =  8.186 Pa  (alpha_D ROI trapz integral)
-  delta_p_moose     = 12.77  Pa  (PINSFV pressure = postprocessor / inlet_area)
-  surrogate_fidelity_relerr = -0.308  (surrogate vs truth)
-  coupling_fidelity_relerr  = +0.560  (MOOSE vs surrogate, MOOSE over-predicts)
+  delta_p_surrogate = 11.357 Pa  (alpha_D ROI trapz integral, baseline included)
+  delta_p_moose     = 11.282 Pa  (PINSFV pressure = postprocessor / inlet_area)
+  surrogate_fidelity_relerr = -0.040  (surrogate vs truth — matches parity plot ≤10%)
+  coupling_fidelity_relerr  = -0.007  (MOOSE vs surrogate — essentially exact)
 
-The coupled MOOSE pressure is only +7.9% off training truth — substantially
-better than the surrogate integral alone (-30.8% off truth) or vanilla MOOSE
-with a constant Forchheimer coefficient (-96% off truth at C_F=1).
+Both the standalone surrogate (-4.0% vs truth) and the coupled MOOSE
+pressure (-4.7% vs truth) sit within the parity plot's "all cases within
+~10%" claim. The coupling adds value rather than distortion: MOOSE now
+reproduces the surrogate's own integral to within 0.7%, where it
+previously over-predicted by +30% because of PiecewiseLinear bridging
+across the porosity steps (the exporter now step-fences both block
+boundaries — see physics reference §5.4).
 
 Forchheimer mapping (corrected derivation against PINSFVMomentumFriction.C
 empirical behavior):
@@ -95,11 +99,12 @@ PY_SIF = Path(
     )
 )
 
-# Set against the observed coupling_fidelity_relerr of +0.560, with a
-# ~0.20 margin. Tighten once the surrogate model is retrained or the
-# contraction-edge spike is repositioned. See module docstring for why
-# the bound is non-zero.
-COUPLING_TOL = 0.80
+# Set well above the observed |coupling_fidelity_relerr| of 0.007 so that
+# routine numerical drift doesn't trip the test, while keeping enough margin
+# to catch real regressions (e.g., a future change that drops the
+# porosity-boundary step-fence and re-introduces PiecewiseLinear smearing
+# would push this back above 0.30). See module docstring for context.
+COUPLING_TOL = 0.05
 
 
 @pytest.mark.skipif(

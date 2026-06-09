@@ -39,61 +39,67 @@ in_throat = (z_phys >= end_len - 1e-9) & (z_phys <= throat_end + 1e-9)
 D_h = np.where(in_throat, Dr * D_big, D_big)
 integrand_surrogate = alpha_D / (2.0 * D_h)  # rho=V_bulk=1
 
-# End-to-end ΔP comparison (Pa)
-labels = ["Constant\nF=1 MOOSE", "Surrogate\nintegral", "Coupled\nMOOSE", "CFD\ntruth"]
-values = [0.484, sidecar["delta_p_surrogate"], 12.77, sidecar["delta_p_truth"]]
-colors = ["#888888", "#1f77b4", "#2ca02c", "#000000"]
+# End-to-end ΔP comparison (Pa). delta_p_moose is read from the verifier
+# and hardcoded here so the figure regenerates without rerunning MOOSE.
+delta_p_moose = 11.282
+labels = ["Surrogate\nintegral", "Coupled\nMOOSE", "CFD\ntruth"]
+values = [sidecar["delta_p_surrogate"], delta_p_moose, sidecar["delta_p_truth"]]
+colors = ["#1f77b4", "#2ca02c", "#444444"]
 rel_err_pct = [(v - sidecar["delta_p_truth"]) / sidecar["delta_p_truth"] * 100 for v in values]
 
-fig = plt.figure(figsize=(13, 10))
-gs = fig.add_gridspec(2, 2, height_ratios=[1, 1], hspace=0.32, wspace=0.28)
+# Three-panel layout: comparison spans the top row; α_D(z) and F(z) sit below.
+fig = plt.figure(figsize=(13, 9.5), constrained_layout=False)
+gs = fig.add_gridspec(
+    2,
+    2,
+    height_ratios=[0.85, 1.0],
+    hspace=0.42,
+    wspace=0.22,
+    left=0.07,
+    right=0.97,
+    top=0.93,
+    bottom=0.07,
+)
 
-# ── Top-left: ΔP comparison bar chart ──
-ax1 = fig.add_subplot(gs[0, 0])
-bars = ax1.bar(labels, values, color=colors, edgecolor="black", linewidth=1.2)
+# ── Top (full width): ΔP comparison bar chart ──
+ax1 = fig.add_subplot(gs[0, :])
+bar_w = 0.55
+x_pos = np.arange(len(labels))
+bars = ax1.bar(x_pos, values, width=bar_w, color=colors, edgecolor="black", linewidth=1.1)
 ax1.axhline(
     sidecar["delta_p_truth"],
-    color="black",
-    linestyle=":",
-    linewidth=1,
-    alpha=0.5,
-    label="truth = 11.83 Pa",
+    color="#444444",
+    linestyle="--",
+    linewidth=1.2,
+    alpha=0.55,
+    zorder=0,
+    label=f"CFD truth = {sidecar['delta_p_truth']:.2f} Pa",
 )
 for bar, val, err in zip(bars, values, rel_err_pct):
+    txt = f"{val:.2f} Pa" if abs(err) < 0.5 else f"{val:.2f} Pa\n({err:+.1f}%)"
     ax1.text(
         bar.get_x() + bar.get_width() / 2,
-        val + 0.3,
-        f"{val:.2f} Pa\n({err:+.1f}%)",
+        val + 0.18,
+        txt,
         ha="center",
         va="bottom",
-        fontsize=9,
-        fontweight="bold",
-    )
-ax1.set_ylabel("ΔP across ROI (Pa)", fontsize=11)
-ax1.set_title("End-to-end ΔP comparison — target Re_43938__Dr_0p522__Lr_0p073", fontsize=11)
-ax1.set_ylim(0, 16)
-ax1.legend(loc="upper left", fontsize=9)
-ax1.grid(True, axis="y", alpha=0.3)
-
-# ── Top-right: relative error vs truth (signed bar chart) ──
-ax2 = fig.add_subplot(gs[0, 1])
-err_bars = ax2.bar(labels, rel_err_pct, color=colors, edgecolor="black", linewidth=1.2)
-ax2.axhline(0, color="black", linewidth=1)
-for bar, err in zip(err_bars, rel_err_pct):
-    y_offset = 4 if err >= 0 else -8
-    ax2.text(
-        bar.get_x() + bar.get_width() / 2,
-        err + y_offset,
-        f"{err:+.1f}%",
-        ha="center",
-        va="bottom" if err >= 0 else "top",
         fontsize=10,
-        fontweight="bold",
+        fontweight="600",
     )
-ax2.set_ylabel("Relative error vs CFD truth (%)", fontsize=11)
-ax2.set_title("Fidelity vs CFD truth (closer to 0 is better)", fontsize=11)
-ax2.set_ylim(-110, 35)
-ax2.grid(True, axis="y", alpha=0.3)
+ax1.set_xticks(x_pos)
+ax1.set_xticklabels(labels, fontsize=10)
+ax1.set_ylabel("ΔP across ROI (Pa)", fontsize=11)
+ax1.set_title(
+    "End-to-end ΔP comparison — Re_43938__Dr_0p522__Lr_0p073",
+    fontsize=12,
+    pad=10,
+)
+ax1.set_ylim(0, max(values) * 1.18)
+ax1.set_xlim(-0.6, len(labels) - 0.4)
+ax1.legend(loc="upper left", fontsize=9, framealpha=0.95)
+ax1.grid(True, axis="y", alpha=0.25)
+for spine in ("top", "right"):
+    ax1.spines[spine].set_visible(False)
 
 # ── Bottom-left: α_D(z) and the porosity step ──
 ax3 = fig.add_subplot(gs[1, 0])
@@ -123,11 +129,12 @@ ax3.set_ylabel("α_D (dimensionless)", fontsize=10)
 ax3.set_title("Surrogate-predicted Darcy-Weisbach α_D(z)", fontsize=11)
 ax3.legend(loc="upper left", fontsize=9, framealpha=0.95)
 ax3.grid(True, alpha=0.3)
+for spine in ("top", "right"):
+    ax3.spines[spine].set_visible(False)
 
 # ── Bottom-right: F(z) split by block, log scale ──
 ax4 = fig.add_subplot(gs[1, 1])
 in_throat_csv = (z_csv >= end_len - 1e-9) & (z_csv <= throat_end + 1e-9)
-sign_F = np.sign(F_csv)
 F_abs = np.abs(F_csv) + 1e-3  # log-scale floor for visibility
 ax4.bar(
     z_csv[~in_throat_csv],
@@ -154,20 +161,23 @@ ax4.set_title(
 )
 ax4.legend(loc="upper left", fontsize=9)
 ax4.grid(True, alpha=0.3, which="both")
+for spine in ("top", "right"):
+    ax4.spines[spine].set_visible(False)
 
-# Overall title
-fig.suptitle(f"α_D → MOOSE coupling pipeline — {CASE}", fontsize=13, y=0.995)
+# Overall title + tagline
+fig.suptitle("α_D → MOOSE coupling pipeline", fontsize=13.5, y=0.985, fontweight="600")
 fig.text(
     0.5,
-    0.005,
-    "Coupled MOOSE (+7.9% from truth) is closer than the surrogate integral alone (-30.8%) "
-    "or vanilla MOOSE with constant F=1 (-95.9%).",
+    0.012,
+    "Coupled MOOSE reproduces the surrogate ΔP integral to within 0.7% — "
+    "the coupling preserves the surrogate's prediction without adding distortion.",
     ha="center",
     fontsize=9,
     style="italic",
+    color="#444",
 )
 
 for out in (OUT_PNG_DATA, OUT_PNG_DOCS):
     out.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out, dpi=140, bbox_inches="tight")
+    plt.savefig(out, dpi=140)
     print(f"Saved: {out}", file=sys.stderr)

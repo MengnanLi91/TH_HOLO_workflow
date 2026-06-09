@@ -137,12 +137,21 @@ def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
     raw_name_to_idx = {n: i for i, n in enumerate(case.feature_names)}
     engineered = build_engineered_feature_map(case.features, case.feature_names)
 
+    # Engineered values win for names that appear in BOTH the zarr's raw
+    # feature_names and the engineered set. This matches the training-time
+    # TabularPairDataset (datasets_tabular.py:234), which builds
+    # `feat_map = {n: i for i, n in enumerate(raw + engineered)}` — duplicate
+    # keys make the later (engineered) entry win. `dist_to_throat_start` and
+    # `dist_to_throat_end` live in both sets and differ by a fraction of an
+    # axial bin (raw uses the analytic throat boundary; engineered uses
+    # `min(z_hat[is_throat])`); without this preference the model sees
+    # slightly different inputs at inference vs training.
     columns: list[np.ndarray] = []
     for name in input_columns:
-        if name in raw_name_to_idx:
-            col = case.features[:, raw_name_to_idx[name]].astype(np.float32)
-        elif name in engineered:
+        if name in engineered:
             col = engineered[name].astype(np.float32)
+        elif name in raw_name_to_idx:
+            col = case.features[:, raw_name_to_idx[name]].astype(np.float32)
         else:
             raise ValueError(
                 f"input_column {name!r} not found in zarr feature_names "
@@ -253,6 +262,54 @@ def restrict_to_throat(
     return z_moose, vals_throat
 
 
+def compute_baseline_encoded(
+    case: "CaseData",
+    z_hat: np.ndarray,
+    d_local_over_D: np.ndarray,
+    *,
+    local_velocity_normalization: bool,
+    target_name: str,
+) -> np.ndarray:
+    """Compute the encoded analytical baseline the training pipeline used.
+
+    AlphaDProfileDataset.__init__ sets ``target_transform=alpha_d_residual_transform``
+    via a ``setdefault`` call (datasets/profile.py:44), so the model is
+    trained on RESIDUALS from a closed-form sudden-contraction +
+    throat-friction baseline. The baseline lives on the dataset as
+    ``_baseline_encoded`` and gets added back to model predictions before
+    decoding (see ``compute_delta_p_metrics`` in metrics.py).
+
+    To reproduce that behavior at inference we (1) evaluate the closed-form
+    baseline α_D(z) in bulk basis for this case's geometry, then (2) encode
+    it the same way the training-time transform did (local-velocity basis,
+    ``signed_log1p``).
+
+    Note: run_meta.json records ``target_transform: null`` because it
+    captures the YAML-passed value, NOT the ``setdefault`` substituted
+    value. The baseline is in effect during training even when
+    ``run_meta`` says it isn't.
+    """
+    from cases.alpha_d.physics.baseline import BaselineGeometry, alpha_d_baseline_profile
+    from cases.alpha_d.physics.targets import alpha_d_bulk_to_values
+
+    geom = BaselineGeometry(
+        Re=case.Re,
+        Dr=case.Dr,
+        Lr=case.Lr,
+        D_big=case.D_big,
+        outer_height_m=case.outer_height_m,
+        buffer_diams=case.buffer_diams,
+    )
+    baseline_bulk = alpha_d_baseline_profile(np.asarray(z_hat, dtype=np.float64), geom)
+    baseline_encoded = alpha_d_bulk_to_values(
+        baseline_bulk,
+        target_name=target_name,
+        d_over_D=np.asarray(d_local_over_D, dtype=np.float64),
+        local_velocity_normalization=local_velocity_normalization,
+    )
+    return np.asarray(baseline_encoded, dtype=np.float64)
+
+
 def decode_to_bulk_alpha_d(
     encoded: np.ndarray,
     *,
@@ -266,6 +323,10 @@ def decode_to_bulk_alpha_d(
     1. Decodes the encoded target (e.g. signed_log1p) to physical alpha_D.
     2. If ``local_velocity_normalization`` is True, converts from local-velocity
        basis to bulk-velocity basis by dividing by ``(d_local/D)^4``.
+
+    Note: when the model was trained on residuals (the default for the
+    Conv1D profile path), callers must add the encoded baseline (see
+    ``compute_baseline_encoded``) to ``encoded`` BEFORE passing it here.
     """
     from cases.alpha_d.physics.targets import alpha_d_values_to_bulk
 
@@ -277,6 +338,48 @@ def decode_to_bulk_alpha_d(
         local_velocity_normalization=local_velocity_normalization,
     )
     return np.asarray(alpha, dtype=np.float64)
+
+
+def _stepfence_porosity_boundaries(
+    z: np.ndarray,
+    cf: np.ndarray,
+    *,
+    boundaries: tuple[float, ...],
+    step_eps: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Insert (z-eps, F-just-below) and (z+eps, F-just-above) at each porosity step.
+
+    The goal is to force MOOSE's PiecewiseLinear to render a near-step rather
+    than a linear bridge across the porosity discontinuity. ``step_eps`` must
+    be small enough that no mesh cell spans across both fence points (typical
+    MOOSE cell sizes are ~0.01 m for this case; 1e-4 m is well below that)
+    AND larger than the float roundoff that PiecewiseLinear treats as
+    "duplicate x" (which raises a strictly-increasing error).
+    """
+    z = np.asarray(z, dtype=np.float64)
+    cf = np.asarray(cf, dtype=np.float64)
+    if not np.all(np.diff(z) > 0):
+        raise ValueError("input z must be strictly increasing.")
+
+    z_list = list(z)
+    cf_list = list(cf)
+    # Insert in reverse order so earlier indices remain valid as we splice in.
+    for boundary in sorted(boundaries, reverse=True):
+        # Find the rightmost station strictly less than the boundary, and the
+        # leftmost strictly greater. The boundary may or may not align with
+        # an existing station; we don't assume it does.
+        zs = np.asarray(z_list)
+        i_left = int(np.searchsorted(zs, boundary, side="left") - 1)
+        i_right = int(np.searchsorted(zs, boundary, side="right"))
+        if i_left < 0 or i_right >= len(z_list):
+            # Boundary is outside the ROI; nothing to fence.
+            continue
+        f_left = cf_list[i_left]
+        f_right = cf_list[i_right]
+        # Insert (b-eps, f_left) before i_right, then (b+eps, f_right) immediately after.
+        z_list[i_right:i_right] = [boundary - step_eps, boundary + step_eps]
+        cf_list[i_right:i_right] = [f_left, f_right]
+    return np.asarray(z_list, dtype=np.float64), np.asarray(cf_list, dtype=np.float64)
 
 
 def write_outputs(*, csv_path: Path, z: np.ndarray, cf: np.ndarray, sidecar: dict) -> None:
@@ -325,14 +428,29 @@ def main(argv: list[str] | None = None) -> int:
     x = build_model_input(case, run_meta)
     y_encoded = forward(args.checkpoint, run_meta, x)
 
-    # ---- Decode to bulk-basis alpha_D ----
+    # ---- Add the residual baseline back, then decode to bulk-basis alpha_D ----
     feat_idx = case.feature_names.index("d_local_over_D")
     d_local_over_D = case.features[:, feat_idx].astype(np.float64)
+    feat_idx_z = case.feature_names.index("z_hat")
+    z_hat = case.features[:, feat_idx_z].astype(np.float64)
     output_columns = run_meta["data"]["output_columns"]
     local_norm = bool(run_meta["data"].get("local_velocity_normalization", False))
 
+    # AlphaDProfileDataset auto-injects the residual transform via setdefault,
+    # so the model predicts residuals from a closed-form baseline. Reproduce
+    # the training-time add-back by computing the encoded baseline for this
+    # case's geometry and adding it to the model output BEFORE decoding.
+    baseline_encoded = compute_baseline_encoded(
+        case,
+        z_hat,
+        d_local_over_D,
+        local_velocity_normalization=local_norm,
+        target_name=output_columns[0],
+    )
+    y_encoded_total = np.asarray(y_encoded, dtype=np.float64) + baseline_encoded
+
     alpha_d_bulk = decode_to_bulk_alpha_d(
-        y_encoded,
+        y_encoded_total,
         d_local_over_D=d_local_over_D,
         local_velocity_normalization=local_norm,
         target_name=output_columns[0],
@@ -348,9 +466,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     # ---- ROI axial coordinates ----
-    feat_idx_z = case.feature_names.index("z_hat")
     feat_idx_throat = case.feature_names.index("is_throat")
-    z_hat = case.features[:, feat_idx_z].astype(np.float64)
     is_throat = case.features[:, feat_idx_throat].astype(np.float64)
 
     throat_length_m = case.outer_height_m * case.Lr
@@ -380,8 +496,28 @@ def main(argv: list[str] | None = None) -> int:
         D_h=D_h_roi,
     )
 
+    # ---- Step-fence the porosity boundaries ----
+    # MOOSE's PiecewiseLinear interpolates F across every adjacent CSV pair.
+    # At the porosity steps (z = end_length and z = end_length + throat_length)
+    # both ε and D_h jump, and the surrogate's α_D often spikes just upstream
+    # of the contraction. Without explicit step-fencing, MOOSE's mesh cells
+    # straddling z = 0.2 sample large interpolated F values that don't exist
+    # in either block, over-counting the friction integral by ~3-5 Pa for the
+    # target case (raising MOOSE_coupled to +24.8% vs truth).
+    #
+    # Inserting a duplicate-z fence (two rows separated by `step_eps`) at each
+    # porosity boundary collapses the interpolation slope to a near-step and
+    # restores MOOSE_coupled ≈ surrogate's full-ROI integral.
+    step_eps = 1e-4  # well below mesh cell size (~0.01 m) and station spacing
+    z_csv, cf_csv = _stepfence_porosity_boundaries(
+        z_phys,
+        cf_all,
+        boundaries=(end_length_m, end_length_m + throat_length_m),
+        step_eps=step_eps,
+    )
+
     # ---- Write outputs ----
-    # z_phys is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
+    # z is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
     # No pre-shift needed; PiecewiseLinear spans [0, roi_length].
     v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
     sidecar = {
@@ -403,10 +539,11 @@ def main(argv: list[str] | None = None) -> int:
         "delta_p_truth": case.delta_p_truth,
         "delta_p_surrogate": delta_p_surrogate,
         "v_local_over_v_bulk_was_in_input_columns": v_local_in_inputs,
+        "step_fence_eps": step_eps,
         "alpha_D_bulk_roi": alpha_d_bulk.tolist(),
         "z_phys_roi": z_phys.tolist(),
     }
-    write_outputs(csv_path=args.output_csv, z=z_phys, cf=cf_all, sidecar=sidecar)
+    write_outputs(csv_path=args.output_csv, z=z_csv, cf=cf_csv, sidecar=sidecar)
 
     print(
         f"Wrote {args.output_csv} ({len(z_phys)} full-ROI stations); "
