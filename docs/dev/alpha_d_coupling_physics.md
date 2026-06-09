@@ -759,7 +759,7 @@ parameter space and this is its representative.
 
 ### 7.7. Cross-case generalization of the coupling (10-case probe)
 
-§7.4 and §7.6 establish that the surrogate predicts well across the
+§7.6 establishes that the surrogate predicts well across the
 test set on its own. To check that the **coupling** preserves this
 predictive quality as the geometry and Reynolds number vary, the
 pipeline was rerun on a strategic 10-case probe drawn from the held-out
