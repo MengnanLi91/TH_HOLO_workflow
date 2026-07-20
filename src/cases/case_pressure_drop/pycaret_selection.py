@@ -21,6 +21,8 @@ V1 contract
   plug-compatible with the existing sklearn-based ``run_feature_selection``.
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import logging
@@ -64,7 +66,9 @@ def build_dataframe(dataset: CasePressureDropDataset, feature_names: list[str]):
     import pandas as pd
 
     if _TARGET_COL in feature_names:
-        raise ValueError(f"feature_names contains reserved target column {_TARGET_COL!r}.")
+        raise ValueError(
+            f"feature_names contains reserved target column {_TARGET_COL!r}."
+        )
 
     X = dataset.build_feature_matrix(feature_names)  # raises on unknown names
     y = dataset.target_log1p()
@@ -106,7 +110,10 @@ def _extract_ranking(exp, ranker_id: str) -> list[dict[str, Any]]:
         importances = np.abs(coef)
 
     if importances is None or len(importances) != len(names):
-        return [{"feature": n, "importance": None, "rank": i + 1} for i, n in enumerate(names)]
+        return [
+            {"feature": n, "importance": None, "rank": i + 1}
+            for i, n in enumerate(names)
+        ]
 
     order = np.argsort(-importances)
     return [
@@ -185,7 +192,9 @@ def run_pycaret_selection(
                 {
                     "rank": row["rank"],
                     "feature": row["feature"],
-                    "importance": ("" if row["importance"] is None else f"{row['importance']:.8e}"),
+                    "importance": (
+                        "" if row["importance"] is None else f"{row['importance']:.8e}"
+                    ),
                 }
             )
 

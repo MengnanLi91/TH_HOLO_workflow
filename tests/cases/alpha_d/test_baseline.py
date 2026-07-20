@@ -25,6 +25,7 @@ def _trapezoidal_dp(profile: np.ndarray, geom: BaselineGeometry) -> float:
     return float(np.trapz(dp_dz, z * geom.L_roi))
 
 
+@pytest.mark.parametrize("include_head", [True, False])
 @pytest.mark.parametrize(
     "Re, Dr, Lr",
     [
@@ -33,28 +34,96 @@ def _trapezoidal_dp(profile: np.ndarray, geom: BaselineGeometry) -> float:
         (250000, 0.9, 0.179),
         (18420, 0.9, 0.031),
         (104807, 0.333, 0.01),
+        (43938, 0.144, 0.031),
     ],
 )
-def test_profile_integrates_to_closed_form(Re: float, Dr: float, Lr: float) -> None:
-    """Trapezoidal integration of the per-station baseline reproduces the closed form."""
+def test_profile_integrates_to_closed_form(Re: float, Dr: float, Lr: float, include_head: bool) -> None:
+    """Trapezoidal integration of the per-station baseline reproduces the closed form.
+
+    Checked both with and without the acceleration head — each single-cell
+    deposit contributes its full ΔP through the two trapezoidal half-intervals,
+    so profile and scalar stay consistent either way.
+    """
     geom = BaselineGeometry(Re=Re, Dr=Dr, Lr=Lr)
-    profile = alpha_d_baseline_profile(_station_z_hat(geom.n_stations), geom)
+    profile = alpha_d_baseline_profile(
+        _station_z_hat(geom.n_stations), geom, include_acceleration_head=include_head
+    )
     integrated = _trapezoidal_dp(profile, geom)
-    closed = integrated_baseline_delta_p(geom)
+    closed = integrated_baseline_delta_p(geom, include_acceleration_head=include_head)
     assert closed > 0.0
     rel_err = abs(integrated - closed) / closed
     # Trapezoidal of a step function at midpoints converges as O(1/N); 1 % is plenty for N=50.
-    assert rel_err < 1e-2, f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr}"
+    assert rel_err < 1e-2, f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr} head={include_head}"
 
 
 def test_profile_zero_outside_throat() -> None:
+    """Downstream is all-zero; upstream is all-zero except the single accel bin."""
     geom = BaselineGeometry(Re=43938, Dr=0.617, Lr=0.137)
     z = _station_z_hat(geom.n_stations)
     profile = alpha_d_baseline_profile(z, geom)
     upstream = z < geom.z_throat_start_norm
     downstream = z > geom.z_throat_end_norm
-    assert np.all(profile[upstream] == 0.0)
+    # Exactly one upstream station (the acceleration head) is nonzero.
+    assert np.count_nonzero(profile[upstream]) == 1
+    accel_idx = np.flatnonzero(upstream)[int(np.argmax(z[upstream]))]
+    assert profile[accel_idx] > 0.0
     assert np.all(profile[downstream] == 0.0)
+    # With the head disabled the baseline is zero everywhere outside the throat
+    # (the legacy behaviour — regression guard).
+    legacy = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
+    assert np.all(legacy[upstream] == 0.0)
+    assert np.all(legacy[downstream] == 0.0)
+
+
+@pytest.mark.parametrize(
+    "Re, Dr, Lr",
+    [(43938, 0.144, 0.031), (104807, 0.522, 0.073), (11927, 0.05, 0.052), (250000, 0.9, 0.179)],
+)
+def test_acceleration_head_adds_analytic_delta_p(Re: float, Dr: float, Lr: float) -> None:
+    """include vs exclude differs by exactly ΔP_accel = q_throat − q_bulk."""
+    geom = BaselineGeometry(Re=Re, Dr=Dr, Lr=Lr)
+    with_head = integrated_baseline_delta_p(geom)  # default True
+    without = integrated_baseline_delta_p(geom, include_acceleration_head=False)
+    q_throat = 0.5 * geom.rho * (geom.V_bulk / Dr**2) ** 2
+    q_bulk = 0.5 * geom.rho * geom.V_bulk**2
+    assert with_head - without == pytest.approx(q_throat - q_bulk, rel=1e-12)
+    # The head scales 1/Dr⁴ and dominates the (K_c + friction) legacy term at
+    # small Dr — that's the whole point of moving it out of the NN residual.
+    if Dr < 0.2:
+        assert (with_head - without) > without
+
+
+def test_include_false_reproduces_legacy_scalar() -> None:
+    """include_acceleration_head=False reproduces the (K_c + friction)·q_throat form."""
+    geom = BaselineGeometry(Re=43938, Dr=0.617, Lr=0.137)
+    Dr2 = geom.Dr**2
+    K_c = 0.5 * (1.0 - Dr2)
+    f = 0.316 * (geom.Re / geom.Dr) ** -0.25
+    q_throat = 0.5 * geom.rho * (geom.V_bulk / Dr2) ** 2
+    L_throat = geom.Lr * geom.outer_height_m
+    D_throat = geom.D_big * geom.Dr
+    legacy = (K_c + f * L_throat / D_throat) * q_throat
+    assert integrated_baseline_delta_p(geom, include_acceleration_head=False) == pytest.approx(
+        legacy, rel=1e-12
+    )
+
+
+def test_acceleration_head_located_at_last_upstream_cell() -> None:
+    """The head is a single spike at the last station before the throat entrance."""
+    geom = BaselineGeometry(Re=43938, Dr=0.144, Lr=0.031)
+    z = _station_z_hat(geom.n_stations)
+    profile = alpha_d_baseline_profile(z, geom)
+    legacy = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
+    diff = profile - legacy
+    # exactly one station carries the head ...
+    assert np.count_nonzero(diff) == 1
+    accel_idx = int(np.flatnonzero(diff)[0])
+    # ... it sits upstream of the throat, adjacent to the entrance ...
+    assert z[accel_idx] < geom.z_throat_start_norm
+    assert (geom.z_throat_start_norm - z[accel_idx]) < geom.dz_norm
+    # ... and its magnitude is the analytic head α = (1/Dr⁴ − 1)·D_big/dz_phys.
+    expected = (1.0 / geom.Dr**4 - 1.0) * geom.D_big / geom.dz_phys
+    assert diff[accel_idx] == pytest.approx(expected, rel=1e-12)
 
 
 def test_baseline_underpredicts_real_dp_consistently() -> None:

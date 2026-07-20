@@ -89,6 +89,7 @@ make -C docs html SPHINXOPTS="-W --keep-going"
 | `docs/user/` | User-facing tutorials and how-tos |
 | `docs/dev/` | Developer-oriented docs (this page lives here) |
 | `docs/cases/` | One page per surrogate case |
+| `docs/demo_cases/` | Reproducible end-to-end demonstrations for specific cases |
 | `docs/api/` | Auto-generated API reference (`.. automodule::` blocks) |
 | `docs/archive/` | Historical planning / refactor records |
 | `docs/superpowers/` | Internal planning; **excluded from the rendered site** via `exclude_patterns` in `conf.py` |

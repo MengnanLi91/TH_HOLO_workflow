@@ -80,14 +80,14 @@ How adapters, datasets, and the runner fit together when adding a model.
 Open the Architecture page.
 :::
 
-:::{grid-item-card} {octicon}`beaker` Coupling physics
-:link: dev/alpha_d_coupling_physics
+:::{grid-item-card} {octicon}`beaker` Alpha-D coupling demo
+:link: demo_cases/alpha_d_coupling_physics
 :link-type: doc
 
-Equations, averaging conventions, and the α_D → MOOSE Forchheimer
-mapping with the resolved CFD vs PINSFV verification.
+An end-to-end demonstration of the α_D pipeline and its MOOSE PINSFV
+coupling, including resolved-CFD and surrogate validation.
 
-Open the Physics Reference.
+Open the Alpha-D coupling demo.
 :::
 
 ::::
@@ -183,6 +183,13 @@ architecture
 
 user/index
 cases/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Demonstrations
+
+demo_cases/index
 ```
 
 ```{toctree}

@@ -40,3 +40,4 @@ src/logs.log
 src/cases/alpha_d/moose/*.e
 src/cases/alpha_d/moose/*.csv
 src/cases/alpha_d/moose/*.json
+tests/cases/claim_*/*

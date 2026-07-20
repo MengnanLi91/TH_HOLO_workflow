@@ -53,6 +53,7 @@ the container SIFs, or the ``apptainer`` binary itself isn't available.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -144,10 +145,15 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
     sidecar = out_csv.with_suffix(".meta.json")
     assert sidecar.exists(), "Exporter did not produce sidecar JSON"
 
-    # 2) Place CSV in the MOOSE input directory (MOOSE resolves data_file
-    # relative to the .i file's directory)
-    staged_csv = MOOSE_DIR / "forchheimer_profile.csv"
+    # 2) Isolate this case's MOOSE input and profile. MOOSE resolves data_file
+    # relative to the .i file's directory.
+    moose_work_dir = tmp_path / "moose"
+    moose_work_dir.mkdir()
+    staged_input = moose_work_dir / "2d-porous-flow_alphaD.i"
+    staged_csv = moose_work_dir / "forchheimer_profile.csv"
+    shutil.copyfile(MOOSE_DIR / "2d-porous-flow_alphaD.i", staged_input)
     shutil.copyfile(out_csv, staged_csv)
+    delta_p_initial = json.loads(sidecar.read_text(encoding="utf-8"))["delta_p_surrogate"]
 
     # 3) Run MOOSE — runs inside the MOOSE SIF (libwasphit, libvtk)
     pp_csv = tmp_path / "2d-porous-flow_alphaD_out.csv"
@@ -160,8 +166,9 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
             str(MOOSE_SIF),
             "bash",
             "-lc",
-            f"cd {MOOSE_DIR} && {NS_EXE} "
-            f"-i 2d-porous-flow_alphaD.i "
+            f"cd {moose_work_dir} && {NS_EXE} "
+            f"-i {staged_input} "
+            f"delta_p_initial={delta_p_initial} "
             f"Outputs/file_base={pp_csv.with_suffix('').as_posix()}",
         ],
         check=True,
