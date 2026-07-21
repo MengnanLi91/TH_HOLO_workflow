@@ -1,6 +1,6 @@
 """Per-case profile dataset for 1D-conv α_D training.
 
-Wraps a :class:`TabularPairDataset` and exposes per-case views shaped
+Wraps a :class:`training.datasets_tabular.TabularPairDataset` and exposes per-case views shaped
 ``(features, stations)`` so that a 1D conv along the station axis can
 treat each case as a single sample.
 
@@ -19,6 +19,7 @@ from torch.utils.data import Dataset
 
 from cases.alpha_d.feature_data import engineered_features_spec
 from cases.alpha_d.transforms import alpha_d_residual_transform
+from training.case_lists import load_case_selection
 from training.datasets import parse_field_list
 from training.datasets_tabular import TabularPairDataset
 
@@ -155,7 +156,9 @@ class AlphaDProfileDataset(Dataset):
 
     def subset_by_case_indices(self, case_indices) -> "AlphaDProfileDataset":
         case_indices = [int(i) for i in case_indices]
-        return AlphaDProfileDataset._from_inner(self._inner.subset_by_case_indices(case_indices))
+        return AlphaDProfileDataset._from_inner(
+            self._inner.subset_by_case_indices(case_indices)
+        )
 
     def add_baseline_to_encoded(self, encoded, row_mask=None, field_idx=None):
         """Delegate to the inner TabularPairDataset."""
@@ -164,6 +167,36 @@ class AlphaDProfileDataset(Dataset):
             row_mask=row_mask,
             field_idx=field_idx,
         )
+
+    def reproducibility_metadata(self) -> dict:
+        """Describe effective case defaults that are not visible in YAML."""
+        norm_stats = None
+        if self.norm_stats:
+            norm_stats = {
+                "x_mean": self.norm_stats["x_mean"].detach().cpu().tolist(),
+                "x_std": self.norm_stats["x_std"].detach().cpu().tolist(),
+            }
+        return {
+            "dataset_type": f"{type(self).__module__}:{type(self).__name__}",
+            "input_columns": list(self.input_columns),
+            "output_columns": list(self.output_columns),
+            "normalize": bool(self.normalize),
+            "norm_stats": norm_stats,
+            "target_transform": (
+                f"{alpha_d_residual_transform.__module__}:"
+                f"{alpha_d_residual_transform.__name__}"
+            ),
+            "has_target_baseline": bool(self.has_target_baseline),
+            "analytical_baseline": (
+                "cases.alpha_d.physics.baseline:alpha_d_baseline_profile"
+                if self.has_target_baseline
+                else None
+            ),
+            "local_velocity_normalization": bool(self.local_velocity_normalization),
+            "throat_weight": self._inner.throat_weight,
+            "downstream_weight": self._inner.downstream_weight,
+            "include_case_idx": bool(self._inner.include_case_idx),
+        }
 
 
 def _build_case_slices(inner: TabularPairDataset) -> list[np.ndarray]:
@@ -208,9 +241,11 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         v = data_cfg.get(key)
         return float(v) if v is not None else None
 
-    exclude_cases = data_cfg.get("exclude_cases")
-    if exclude_cases is not None:
-        exclude_cases = [str(c) for c in exclude_cases]
+    exclude_cases = load_case_selection(
+        data_cfg.get("exclude_cases"),
+        data_cfg.get("exclude_cases_file"),
+        label="exclude_cases",
+    )
 
     return AlphaDProfileDataset(
         zarr_dir=data_cfg["zarr_dir"],
@@ -223,6 +258,8 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         downstream_weight=_opt_float("downstream_weight"),
         include_case_idx=bool(data_cfg.get("include_case_idx", False)),
         exclude_cases=exclude_cases,
-        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
+        local_velocity_normalization=bool(
+            data_cfg.get("local_velocity_normalization", False)
+        ),
         min_Dr=_opt_float("min_Dr"),
     )

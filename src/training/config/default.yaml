@@ -51,6 +51,7 @@ output:
   case_name: ${hydra:job.config_name}
   case_dir: ${output.root_dir}/${output.case_name}
   checkpoint: ${output.case_dir}/model.mdlus
+  run_meta: null
   metrics_out: auto
   plot_dir: null
   plot_max_cases: 3

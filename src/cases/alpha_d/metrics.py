@@ -1,6 +1,7 @@
 """Alpha-D-specific extended evaluation metrics.
 
-The generic runner calls :meth:`Experiment.compute_extended_metrics`, which
+The generic runner calls
+:meth:`training.experiment.Experiment.compute_extended_metrics`, which
 ``AlphaDExperiment`` (in ``cases/alpha_d/experiment.py``) overrides to invoke
 the helpers in this module. Base experiments inherit a no-op and skip this
 module entirely, so the runner stays alpha-D-agnostic.
@@ -121,7 +122,9 @@ def compute_delta_p_metrics(
             delta_p_pred = float(torch.trapezoid(dp_dz, z_physical).cpu())
 
             rel_err = abs(delta_p_pred - delta_p_gt) / abs(delta_p_gt)
-            log_err = abs(math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8)))
+            log_err = abs(
+                math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8))
+            )
 
             per_case.append(
                 {
@@ -172,7 +175,11 @@ def compute_pointwise_extended_metrics(
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
 
     def _has_physical_inverse(name: str) -> bool:
-        return is_alpha_d_target(name) or name.startswith("log_") or name.startswith("log10_")
+        return (
+            is_alpha_d_target(name)
+            or name.startswith("log_")
+            or name.startswith("log10_")
+        )
 
     per_field_extended = []
     for i, name in enumerate(output_fields):
@@ -244,8 +251,12 @@ def compute_pointwise_extended_metrics(
                         if (raw_d_over_D is not None and is_alpha_d_target(field_name))
                         else None
                     )
-                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
-                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
+                    p_full = dataset.add_baseline_to_encoded(
+                        p, row_mask=mask, field_idx=i
+                    )
+                    t_full = dataset.add_baseline_to_encoded(
+                        t, row_mask=mask, field_idx=i
+                    )
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,
@@ -283,8 +294,12 @@ def compute_pointwise_extended_metrics(
                         if (raw_d_over_D is not None and is_alpha_d_target(field_name))
                         else None
                     )
-                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
-                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
+                    p_full = dataset.add_baseline_to_encoded(
+                        p, row_mask=mask, field_idx=i
+                    )
+                    t_full = dataset.add_baseline_to_encoded(
+                        t, row_mask=mask, field_idx=i
+                    )
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,

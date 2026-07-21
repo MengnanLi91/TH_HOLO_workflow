@@ -9,6 +9,7 @@ you want to reproduce.
 :maxdepth: 1
 
 getting_started
+running_workflows
 running_moose
 alpha_d_surrogate
 hyperparameter_optimization

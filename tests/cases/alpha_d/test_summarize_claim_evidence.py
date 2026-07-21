@@ -175,6 +175,46 @@ def test_summarize_study_computes_paired_statistics(tmp_path):
     ] == pytest.approx(1.0 / 90.0)
 
 
+def test_summarize_study_reads_new_panel_and_moose_status_schemas(tmp_path):
+    heldout = _write_case_artifacts(tmp_path)
+    tag_dir = tmp_path / "indist" / "target"
+    legacy_manifest = tag_dir / "manifest.json"
+    manifest = json.loads(legacy_manifest.read_text(encoding="utf-8"))
+    manifest.pop("claim_evidence_manifest")
+    manifest["panel_manifest_schema"] = 2
+    legacy_manifest.unlink()
+    _write_json(tag_dir / "panel_manifest.json", manifest)
+
+    status_path = tag_dir / "moose" / heldout[0] / "run_status.json"
+    _write_json(
+        status_path,
+        {
+            "moose_case_status_schema": 2,
+            "case": heldout[0],
+            "status": "success",
+            "selected_attempt": "primary",
+            "attempts": [
+                {
+                    "name": "primary",
+                    "solver_returncode": 0,
+                    "output_csv": "moose_primary.csv",
+                    "verification_status": "valid",
+                }
+            ],
+        },
+    )
+
+    result = summarize_study(tmp_path)
+
+    assert result["claim_evidence_summary_schema"] == 2
+    assert result["evidence_classes"] == {
+        "direct_scalar_regression": ["linear_regression", "random_forest", "mlp"],
+        "direct_alpha_d_gradient_integration": "records",
+        "moose_coupled_alpha_d": "moose_spotchecks",
+    }
+    assert len(result["moose_spotchecks"]) == 1
+
+
 def test_summarize_study_uses_report_cases_for_statistics(tmp_path):
     heldout = _write_case_artifacts(tmp_path, report_cases=["Re_100__Dr_0p5__Lr_0p1"])
 

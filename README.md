@@ -111,11 +111,13 @@ read correctly both on GitHub and on the hosted site.
 ### User docs
 
 - [Getting Started (Docker setup, run modes, logs, troubleshooting)](docs/user/getting_started.md)
+- [Reusable Workflows and New-Case Template](docs/user/running_workflows.md)
 - [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md)
 - [Hyperparameter Optimization](docs/user/hyperparameter_optimization.md)
 
 ### Developer docs
 
+- [Case template (copyable PyCaret + HPO starting point)](templates/case/README.md)
 - [ETL Pipeline Internals](docs/dev/etl_pipeline.md)
 - [Dataset API](docs/dev/dataset.md)
 - [FNO Training and Evaluation](docs/dev/fno_train_eval.md)

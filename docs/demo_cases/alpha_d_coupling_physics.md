@@ -8,12 +8,146 @@ It cross-references the implementation:
 
 - Training-side ETL: `src/cases/alpha_d/etl/transform.py`
 - Target decode/encode: `src/cases/alpha_d/physics/targets.py`
+- Reusable study definition: `src/cases/alpha_d/study_workflow.py`
+- Tracked study matrix: `src/cases/alpha_d/configs/coupling_study.toml`
 - Surrogate → MOOSE exporter: `src/cases/alpha_d/export_friction_profile.py`
 - MOOSE input: `src/cases/alpha_d/moose/2d-porous-flow_alphaD.i`
 - MOOSE PINSFV kernels: `moose/modules/navier_stokes/src/fvkernels/`
 
 If equations here ever drift from the code, **the code is right**. Update
 this document to match.
+
+---
+
+## Reproduce this study
+
+Prerequisites are Python 3.11 or newer, `uv`, Apptainer, the processed alpha-D
+Zarr dataset, a MULTIFID Python image containing the ML dependencies, and a
+MOOSE image that can run `navier_stokes-opt`. From the repository root:
+
+The tracked TOML explicitly selects the default method and its coupling
+contracts:
+
+```toml
+[training.alpha]
+id = "conv1d_profile"
+runner_module = "cases.alpha_d.train"
+config_name = "train_conv1d"
+artifact_contract = "alpha_d_profile_v1"
+checkpoint = "model.mdlus"
+run_meta = "run_meta.json"
+
+[training.alpha.hpo]
+enabled = true
+reference_panel = "indist_panel"
+
+[training.alpha.export]
+module = "cases.alpha_d.export_friction_profile"
+contract = "forchheimer_profile_v1"
+```
+
+To use another profile model, create its Hydra YAML and change `id` and
+`config_name`. A custom runner or exporter can also be selected, but it must
+honor the declared artifact and exporter CLI contracts. Run `plan` before
+starting, then choose a new run ID because method selection is part of the
+resolved-configuration hash. See
+[Run a Reproducible Study Workflow](../user/running_workflows.md) for a CNN
+example.
+
+```bash
+uv sync
+export MULTIFID_PYTHON_IMAGE=/absolute/path/to/multifid-th.sif
+export MULTIFID_MOOSE_IMAGE=/absolute/path/to/moose-dev.sif
+
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-20260720
+uv run multifid-workflow status \
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-20260720
+```
+
+The default `inputs.mode = "reuse"` fingerprints the existing processed Zarr
+tree. To rebuild it from raw Exodus first, copy the tracked TOML, set
+`inputs.mode = "raw_etl"`, and point `inputs.raw_dir` at the source campaign.
+The ETL output then stays inside the run directory.
+
+Typical stage costs are:
+
+| stage family | expected cost | resumable unit |
+|---|---|---|
+| `prepare_data`, `plan_panels` | seconds when reusing Zarr; ETL can take hours | whole stage |
+| `panel.<tag>.select_features` | minutes per panel | panel |
+| `tune_alpha` | the most expensive ML stage; one selected-method search | one reference-panel search |
+| `panel.<tag>.train_direct` | minutes per panel | panel |
+| `panel.<tag>.train_alpha` | tens of minutes to hours per panel | panel |
+| `panel.<tag>.export_closure` | minutes per panel | panel |
+| `solve_moose` | solver-dependent; all reported low-`Dr` cases plus controls | per-case primary/retry records |
+| `summarize` | seconds | whole report |
+
+Rerun the same command with the same run ID to resume. Successful stages are
+not repeated unless an output checksum, an upstream artifact fingerprint, or a
+semantic validator fails. Interrupted/failed stages rerun. MOOSE case failures
+retain their commands and logs, are recorded as explicit failures rather than
+zero pressure, and let `summarize` continue with observed coverage. Reusing a
+run ID after changing the resolved config, Git worktree, or input data is
+rejected; choose a new ID.
+
+All generated artifacts are together under:
+
+```text
+data/workflows/alpha_d_coupling/<run-id>/
+├── resolved_config.json
+├── run_manifest.json
+├── logs/
+├── panels/<tag>/
+│   ├── heldout_cases.txt
+│   ├── report_cases.txt
+│   ├── artifacts/{direct,alpha,alpha_feature_selection}/
+│   ├── coupled/<case>/
+│   └── moose/<case>/{commands,logs,status,verification}/
+├── tuning/{best_params.json,best_overrides.txt}
+├── moose_matrix.json
+└── report/
+```
+
+The one canonical `heldout_cases.txt` per panel is passed to direct-regressor
+testing, alpha-D feature selection, and alpha-D training. The summarizer checks
+all three persisted contracts before producing evidence.
+
+Method provenance appears in four places:
+
+- `resolved_config.json` contains the full `[training.alpha]` selection;
+- each `panel_manifest.json` records the method, profile, artifact paths, and
+  contract versions;
+- the selected training command writes the resolved model entrypoint, adapter,
+  parameters, and effective data settings to its configured metadata file; and
+- the published-results manifest records the selected method beside workflow,
+  input, code, solver-coverage, and figure hashes.
+
+The currently published figures remain the default Conv1D result. Selecting a
+new method does not relabel or overwrite them until the complete workflow is
+regenerated and explicitly published.
+
+Only `publish` writes documentation assets:
+
+```bash
+uv run multifid-workflow publish \
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-20260720
+uv run multifid-workflow publish \
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-20260720 \
+  --check
+```
+
+| run artifact | published use |
+|---|---|
+| `report/claim_evidence.json` | result summaries, evidence classes, and coverage in the published-results manifest |
+| `report/claim_evidence.md` | auditable generated comparison report |
+| `report/paired_case_errors.csv` | direct scalar regression vs direct alpha-D integration rows |
+| `report/moose_paired_case_errors.csv` | validated MOOSE-coupled alpha-D rows only |
+| `report/claim_error_summary.svg` | `docs/_static/alpha_d_claim_error_summary.svg` |
+| `moose_matrix.json` | attempted/succeeded/failed coverage in `docs/demo_cases/alpha_d_published_results.json` |
 
 ---
 
@@ -784,7 +918,7 @@ profile. The two α_D results are kept separate throughout:
 
 `cases.alpha_d.extrapolation.build_split()` defines every split. Each saved
 held-out list is reused for direct-regressor `force_test`, direct feature
-selection, α_D feature selection, and α_D Conv1D training. The archived
+selection, α_D feature selection, and selected α_D method training. The archived
 metadata verifies that these sets match and that no held-out case enters
 training or feature selection.
 
@@ -963,13 +1097,13 @@ implementation extends the Forchheimer treatment to the full PINSFV
 volume-averaged form, which is where the extra `ε²` factor in our
 mapping (§5) ultimately comes from.
 
-### 8.5. Spec/plan documents
+### 8.5. Reproducible workflow definition
 
-- Design spec (this project): `docs/superpowers/specs/2026-05-28-alpha-d-moose-coupling-design.md`
-- Implementation plan (this project): `docs/superpowers/plans/2026-05-28-alpha-d-moose-coupling.md`
-
-Both are gitignored under `docs/superpowers/` per user preference, but
-live on disk for reference.
+The executable study definition is the tracked
+`src/cases/alpha_d/configs/coupling_study.toml`, interpreted by
+`src/cases/alpha_d/study_workflow.py` through the case-independent workflow
+kernel. The [workflow extension guide](../dev/workflows.md) documents how to
+apply the same architecture to another case.
 
 ---
 
@@ -983,9 +1117,11 @@ live on disk for reference.
 | Encoder (signed_log1p) | `src/cases/alpha_d/physics/targets.py` | 91–96 |
 | Decoder (signed_log1p) | `src/cases/alpha_d/physics/targets.py` | 100–113 |
 | Local↔bulk basis conversion | `src/cases/alpha_d/physics/targets.py` | 100–129 |
-| Exporter pipeline | `src/cases/alpha_d/export_friction_profile.py` | 307–415 |
-| α_D → F mapping function | `src/cases/alpha_d/export_friction_profile.py` | 192–220 |
-| ΔP_surrogate integral | `src/cases/alpha_d/export_friction_profile.py` | 291–304 |
+| Workflow and panel matrix | `src/cases/alpha_d/study_workflow.py` | case-owned stage builder |
+| Tracked study configuration | `src/cases/alpha_d/configs/coupling_study.toml` | whole file |
+| Exporter pipeline | `src/cases/alpha_d/export_friction_profile.py` | `main()` |
+| α_D → F mapping function | `src/cases/alpha_d/coupling_utils.py` | `alpha_d_to_forchheimer()` |
+| ΔP surrogate integral | `src/cases/alpha_d/coupling_utils.py` | `integrate_delta_p()` |
 | Verifier (postprocessor → pressure) | `src/cases/alpha_d/verify_delta_p.py` | 24–36 |
 | MOOSE input (baseline coupled case) | `src/cases/alpha_d/moose/2d-porous-flow_alphaD.i` | (whole file) |
 | PINSFV pressure kernel (ε∇p) | `moose/.../fvkernels/PINSFVMomentumPressure.C` | 41–44 |

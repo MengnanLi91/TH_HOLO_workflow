@@ -27,13 +27,16 @@ docs = [
     "sphinx-autobuild",
 ]
 
+[project.scripts]
+multifid-workflow = "workflows.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = ["read_exdous"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["training*", "feature_selection*", "cases*", "dataset*"]
+include = ["training*", "feature_selection*", "cases*", "dataset*", "workflows*"]
 namespaces = false
 
 # ---------------------------------------------------------------------------

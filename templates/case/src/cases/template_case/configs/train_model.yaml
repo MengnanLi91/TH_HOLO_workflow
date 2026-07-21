@@ -1,0 +1,94 @@
+defaults:
+  - default
+  - _self_
+
+hydra:
+  searchpath:
+    - pkg://training.config
+    - pkg://cases.template_case.configs
+
+# Use model.name for a registered model or replace it with
+# model.entrypoint: your_package.your_model:build.
+model:
+  name: mlp
+  adapter: pointwise
+  params:
+    layer_size: 128
+    num_layers: 4
+    activation_fn: silu
+    skip_connections: true
+    dropout: 0.05
+
+data:
+  zarr_dir: ???
+  input_columns: null
+  input_columns_file: ???
+  output_columns: [target]
+  normalize: true
+  exclude_cases: []
+  exclude_cases_file: null
+  split:
+    # The workflow overrides these paths with its canonical split files.
+    strategy: file
+    train_ratio: 0.8
+    seed: 42
+    train_file: ???
+    test_file: ???
+
+training:
+  epochs: 200
+  batch_size: 256
+  num_workers: 0
+  lr: 1.0e-3
+  seed: 42
+  device: auto
+  loss: mse
+  weight_decay: 1.0e-5
+
+output:
+  root_dir: data/workflows/template_case/manual
+  case_name: mlp
+  case_dir: ${output.root_dir}/${output.case_name}
+  checkpoint: ${output.case_dir}/model.mdlus
+  run_meta: ${output.case_dir}/run_meta.json
+
+# A nonempty search_space makes training.runner.train_or_hpo run Optuna and,
+# with retrain_best=true, persist the final model at output.checkpoint.
+hpo:
+  study_name: template_case_mlp_v1
+  direction: minimize
+  n_trials: 20
+  seed: 42
+  show_progress_bar: true
+  storage: sqlite:///${hpo.output_dir}/${hpo.study_name}.db
+  load_if_exists: true
+  retrain_best: true
+  output_dir: ${output.case_dir}/hpo
+  sampler:
+    name: TPESampler
+    params:
+      seed: ${hpo.seed}
+  pruner:
+    name: MedianPruner
+    params:
+      n_startup_trials: 5
+      n_warmup_steps: 5
+  validation:
+    split_ratio: 0.2
+    seed: ${hpo.seed}
+  search_space:
+    training.lr:
+      type: float
+      low: 1.0e-5
+      high: 1.0e-2
+      log: true
+    training.batch_size:
+      type: categorical
+      choices: [128, 256, 512]
+    model.params.layer_size:
+      type: categorical
+      choices: [64, 128, 256]
+    model.params.num_layers:
+      type: int
+      low: 2
+      high: 6

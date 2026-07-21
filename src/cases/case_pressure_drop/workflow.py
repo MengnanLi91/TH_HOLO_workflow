@@ -15,6 +15,7 @@ from cases.case_pressure_drop.modeling import (
     load_saved_model,
 )
 from cases.case_pressure_drop.plotting import save_prediction_plots
+from training.case_lists import load_case_selection
 
 
 def to_plain_dict(cfg: Any) -> dict[str, Any]:
@@ -36,7 +37,9 @@ def _resolve_path(raw_path: str | Path) -> Path:
     return Path(raw_path).expanduser().resolve()
 
 
-def _normalize_split_cfg(split_cfg: dict[str, Any], default_seed: int) -> dict[str, Any]:
+def _normalize_split_cfg(
+    split_cfg: dict[str, Any], default_seed: int
+) -> dict[str, Any]:
     normalized = dict(split_cfg)
     normalized.setdefault("strategy", "stratified")
     if normalized["strategy"] in {"sequential", "random", "stratified"}:
@@ -151,7 +154,9 @@ def split_case_indices(
             n_bins=int(split_cfg.get("n_bins", 3)),
         )
     else:
-        raise ValueError("split.strategy must be one of {'sequential', 'random', 'stratified'}.")
+        raise ValueError(
+            "split.strategy must be one of {'sequential', 'random', 'stratified'}."
+        )
 
     force_test = [str(name) for name in (split_cfg.get("force_test") or [])]
     if force_test:
@@ -168,7 +173,9 @@ def split_case_indices(
     return train_idx, test_idx, train_sims, test_sims
 
 
-def _comparison_table(metrics: dict[str, dict[str, float]], best_model_name: str) -> str:
+def _comparison_table(
+    metrics: dict[str, dict[str, float]], best_model_name: str
+) -> str:
     header = "| Model | RMSE [Pa] | MAE [Pa] | R² | MAPE | Median Abs Rel Err | Max Abs Rel Err |"
     divider = "|---|---:|---:|---:|---:|---:|---:|"
     lines = [header, divider]
@@ -370,7 +377,9 @@ def _print_evaluation_summary_rich(
         best_table.add_column("Case", style="cyan", no_wrap=True)
         best_table.add_column("True", justify="right", no_wrap=True)
         best_table.add_column("Pred", justify="right", no_wrap=True)
-        best_table.add_column("Abs Rel Err", justify="right", style="green", no_wrap=True)
+        best_table.add_column(
+            "Abs Rel Err", justify="right", style="green", no_wrap=True
+        )
         for row in ranking["best_cases"][:3]:
             best_table.add_row(
                 str(row["case"]),
@@ -389,7 +398,9 @@ def _print_evaluation_summary_rich(
         worst_table.add_column("True", justify="right", no_wrap=True)
         worst_table.add_column("Pred", justify="right", no_wrap=True)
         worst_table.add_column("Signed Rel Err", justify="right", no_wrap=True)
-        worst_table.add_column("Abs Rel Err", justify="right", style="red", no_wrap=True)
+        worst_table.add_column(
+            "Abs Rel Err", justify="right", style="red", no_wrap=True
+        )
         for row in ranking["worst_cases"][:3]:
             signed = 100.0 * float(row["signed_relative_error"])
             signed_text = Text(f"{signed:+.2f}%")
@@ -530,6 +541,11 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
         )
     )
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), split_seed)
+    split_cfg["force_test"] = load_case_selection(
+        split_cfg.get("force_test"),
+        split_cfg.get("force_test_file"),
+        label="force_test",
+    )
     train_idx, test_idx, train_sims, test_sims = split_case_indices(
         dataset.sim_names,
         split_cfg,
@@ -541,13 +557,17 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
         str(output_cfg.get("feature_selection_dir") or (case_dir / "feature_selection"))
     )
     model_dir = _resolve_path(str(output_cfg.get("model_dir") or (case_dir / "models")))
-    run_meta_path = _resolve_path(str(output_cfg.get("run_meta") or (case_dir / "run_meta.json")))
+    run_meta_path = _resolve_path(
+        str(output_cfg.get("run_meta") or (case_dir / "run_meta.json"))
+    )
 
     case_dir.mkdir(parents=True, exist_ok=True)
     feature_dir.mkdir(parents=True, exist_ok=True)
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    candidate_features = list(feature_cfg.get("candidate_features") or CANDIDATE_FEATURES)
+    candidate_features = list(
+        feature_cfg.get("candidate_features") or CANDIDATE_FEATURES
+    )
     fs_method = str(feature_cfg.get("method", "borda")).lower()
     if bool(feature_cfg.get("enabled", True)):
         if fs_method == "pycaret":
@@ -608,6 +628,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
     )
 
     run_meta = {
+        "training_run_meta_schema": 2,
         "task": "case_pressure_drop_regression",
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "output_dir": str(case_dir),
@@ -629,6 +650,11 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
             "seed": int(split_cfg.get("seed", split_seed)),
             "n_bins": int(split_cfg.get("n_bins", 3)),
             "force_test": [str(name) for name in (split_cfg.get("force_test") or [])],
+            "force_test_file": (
+                str(_resolve_path(str(split_cfg["force_test_file"])))
+                if split_cfg.get("force_test_file")
+                else None
+            ),
             "train_sims": train_sims,
             "test_sims": test_sims,
         },
@@ -729,7 +755,9 @@ def evaluate_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
     for model_name, model_meta in run_meta["models"].items():
         artifact = load_saved_model(model_meta["artifact"])
         estimator = artifact["estimator"]
-        feature_names = list(artifact.get("feature_names") or run_meta["data"]["selected_features"])
+        feature_names = list(
+            artifact.get("feature_names") or run_meta["data"]["selected_features"]
+        )
         X_test = test_dataset.build_feature_matrix(feature_names)
         pred_log = estimator.predict(X_test)
         pred_pa = inverse_transform_target(pred_log)
@@ -796,7 +824,9 @@ def evaluate_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
         table_out_path.write_text(comparison, encoding="utf-8")
 
     plot_dir_value = eval_cfg.get("plot_dir")
-    plot_dir = _resolve_path(str(plot_dir_value)) if plot_dir_value else (run_dir / "plots")
+    plot_dir = (
+        _resolve_path(str(plot_dir_value)) if plot_dir_value else (run_dir / "plots")
+    )
     plot_files = []
     if bool(eval_cfg.get("save_plots", True)):
         try:

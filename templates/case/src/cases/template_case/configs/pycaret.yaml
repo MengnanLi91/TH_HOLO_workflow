@@ -1,0 +1,24 @@
+# Case-owned settings consumed by run_feature_selection_pycaret.py.
+data:
+  zarr_dir: ???
+  target: target
+  exclude_cases: []
+  exclude_cases_file: null
+  selected_from_allowlist: null
+
+output:
+  dir: ???
+
+pycaret:
+  seed: 42
+  test_ratio: 0.2
+  ranker: gbr
+  setup:
+    normalize: true
+    transformation: false
+    remove_multicollinearity: true
+    multicollinearity_threshold: 0.95
+    low_variance_threshold: 0.0
+    feature_selection: true
+    feature_selection_method: classic
+    n_features_to_select: 2

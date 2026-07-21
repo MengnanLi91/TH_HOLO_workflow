@@ -2,7 +2,7 @@
 
 For a single target case, this script:
   1. Loads features from the case's existing ETL `.zarr` store.
-  2. Loads the trained Conv1D checkpoint.
+  2. Loads a trained profile-model checkpoint.
   3. Runs forward inference to get the per-station alpha_D profile.
   4. Maps alpha_D(z) to MOOSE PINSFV Forchheimer coefficient C_F(z) using
      the full-ROI block-aware empirical equivalence (see spec Section 4.3
@@ -26,13 +26,42 @@ Block-specific Forchheimer mapping (empirical, constant-F=1 verified):
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-import torch
-import zarr
+
+from cases.alpha_d.coupling_utils import (
+    alpha_d_to_forchheimer,
+    compute_baseline_encoded,
+    decode_to_bulk_alpha_d,
+    integrate_delta_p,
+    restrict_to_throat,
+    stepfence_porosity_boundaries,
+    write_outputs,
+)
+
+__all__ = [
+    "Args",
+    "CaseData",
+    "alpha_d_to_forchheimer",
+    "build_model_input",
+    "compute_baseline_encoded",
+    "decode_to_bulk_alpha_d",
+    "forward",
+    "integrate_delta_p",
+    "load_case_from_zarr",
+    "main",
+    "parse_args",
+    "restrict_to_throat",
+    "stepfence_porosity_boundaries",
+    "write_outputs",
+]
+
+# Compatibility alias retained for existing callers and tests.
+_stepfence_porosity_boundaries = stepfence_porosity_boundaries
 
 
 @dataclass
@@ -46,7 +75,10 @@ class Args:
 def parse_args(argv: list[str] | None = None) -> Args:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--zarr", type=Path, required=True, help="Path to the target case's .zarr store."
+        "--zarr",
+        type=Path,
+        required=True,
+        help="Path to the target case's .zarr store.",
     )
     parser.add_argument(
         "--checkpoint", type=Path, required=True, help="Path to the .mdlus checkpoint."
@@ -58,7 +90,10 @@ def parse_args(argv: list[str] | None = None) -> Args:
         help="Path to the run_meta.json sibling of the checkpoint.",
     )
     parser.add_argument(
-        "--output-csv", type=Path, required=True, help="Output CSV path (Forchheimer profile)."
+        "--output-csv",
+        type=Path,
+        required=True,
+        help="Output CSV path (Forchheimer profile).",
     )
     ns = parser.parse_args(argv)
     return Args(
@@ -89,6 +124,8 @@ class CaseData:
 
 def load_case_from_zarr(zarr_path: Path) -> CaseData:
     """Read features, targets, and geometry metadata for one case."""
+    import zarr
+
     if not zarr_path.exists():
         raise FileNotFoundError(f"Case zarr not found: {zarr_path}")
 
@@ -119,21 +156,13 @@ def load_case_from_zarr(zarr_path: Path) -> CaseData:
 def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
     """Project zarr features into the model's input_columns + normalize.
 
-    Returns array of shape (1, n_features, n_stations) — Conv1D NCL.
+    Returns array of shape (1, n_features, n_stations) in profile NCL layout.
     Reuses `cases.alpha_d.feature_data.build_engineered_feature_map` for
     engineered columns to match training-time feature synthesis exactly.
     """
     from cases.alpha_d.feature_data import build_engineered_feature_map
 
     input_columns: list[str] = list(run_meta["data"]["input_columns"])
-    x_mean = np.asarray(run_meta["data"]["norm_stats"]["x_mean"], dtype=np.float32)
-    x_std = np.asarray(run_meta["data"]["norm_stats"]["x_std"], dtype=np.float32)
-    if len(x_mean) != len(input_columns) or len(x_std) != len(input_columns):
-        raise ValueError(
-            f"norm_stats length mismatch: {len(x_mean)} mean / "
-            f"{len(x_std)} std vs {len(input_columns)} input_columns"
-        )
-
     raw_name_to_idx = {n: i for i, n in enumerate(case.feature_names)}
     engineered = build_engineered_feature_map(case.features, case.feature_names)
 
@@ -161,29 +190,48 @@ def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
         columns.append(col)
 
     raw_x = np.stack(columns, axis=0)  # (C, L)
-    normed = (raw_x - x_mean[:, None]) / x_std[:, None]
+    normalize = bool(
+        run_meta["data"].get(
+            "normalize", run_meta["data"].get("norm_stats") is not None
+        )
+    )
+    if normalize:
+        stats = run_meta["data"].get("norm_stats") or {}
+        x_mean = np.asarray(stats.get("x_mean"), dtype=np.float32)
+        x_std = np.asarray(stats.get("x_std"), dtype=np.float32)
+        if len(x_mean) != len(input_columns) or len(x_std) != len(input_columns):
+            raise ValueError(
+                f"norm_stats length mismatch: {len(x_mean)} mean / "
+                f"{len(x_std)} std vs {len(input_columns)} input_columns"
+            )
+        normed = (raw_x - x_mean[:, None]) / x_std[:, None]
+    else:
+        normed = raw_x
     return normed[None, :, :].astype(np.float32)  # (1, C, L)
 
 
 def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.ndarray:
-    """Load Conv1D checkpoint, run forward pass on normalized input.
+    """Load a profile-model checkpoint and run it on normalized input.
 
     Returns array of shape (n_stations,) — the encoded target prediction
     (signed_log1p_alpha_D in local-velocity basis if the model was trained
     with local_velocity_normalization=True).
     """
+    import torch
+
     import physicsnemo  # delayed — heavy import; keep out of module scope
 
-    # Ensure the Conv1DProfile class is defined (it registers itself only
-    # when physicsnemo is importable) so from_checkpoint can find it.
-    import training.models.conv1d_profile  # noqa: F401
+    entrypoint = str(run_meta.get("entrypoint") or "")
+    if ":" not in entrypoint:
+        raise ValueError("run_meta entrypoint must use 'module.path:callable' format")
+    importlib.import_module(entrypoint.rsplit(":", 1)[0])
 
     model = physicsnemo.Module.from_checkpoint(str(checkpoint_path))
     model.eval()
 
     with torch.no_grad():
         x_t = torch.from_numpy(x_normed)
-        y_t = model(x_t)  # expected (1, n_outputs, n_stations) for Conv1D NCL
+        y_t = model(x_t)  # expected (1, n_outputs, n_stations) profile NCL
 
     if y_t.dim() != 3 or y_t.shape[0] != 1:
         raise RuntimeError(
@@ -198,215 +246,6 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
         )
 
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
-
-
-def alpha_d_to_forchheimer(
-    alpha_d_bulk: np.ndarray,
-    *,
-    porosity: np.ndarray | float,
-    D_h: np.ndarray | float,
-) -> np.ndarray:
-    """Map bulk-basis Darcy-Weisbach α_D(z) to MOOSE PINSFV Forchheimer C_F.
-
-    Empirical PINSFV behavior (constant-F=1 verification tests 2026-05-28):
-      MOOSE PINSFVMomentumFriction with PINSFVSpeedFunctorMaterial gives
-        -dP/dz_MOOSE = F / (2 · porosity²)    (for ρ = U_super = 1)
-      [The kernel comment in PINSFVMomentumFriction.C says U_super² but
-      the empirical behavior has an extra 1/porosity factor. The kernel
-      appears to use interstitial² rather than interstitial·superficial
-      velocity internally, giving the extra 1/ε factor at ε < 1.]
-      Training α_D is defined by -dP/dz = α_D / (2 · D_h)  (for ρ = V_bulk = 1).
-      Equate: F = α_D · porosity² / D_h.
-
-    Block-specific values for our 3-block PINSFV mesh:
-      blocks 1, 3 (non-porous buffer):  porosity = 1,   D_h = D_outer
-                                         → F = α_D / D_outer
-      block 2 (porous throat):          porosity = Dr², D_h = Dr · D_outer
-                                         → F = α_D · Dr³ / D_outer
-    """
-    porosity_arr = np.asarray(porosity, dtype=np.float64)
-    D_h_arr = np.asarray(D_h, dtype=np.float64)
-    if np.any(porosity_arr <= 0) or np.any(D_h_arr <= 0):
-        raise ValueError("porosity and D_h must be positive everywhere.")
-    return np.asarray(alpha_d_bulk, dtype=np.float64) * (porosity_arr**2) / D_h_arr
-
-
-def restrict_to_throat(
-    *,
-    z_hat: np.ndarray,
-    is_throat: np.ndarray,
-    values: np.ndarray,
-    throat_length: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Keep only throat stations; remap z_hat to MOOSE throat coords.
-
-    Returns (z_moose, values_at_throat). z_moose spans [0, throat_length].
-    """
-    mask = np.asarray(is_throat).astype(np.float64) > 0.5
-    if not mask.any():
-        raise ValueError("No throat stations found (is_throat all zero).")
-
-    z_hat_throat = np.asarray(z_hat, dtype=np.float64)[mask]
-    vals_throat = np.asarray(values, dtype=np.float64)[mask]
-
-    order = np.argsort(z_hat_throat)
-    z_hat_throat = z_hat_throat[order]
-    vals_throat = vals_throat[order]
-
-    z_start = z_hat_throat[0]
-    z_end = z_hat_throat[-1]
-    if z_end <= z_start:
-        raise ValueError("Throat z_hat span is zero or negative; check inputs.")
-
-    z_moose = (z_hat_throat - z_start) / (z_end - z_start) * float(throat_length)
-    return z_moose, vals_throat
-
-
-def compute_baseline_encoded(
-    case: "CaseData",
-    z_hat: np.ndarray,
-    d_local_over_D: np.ndarray,
-    *,
-    local_velocity_normalization: bool,
-    target_name: str,
-) -> np.ndarray:
-    """Compute the encoded analytical baseline the training pipeline used.
-
-    AlphaDProfileDataset.__init__ sets ``target_transform=alpha_d_residual_transform``
-    via a ``setdefault`` call (datasets/profile.py:44), so the model is
-    trained on RESIDUALS from a closed-form sudden-contraction +
-    throat-friction baseline. The baseline lives on the dataset as
-    ``_baseline_encoded`` and gets added back to model predictions before
-    decoding (see ``compute_delta_p_metrics`` in metrics.py).
-
-    To reproduce that behavior at inference we (1) evaluate the closed-form
-    baseline α_D(z) in bulk basis for this case's geometry, then (2) encode
-    it the same way the training-time transform did (local-velocity basis,
-    ``signed_log1p``).
-
-    Note: run_meta.json records ``target_transform: null`` because it
-    captures the YAML-passed value, NOT the ``setdefault`` substituted
-    value. The baseline is in effect during training even when
-    ``run_meta`` says it isn't.
-    """
-    from cases.alpha_d.physics.baseline import BaselineGeometry, alpha_d_baseline_profile
-    from cases.alpha_d.physics.targets import alpha_d_bulk_to_values
-
-    geom = BaselineGeometry(
-        Re=case.Re,
-        Dr=case.Dr,
-        Lr=case.Lr,
-        D_big=case.D_big,
-        outer_height_m=case.outer_height_m,
-        buffer_diams=case.buffer_diams,
-    )
-    baseline_bulk = alpha_d_baseline_profile(np.asarray(z_hat, dtype=np.float64), geom)
-    baseline_encoded = alpha_d_bulk_to_values(
-        baseline_bulk,
-        target_name=target_name,
-        d_over_D=np.asarray(d_local_over_D, dtype=np.float64),
-        local_velocity_normalization=local_velocity_normalization,
-    )
-    return np.asarray(baseline_encoded, dtype=np.float64)
-
-
-def decode_to_bulk_alpha_d(
-    encoded: np.ndarray,
-    *,
-    d_local_over_D: np.ndarray,
-    local_velocity_normalization: bool,
-    target_name: str,
-) -> np.ndarray:
-    """Invert the encoder; convert local-velocity basis to bulk basis if needed.
-
-    ``alpha_d_values_to_bulk`` handles both steps in one call:
-    1. Decodes the encoded target (e.g. signed_log1p) to physical alpha_D.
-    2. If ``local_velocity_normalization`` is True, converts from local-velocity
-       basis to bulk-velocity basis by dividing by ``(d_local/D)^4``.
-
-    Note: when the model was trained on residuals (the default for the
-    Conv1D profile path), callers must add the encoded baseline (see
-    ``compute_baseline_encoded``) to ``encoded`` BEFORE passing it here.
-    """
-    from cases.alpha_d.physics.targets import alpha_d_values_to_bulk
-
-    encoded = np.asarray(encoded, dtype=np.float64)
-    alpha = alpha_d_values_to_bulk(
-        encoded,
-        target_name=target_name,
-        d_over_D=np.asarray(d_local_over_D, dtype=np.float64),
-        local_velocity_normalization=local_velocity_normalization,
-    )
-    return np.asarray(alpha, dtype=np.float64)
-
-
-def _stepfence_porosity_boundaries(
-    z: np.ndarray,
-    cf: np.ndarray,
-    *,
-    boundaries: tuple[float, ...],
-    step_eps: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Insert (z-eps, F-just-below) and (z+eps, F-just-above) at each porosity step.
-
-    The goal is to force MOOSE's PiecewiseLinear to render a near-step rather
-    than a linear bridge across the porosity discontinuity. ``step_eps`` must
-    be small enough that no mesh cell spans across both fence points (typical
-    MOOSE cell sizes are ~0.01 m for this case; 1e-4 m is well below that)
-    AND larger than the float roundoff that PiecewiseLinear treats as
-    "duplicate x" (which raises a strictly-increasing error).
-    """
-    z = np.asarray(z, dtype=np.float64)
-    cf = np.asarray(cf, dtype=np.float64)
-    if not np.all(np.diff(z) > 0):
-        raise ValueError("input z must be strictly increasing.")
-
-    z_list = list(z)
-    cf_list = list(cf)
-    # Insert in reverse order so earlier indices remain valid as we splice in.
-    for boundary in sorted(boundaries, reverse=True):
-        # Find the rightmost station strictly less than the boundary, and the
-        # leftmost strictly greater. The boundary may or may not align with
-        # an existing station; we don't assume it does.
-        zs = np.asarray(z_list)
-        i_left = int(np.searchsorted(zs, boundary, side="left") - 1)
-        i_right = int(np.searchsorted(zs, boundary, side="right"))
-        if i_left < 0 or i_right >= len(z_list):
-            # Boundary is outside the ROI; nothing to fence.
-            continue
-        f_left = cf_list[i_left]
-        f_right = cf_list[i_right]
-        # Insert (b-eps, f_left) before i_right, then (b+eps, f_right) immediately after.
-        z_list[i_right:i_right] = [boundary - step_eps, boundary + step_eps]
-        cf_list[i_right:i_right] = [f_left, f_right]
-    return np.asarray(z_list, dtype=np.float64), np.asarray(cf_list, dtype=np.float64)
-
-
-def write_outputs(*, csv_path: Path, z: np.ndarray, cf: np.ndarray, sidecar: dict) -> None:
-    """Write z/F CSV plus a sidecar JSON with metadata."""
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with csv_path.open("w") as fh:
-        fh.write("z,F\n")
-        for zi, ci in zip(z, cf):
-            fh.write(f"{zi:.9e},{ci:.9e}\n")
-    sidecar_path = csv_path.with_suffix(".meta.json")
-    sidecar_path.write_text(json.dumps(sidecar, indent=2))
-
-
-def _integrate_delta_p_with_z_phys(
-    alpha_d_bulk: np.ndarray,
-    z_phys: np.ndarray,
-    D_h: np.ndarray,
-    rho: float,
-    V_bulk: float,
-) -> float:
-    """Trapezoidal integral of -dP/dz over ROI.
-
-    -dP/dz = alpha_D * rho * V_bulk**2 / (2 * D_h)
-    delta_p = integral of (-dP/dz) dz over [z_start, z_end] (ROI)
-    """
-    integrand = alpha_d_bulk * rho * V_bulk**2 / (2.0 * D_h)
-    return float(np.trapz(integrand, x=z_phys))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -440,14 +279,21 @@ def main(argv: list[str] | None = None) -> int:
     # so the model predicts residuals from a closed-form baseline. Reproduce
     # the training-time add-back by computing the encoded baseline for this
     # case's geometry and adding it to the model output BEFORE decoding.
-    baseline_encoded = compute_baseline_encoded(
-        case,
-        z_hat,
-        d_local_over_D,
-        local_velocity_normalization=local_norm,
-        target_name=output_columns[0],
-    )
-    y_encoded_total = np.asarray(y_encoded, dtype=np.float64) + baseline_encoded
+    effective_data = run_meta["data"].get("effective") or {}
+    # Legacy alpha-D run metadata omitted the dataset-injected transform, so
+    # absence of the new field retains the historical residual-baseline path.
+    has_target_baseline = bool(effective_data.get("has_target_baseline", True))
+    if has_target_baseline:
+        baseline_encoded = compute_baseline_encoded(
+            case,
+            z_hat,
+            d_local_over_D,
+            local_velocity_normalization=local_norm,
+            target_name=output_columns[0],
+        )
+        y_encoded_total = np.asarray(y_encoded, dtype=np.float64) + baseline_encoded
+    else:
+        y_encoded_total = np.asarray(y_encoded, dtype=np.float64)
 
     alpha_d_bulk = decode_to_bulk_alpha_d(
         y_encoded_total,
@@ -478,12 +324,12 @@ def main(argv: list[str] | None = None) -> int:
     # Dr*D_big inside throat. Use d_local_over_D directly.
     D_h_roi = d_local_over_D * case.D_big
 
-    delta_p_surrogate = _integrate_delta_p_with_z_phys(
-        alpha_d_bulk=alpha_d_bulk,
-        z_phys=z_phys,
-        D_h=D_h_roi,
-        rho=case.rho,
-        V_bulk=case.V_bulk,
+    delta_p_surrogate = integrate_delta_p(
+        alpha_d_bulk,
+        z_phys,
+        D_h_roi,
+        case.rho,
+        case.V_bulk,
     )
 
     # ---- Block-aware full-ROI Forchheimer mapping ----
@@ -519,8 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     # ---- Write outputs ----
     # z is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
     # No pre-shift needed; PiecewiseLinear spans [0, roi_length].
-    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
+    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get(
+        "input_columns", []
+    )
     sidecar = {
+        "coupling_export_schema": 1,
         "case_id": case.case_id,
         "checkpoint": str(args.checkpoint),
         "Re": case.Re,

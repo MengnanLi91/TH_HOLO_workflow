@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from cases.alpha_d.feature_data import ALLOWLIST, load_feature_matrix
 from feature_selection.manifest import build_manifest, write_manifest
 from feature_selection.pycaret_selection import run_pycaret_selection
+from training.case_lists import load_case_selection
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,20 @@ def main(cfg: DictConfig) -> None:
     output_cfg = cfg_dict["output"]
     pycaret_cfg = cfg_dict.get("pycaret") or {}
 
+    exclude_cases = load_case_selection(
+        data_cfg.get("exclude_cases"),
+        data_cfg.get("exclude_cases_file"),
+        label="exclude_cases",
+    )
     data = load_feature_matrix(
         zarr_dir=data_cfg["zarr_dir"],
         target=data_cfg.get("target", "log_alpha_D"),
         selected_from_allowlist=data_cfg.get("selected_from_allowlist"),
-        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", True)),
+        local_velocity_normalization=bool(
+            data_cfg.get("local_velocity_normalization", True)
+        ),
         min_Dr=data_cfg.get("min_Dr"),
-        exclude_cases=data_cfg.get("exclude_cases") or [],
+        exclude_cases=exclude_cases,
     )
     logger.info(
         "Loaded %d rows across %d cases; %d candidate features.",
@@ -82,6 +90,7 @@ def main(cfg: DictConfig) -> None:
         n_cases=data.n_cases,
         seeds={"pycaret": int(pycaret_cfg.get("seed", 42))},
     )
+    manifest["config"]["data"]["exclude_cases"] = exclude_cases
     try:
         import pycaret
 

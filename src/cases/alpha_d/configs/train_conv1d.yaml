@@ -33,6 +33,7 @@ data:
   downstream_weight: 1.0
   min_Dr: 0.333
   exclude_cases: []
+  exclude_cases_file: null
   split:
     strategy: stratified
     train_ratio: 0.8

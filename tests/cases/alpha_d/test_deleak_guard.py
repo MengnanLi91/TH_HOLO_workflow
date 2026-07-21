@@ -1,5 +1,8 @@
 import pytest
-from cases.alpha_d.extrapolation import AXES  # noqa: F401  (ensures package import path)
+
+from cases.alpha_d.extrapolation import (
+    AXES,
+)  # noqa: F401  (ensures package import path)
 
 CFD_DERIVED = ("V_local_over_V_bulk", "log10_Re_local")
 

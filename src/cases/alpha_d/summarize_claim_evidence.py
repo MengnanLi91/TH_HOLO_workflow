@@ -74,9 +74,15 @@ def _read_case_list(path: Path) -> list[str]:
 
 def discover_manifests(study_root: Path) -> list[Manifest]:
     manifests: list[Manifest] = []
-    for path in sorted(study_root.rglob("manifest.json")):
+    paths = sorted(
+        set(study_root.rglob("manifest.json"))
+        | set(study_root.rglob("panel_manifest.json"))
+    )
+    for path in paths:
         raw = _load_json(path)
-        if raw.get("claim_evidence_manifest") != 1:
+        if raw.get("claim_evidence_manifest") != 1 and raw.get(
+            "panel_manifest_schema"
+        ) not in {2, 3}:
             continue
         base = path.parent
         heldout = [str(case) for case in raw.get("heldout_cases") or []]
@@ -395,7 +401,10 @@ def _moose_artifact_error(
     case = case_dir.name
     if case not in set(manifest.report_cases):
         return "case is not in report_cases"
-    if status.get("moose_run_status_schema") != 1:
+    status_schema = status.get("moose_run_status_schema")
+    if status_schema is None:
+        status_schema = status.get("moose_case_status_schema")
+    if status_schema not in {1, 2}:
         return "missing supported MOOSE run-status schema"
     if status.get("status") != "success":
         return f"MOOSE run status is {status.get('status')!r}"
@@ -407,6 +416,17 @@ def _moose_artifact_error(
         if not _positive_finite(verifier, key):
             return f"{key} is not finite and positive"
     output_csv = status.get("output_csv")
+    if status_schema == 2:
+        selected = status.get("selected_attempt")
+        attempt = next(
+            (
+                item
+                for item in status.get("attempts") or []
+                if item.get("name") == selected
+            ),
+            None,
+        )
+        output_csv = attempt.get("output_csv") if attempt else None
     if not output_csv:
         return "run status does not identify the selected MOOSE CSV"
     output_path = _resolve_path(str(output_csv), base=case_dir)
@@ -453,6 +473,7 @@ def collect_moose_records(
                         "tag": manifest.tag,
                         "case": case,
                         "reason": status.get("message")
+                        or status.get("error")
                         or "missing verify_delta_p.json",
                         "path": str(case_dir),
                     }
@@ -838,7 +859,13 @@ def summarize_study(study_root: Path) -> dict[str, Any]:
     moose_rows = collect_moose_records(manifests, failures=moose_failures)
     conclusion = build_conclusion(summaries, moose_rows, moose_failures, consistency)
     return {
+        "claim_evidence_summary_schema": 2,
         "study_root": str(study_root),
+        "evidence_classes": {
+            "direct_scalar_regression": list(REGRESSOR_MODELS),
+            "direct_alpha_d_gradient_integration": "records",
+            "moose_coupled_alpha_d": "moose_spotchecks",
+        },
         "consistency": consistency,
         "summaries": summaries,
         "records": all_records,

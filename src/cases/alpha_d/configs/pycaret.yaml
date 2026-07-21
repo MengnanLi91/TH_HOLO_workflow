@@ -16,6 +16,7 @@ data:
   local_velocity_normalization: true   # must match training config
   min_Dr: 0.333
   exclude_cases: []
+  exclude_cases_file: null
   selected_from_allowlist: null        # null = full ALLOWLIST
 
 output:

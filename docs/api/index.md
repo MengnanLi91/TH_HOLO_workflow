@@ -13,11 +13,13 @@ The packages mirror the layout described on the
 - **`feature_selection`** — shared feature-analysis helpers.
 - **`dataset`** — the public `MOOSEDataset` consumed by downstream user
   code.
+- **`workflows`** — resumable DAG contracts, executors, and manifest runner.
 
 ```{toctree}
 :maxdepth: 1
 
 training
+workflows
 cases
 feature_selection
 dataset

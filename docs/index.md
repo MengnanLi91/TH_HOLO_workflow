@@ -72,12 +72,21 @@ Open the Alpha-D Surrogate tutorial.
 :::
 
 :::{grid-item-card} {octicon}`code` New model
-:link: architecture
+:link: dev/workflows
 :link-type: doc
 
-How adapters, datasets, and the runner fit together when adding a model.
+Implement a registered or custom model, adapter, experiment, or exporter.
 
-Open the Architecture page.
+Open the workflow extension guide.
+:::
+
+:::{grid-item-card} {octicon}`workflow` Reproducible workflow
+:link: user/running_workflows
+:link-type: doc
+
+Select an ML method, plan a study, resume it, and publish checked artifacts.
+
+Open the workflow user guide.
 :::
 
 :::{grid-item-card} {octicon}`beaker` Alpha-D coupling demo

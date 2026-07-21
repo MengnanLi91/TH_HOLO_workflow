@@ -1,10 +1,81 @@
 # Architecture
 
-MULTIFID-TH has two complementary halves: a pair of **ETL
-pipelines** that turn raw MOOSE outputs into ML-ready Zarr, and a
-**generic training framework** that consumes those Zarr stores through a
-small set of adapters. This page wires them together with the diagrams
-you need to navigate the codebase.
+MULTIFID-TH has three layers: case-owned **ETL pipelines** turn raw MOOSE
+outputs into ML-ready Zarr, the **generic training framework** consumes those
+stores through adapters, and the case-agnostic **workflow kernel** composes
+ETL, training, evaluation, solvers, and publication into resumable studies.
+This page wires them together with the diagrams you need to navigate the
+codebase.
+
+## Workflow kernel and case boundary
+
+`src/workflows/` is the reusable study layer. It validates a stage DAG,
+executes argument arrays locally or through Apptainer, fingerprints inputs,
+updates `run_manifest.json` atomically, and resumes only outputs whose
+checksums and case-owned validators still pass. It never imports `cases.*`.
+
+```{mermaid}
+flowchart LR
+    CLI["multifid-workflow<br/>plan · run · status · publish"] --> CORE["workflows/<br/>DAG · executors · manifest · fingerprints"]
+    TOML["tracked workflow TOML"] --> CLI
+    CASE["cases/&lt;case&gt;/study_workflow.py<br/>build_workflow(config, repo_root)"] --> CORE
+    CORE --> ETL["existing ETL commands"]
+    CORE --> TRAIN["existing training/evaluation commands"]
+    CORE --> SOLVER["case-owned solver/coupling commands"]
+    CORE --> RUN["data/workflows/&lt;workflow-id&gt;/&lt;run-id&gt;"]
+    RUN --> PUBLISH["declared docs figures<br/>publish only"]
+```
+
+The public integration seam for a new case is one function:
+
+```python
+def build_workflow(config, repo_root) -> WorkflowDefinition:
+    return WorkflowDefinition(
+        workflow_id=config["workflow"]["id"],
+        version=1,
+        stages=(Stage("prepare", prepare), Stage("train", train, ("prepare",))),
+    )
+```
+
+Keep physics, panel construction, model-specific command arguments, solver
+validation, and report interpretation in the case package. Keep DAG mechanics,
+execution environments, provenance, and resume rules in `workflows`. See the
+[workflow extension guide](dev/workflows.md) for the complete contract.
+
+### Configuration and ML-method boundary
+
+The study TOML selects one ML method per run, while the selected Hydra YAML
+defines how that method trains. The case builder translates both into stages
+and enforces the artifact contract needed by downstream physics.
+
+```{mermaid}
+flowchart LR
+    TOML["Study TOML<br/>method · runner · contracts"] --> CASE["case study_workflow.py<br/>stage and validator logic"]
+    YAML["Hydra YAML<br/>model · adapter · loss · HPO"] --> RUNNER["generic training runner"]
+    CASE -->|"runner module + config name"| RUNNER
+    RUNNER --> MODEL["registered model<br/>or model.entrypoint"]
+    MODEL --> ADAPTER["grid · graph · pointwise · profile"]
+    ADAPTER --> ART["checkpoint + run_meta.json"]
+    ART --> VALIDATE{"case artifact<br/>contract valid?"}
+    VALIDATE -->|yes| EXPORT["configured exporter"]
+    EXPORT --> SOLVER["case solver / coupling"]
+    VALIDATE -->|no| FAIL["stage failed with contract error"]
+```
+
+Configuration ownership is intentionally non-overlapping:
+
+- TOML controls study inputs, panels, executors, selected method, artifact
+  names, contracts, and publication.
+- Hydra YAML controls architecture, dataset/adapter, split, optimizer, loss,
+  schedule, and HPO search space.
+- `study_workflow.py` controls case-specific stages, dependencies, physics,
+  validators, solver retries, and reports.
+
+Changing the TOML method changes the run's resolved-configuration hash, so an
+existing run ID cannot accidentally resume checkpoints from another model.
+For alpha-D, `alpha_d_profile_v1` validates the training metadata and profile
+shape before `forchheimer_profile_v1` is allowed to feed MOOSE. Other cases may
+define different contracts without changing the workflow kernel.
 
 ## Two ETLs feed one trainer
 
@@ -149,10 +220,10 @@ flowchart TB
     CP --> CPr["run_case_pressure_drop.py"]
 ```
 
-For newcomers: pick a case folder, open its README (alpha-D) or
-top-level entry script, and follow the imports outward. The training
-core does **not** import from `cases/*`; coupling flows in one direction
-only.
+For newcomers: pick a case folder, open its README (alpha-D) or top-level entry
+script, and follow the imports outward. Neither the training core nor the
+workflow core imports from `cases/*`; case builders and adapters point inward
+to the generic layers, never the reverse.
 
 ## `run_meta.json` round-trip
 

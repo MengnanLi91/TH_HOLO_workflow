@@ -256,7 +256,18 @@ suppress_warnings: list[str] = [
 # Run a nitpicky build manually with `sphinx-build -n` when sweeping for
 # typoed `{py:class}` references in prose. The defaults stay quiet.
 nitpicky = False
-nitpick_ignore: list[tuple[str, str]] = []
+nitpick_ignore: list[tuple[str, str]] = [
+    # Optional runtime packages do not publish targets under these annotation
+    # spellings, so strict builds cannot resolve them through intersphinx.
+    ("py:class", "physicsnemo_curator.etl.data_sources.DataSource"),
+    ("py:class", "physicsnemo_curator.etl.processing_config.ProcessingConfig"),
+    ("py:class", "physicsnemo_curator.etl.data_transformations.DataTransformation"),
+    ("py:class", "physicsnemo_curator.etl.dataset_validators.DatasetValidator"),
+    ("py:class", "physicsnemo_curator.etl.dataset_validators.ValidationError"),
+    ("py:class", "physicsnemo.Module"),
+    ("py:class", "optuna.Study"),
+    ("py:class", "optuna.Trial"),
+]
 
 
 # -- Helpful defaults for sphinx-copybutton --------------------------------

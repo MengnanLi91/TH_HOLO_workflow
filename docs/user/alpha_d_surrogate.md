@@ -39,6 +39,26 @@ Verify that you have completed cases:
 ls data/flow_contraction_expansion/parametric_study/Re_5000__Dr_0p144__Lr_0p01/simulation_out.e
 ```
 
+## Recommended complete-study workflow
+
+The commands below remain useful when developing one ETL, feature-selection,
+or training component. For the reproducible panel study and MOOSE coupling,
+use the tracked workflow instead:
+
+```bash
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-001
+```
+
+The workflow uses one canonical held-out file per panel, tunes the selected
+method once, freezes its settings for comparisons, records all provenance, and
+resumes validated artifacts. Select another profile model through
+`[training.alpha]` in the TOML and its Hydra YAML; see
+[Run a Reproducible Study Workflow](running_workflows.md).
+
 ## Step 1: Extract alpha_D profiles (ETL)
 
 The alpha_D ETL pipeline reads each case's `simulation_out.e`, extracts the
