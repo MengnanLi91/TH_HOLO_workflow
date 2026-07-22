@@ -31,6 +31,19 @@ cases/alpha_d/
 
 ### 1. ETL: MOOSE → per-case Zarr
 
+The resumable workflow form, run from the repository root, is:
+
+```bash
+uv run multifid-workflow etl \
+  --config src/cases/alpha_d/configs/etl_workflow.toml \
+  --run-id alpha-d-etl-001 \
+  --input-dir /absolute/path/to/parametric_study
+```
+
+It writes `data/processed` under
+`data/workflows/alpha_d_etl/alpha-d-etl-001/`. The command below remains
+useful when directly developing the ETL inside a prepared heavy environment.
+
 ```bash
 python cases/alpha_d/run_etl.py \
   etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \

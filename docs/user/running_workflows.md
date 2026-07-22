@@ -71,6 +71,39 @@ its output checksums, upstream fingerprints, and semantic validator still
 pass. Interrupted and failed stages rerun. A `partial` solver stage retains
 failed cases and coverage instead of converting them into zero-valued results.
 
+## Build alpha-D Zarr data from raw Exodus cases
+
+The repository does not ship the large alpha-D campaign; `data/` is ignored.
+Use the ETL-only workflow when you have a raw campaign whose case directories
+contain `simulation_out.e` and `case_metadata.txt` (or whose root has
+`cases_manifest.csv`). It needs only the Python image, not the MOOSE image:
+
+```bash
+export MULTIFID_PYTHON_IMAGE=/absolute/path/to/multifid-th.sif
+
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/etl_workflow.toml
+
+uv run multifid-workflow etl \
+  --config src/cases/alpha_d/configs/etl_workflow.toml \
+  --run-id alpha-d-etl-001 \
+  --input-dir /absolute/path/to/parametric_study
+```
+
+`--input-dir` replaces `inputs.raw_dir` and automatically binds that directory
+into the Python Apptainer invocation when it is outside the repository. The
+generated stores and `data/etl_summary.json` are kept together under:
+
+```text
+data/workflows/alpha_d_etl/alpha-d-etl-001/data/processed/
+```
+
+To train or run the coupled study from those stores, copy the study TOML, set
+`inputs.mode = "reuse"`, set `inputs.zarr_dir` to that generated directory,
+then start the study with a different run ID. The ETL summary records any raw
+cases that did not yield a Zarr store; that condition is reported as `partial`
+rather than being silently treated as complete.
+
 ## Choose another ML method
 
 The alpha-D TOML selects one method for the entire run:

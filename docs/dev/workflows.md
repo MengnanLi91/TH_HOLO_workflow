@@ -176,6 +176,23 @@ and solver imports stay inside the configured subprocess environment.
 Apptainer images may be configured directly or through an environment
 variable such as `MULTIFID_PYTHON_IMAGE`.
 
+### ETL-only workflows
+
+An ETL-only case uses the same public builder and runner contracts as a study,
+but its DAG can consist of one extraction stage. Alpha-D exposes this through:
+
+```bash
+uv run multifid-workflow etl \
+  --config src/cases/alpha_d/configs/etl_workflow.toml \
+  --run-id alpha-d-etl-001 \
+  --input-dir /absolute/path/to/raw_campaign
+```
+
+The `etl` subcommand replaces `inputs.raw_dir`; when that path is outside the
+repository, it adds a read/write Apptainer bind for the explicitly supplied
+directory. The case builder still owns the ETL module, output validator, and
+coverage semantics. The generic CLI does not import alpha-D code.
+
 ## Fingerprints, manifests, and resume
 
 Declare external input datasets through `WorkflowDefinition.input_paths`.

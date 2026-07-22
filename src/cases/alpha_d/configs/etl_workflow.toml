@@ -1,0 +1,21 @@
+[workflow]
+id = "alpha_d_etl"
+version = 1
+kind = "etl"
+entrypoint = "cases.alpha_d.etl_workflow:build_workflow"
+output_root = "data/workflows"
+
+[inputs]
+# Raw campaign root; each case directory must contain simulation_out.e and
+# case_metadata.txt, or the root must contain cases_manifest.csv.
+raw_dir = "data/flow_contraction_expansion/parametric_study"
+
+[executors.python]
+kind = "apptainer"
+image_env = "MULTIFID_PYTHON_IMAGE"
+binds = ["{repo_root}:{repo_root}"]
+
+[etl]
+python_executor = "python"
+runner_module = "cases.alpha_d.run_etl"
+num_processes = 4

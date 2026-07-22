@@ -67,6 +67,22 @@ stations, and writes per-case `.zarr` stores.
 
 ### Run the extraction
 
+For the resumable Apptainer workflow, run:
+
+```bash
+uv run multifid-workflow etl \
+    --config src/cases/alpha_d/configs/etl_workflow.toml \
+    --run-id alpha-d-etl-001 \
+    --input-dir /absolute/path/to/parametric_study
+```
+
+The processed stores are written under the ETL run directory, with an input
+fingerprint, logs, and an explicit coverage summary. Point a copied coupling
+study TOML at that `data/processed` directory to use it for training.
+
+For component-level development in an already prepared heavy environment, the
+existing direct command remains available:
+
 ```bash
 cd src && python cases/alpha_d/run_etl.py \
     etl.source.input_dir=../data/flow_contraction_expansion/parametric_study \

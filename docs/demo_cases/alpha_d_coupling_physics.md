@@ -73,6 +73,20 @@ tree. To rebuild it from raw Exodus first, copy the tracked TOML, set
 `inputs.mode = "raw_etl"`, and point `inputs.raw_dir` at the source campaign.
 The ETL output then stays inside the run directory.
 
+For an ETL-only run with its own provenance and resumability, use:
+
+```bash
+uv run multifid-workflow etl \
+  --config src/cases/alpha_d/configs/etl_workflow.toml \
+  --run-id alpha-d-etl-001 \
+  --input-dir /absolute/path/to/parametric_study
+```
+
+It writes processed stores to
+`data/workflows/alpha_d_etl/alpha-d-etl-001/data/processed/`. To use them in
+this study, copy the coupling TOML, set `inputs.mode = "reuse"`, and set
+`inputs.zarr_dir` to that directory.
+
 Typical stage costs are:
 
 | stage family | expected cost | resumable unit |
