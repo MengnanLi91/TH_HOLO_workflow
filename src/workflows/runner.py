@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -269,7 +270,18 @@ class WorkflowRunner:
         _atomic_json(self.run_dir / "resolved_config.json", self.config)
         return manifest
 
-    def run(self, *, target: str | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        *,
+        target: str | None = None,
+        on_stage: Callable[[Stage, str], None] | None = None,
+    ) -> dict[str, Any]:
+        """Execute or resume stages, optionally reporting their lifecycle events.
+
+        ``on_stage`` receives each selected stage and one of ``running``,
+        ``reused``, ``succeeded``, ``partial``, or ``failed``. Reused stages
+        passed their recorded artifact and semantic validation checks.
+        """
         manifest = self._load_or_create_manifest()
         selected = _target_stages(self.ordered, target)
         manifest["status"] = "running"
@@ -293,9 +305,13 @@ class WorkflowRunner:
                 and (stage.validator is None or stage.validator(context))
             ):
                 any_partial = any_partial or record["status"] == "partial"
+                if on_stage is not None:
+                    on_stage(stage, "reused")
                 continue
             record.update({"status": "running", "started_utc": _now(), "error": None})
             _atomic_json(self.manifest_path, manifest)
+            if on_stage is not None:
+                on_stage(stage, "running")
             try:
                 result = stage.action(context) or StageResult()
                 if stage.validator is not None and not stage.validator(context):
@@ -323,9 +339,13 @@ class WorkflowRunner:
                 manifest["status"] = "failed"
                 manifest["updated_utc"] = _now()
                 _atomic_json(self.manifest_path, manifest)
+                if on_stage is not None:
+                    on_stage(stage, "failed")
                 raise
             manifest["updated_utc"] = _now()
             _atomic_json(self.manifest_path, manifest)
+            if on_stage is not None:
+                on_stage(stage, result.status)
         all_terminal = all(
             item.get("status") in ("succeeded", "partial")
             for item in manifest["stages"].values()

@@ -5,12 +5,25 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import shutil
 import sys
-import textwrap
 import tomllib
+from collections import Counter
 from pathlib import Path
 from typing import Any
+
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+from rich.table import Table
+from rich.text import Text
 
 from workflows.runner import WorkflowRunner, validate_workflow
 
@@ -113,131 +126,207 @@ def _dependency_summary(dependencies: tuple[str, ...]) -> str:
 
     leaf_names = {name.rsplit(".", 1)[-1] for name in dependencies}
     if len(leaf_names) == 1:
-        return f"{len(dependencies)} {leaf_names.pop()} stages"
+        return f"{len(dependencies)} {leaf_names.pop()}"
     if all(name.startswith("panel.") for name in dependencies):
-        return f"{len(dependencies)} panel stages"
-    return f"{len(dependencies)} upstream stages"
+        return f"{len(dependencies)} panel"
+    return f"{len(dependencies)} upstream"
 
 
-def _wrap_stage_name(name: str, width: int) -> list[str]:
-    """Wrap dotted stage names at component boundaries when possible."""
-    if len(name) <= width:
-        return [name]
-
-    lines: list[str] = []
-    current = ""
-    for component in name.split("."):
-        candidate = f"{current}.{component}" if current else component
-        if current and len(candidate) > width:
-            lines.append(current)
-            current = component
-        else:
-            current = candidate
-    if current:
-        lines.append(current)
-    return lines
-
-
-def _wrap_cell(value: str, width: int) -> list[str]:
-    return textwrap.wrap(value, width=width, break_long_words=False) or [""]
-
-
-def _wrap_dependencies(value: str, width: int) -> list[str]:
-    """Wrap individual stage dependencies at dotted-name boundaries."""
-    names = value.split(", ")
-    if len(names) == 1:
-        return _wrap_stage_name(value, width)
-
-    lines: list[str] = []
-    for index, name in enumerate(names):
-        suffix = "," if index < len(names) - 1 else ""
-        if "." in name:
-            wrapped = _wrap_stage_name(name, width)
-        else:
-            wrapped = _wrap_cell(name, width)
-        wrapped[-1] += suffix
-        lines.extend(wrapped)
-    return lines
+_STATUS_STYLES = {
+    "pending": "dim",
+    "running": "bold cyan",
+    "succeeded": "bold green",
+    "partial": "bold yellow",
+    "failed": "bold red",
+    "skipped": "bold magenta",
+    "completed": "bold green",
+    "completed_with_partial_results": "bold yellow",
+    "partial_run": "bold yellow",
+}
+_STATUS_SYMBOLS = {
+    "pending": "○",
+    "running": "●",
+    "succeeded": "✓",
+    "partial": "!",
+    "failed": "✗",
+    "skipped": "–",
+    "completed": "✓",
+    "completed_with_partial_results": "!",
+    "partial_run": "!",
+}
 
 
-def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
-    """Print a compact, terminal-width-aware table without extra dependencies."""
-    terminal_width = shutil.get_terminal_size(fallback=(120, 24)).columns
-    number_width = max(2, len(headers[0]), *(len(row[0]) for row in rows))
-    stage_width = min(
-        42,
-        max(22, min(max(len(row[1]) for row in rows), terminal_width // 3)),
+def _status_text(status: str) -> Text:
+    """Return a consistently styled, human-readable workflow status."""
+    label = status.replace("_", " ").title()
+    marker = _STATUS_SYMBOLS.get(status, "?")
+    return Text(f"{marker} {label}", style=_STATUS_STYLES.get(status, "bold"))
+
+
+def _stage_counts(records: dict[str, Any]) -> Text:
+    """Return a compact color-coded count of stages by state."""
+    counts = Counter(
+        str(record.get("status", "unknown")) for record in records.values()
     )
-    dependency_width = min(
-        30,
-        max(18, min(max(len(row[2]) for row in rows), terminal_width // 4)),
-    )
-    description_width = max(
-        24, terminal_width - number_width - stage_width - dependency_width - 6
-    )
-    widths = (number_width, stage_width, dependency_width, description_width)
+    parts: list[Text] = []
+    for status in sorted(counts):
+        if parts:
+            parts.append(Text("  "))
+        value = _status_text(status)
+        value.append(f" {counts[status]}")
+        parts.append(value)
+    return Text.assemble(*parts) if parts else Text("No stages", style="dim")
 
-    def render(values: tuple[str, ...]) -> None:
-        cells = (
-            _wrap_cell(values[0], widths[0]),
-            _wrap_stage_name(values[1], widths[1]),
-            _wrap_dependencies(values[2], widths[2]),
-            _wrap_cell(values[3], widths[3]),
+
+def _summary_table(rows: list[tuple[str, Text | str]]) -> Table:
+    """Build the small key/value table used in CLI summary panels."""
+    table = Table.grid(padding=(0, 1))
+    table.add_column(style="bold bright_blue", no_wrap=True)
+    table.add_column()
+    for label, value in rows:
+        table.add_row(label, value)
+    return table
+
+
+def _stage_table(*, status: bool) -> Table:
+    """Build the shared stage table for workflow plans and saved runs."""
+    table = Table(
+        box=box.SIMPLE_HEAVY,
+        header_style="bold bright_blue",
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("#", justify="right", style="dim", width=3, no_wrap=True)
+    table.add_column(
+        "Stage",
+        style="cyan",
+        width=28,
+        no_wrap=True,
+        overflow="ellipsis",
+    )
+    if status:
+        table.add_column("State", no_wrap=True)
+    else:
+        table.add_column(
+            "Depends on",
+            style="magenta",
+            width=19,
+            no_wrap=True,
+            overflow="ellipsis",
         )
-        for index in range(max(len(cell) for cell in cells)):
-            print(
-                f"{cells[0][index] if index < len(cells[0]) else '':>{widths[0]}}  "
-                f"{cells[1][index] if index < len(cells[1]) else '':<{widths[1]}}  "
-                f"{cells[2][index] if index < len(cells[2]) else '':<{widths[2]}}  "
-                f"{cells[3][index] if index < len(cells[3]) else ''}"
-            )
-
-    render(headers)
-    print("  ".join("-" * width for width in widths))
-    for row in rows:
-        render(row)
+    table.add_column(
+        "Description", min_width=18, ratio=1, no_wrap=True, overflow="ellipsis"
+    )
+    return table
 
 
 def _print_plan(definition, target: str | None) -> None:
     ordered = _selected_stages(definition, target)
-    target_label = "all stages" if target is None else f"{target} and dependencies"
-    print("Workflow plan")
-    print("=" * len("Workflow plan"))
-    print(
-        f"{definition.workflow_id} | schema {definition.version} | "
-        f"{len(ordered)} stage{'s' if len(ordered) != 1 else ''}"
-    )
-    print(f"Target: {target_label}\n")
-
-    rows = [
-        (
-            str(index),
-            stage.name,
-            _dependency_summary(stage.dependencies),
-            stage.description or "-",
+    console = Console()
+    target_label = "All stages" if target is None else f"{target} and dependencies"
+    console.print(
+        Panel(
+            _summary_table(
+                [
+                    ("Workflow", Text(definition.workflow_id, style="bold cyan")),
+                    ("Schema", str(definition.version)),
+                    ("Stages", f"{len(ordered)} selected"),
+                    ("Target", Text(target_label, style="cyan")),
+                    ("Mode", Text("Validation only; no commands run", style="dim")),
+                ]
+            ),
+            title="[bold bright_blue]Workflow plan[/bold bright_blue]",
+            border_style="bright_blue",
+            expand=False,
         )
-        for index, stage in enumerate(ordered, 1)
-    ]
-    _print_table(("#", "Stage", "Depends on", "Description"), rows)
+    )
+    table = _stage_table(status=False)
+    for index, stage in enumerate(ordered, 1):
+        table.add_row(
+            str(index),
+            Text(stage.name),
+            Text(_dependency_summary(stage.dependencies)),
+            Text(
+                stage.description or "-", style="dim" if not stage.description else ""
+            ),
+        )
+    console.print(table)
 
 
 def _status(run_dir: Path) -> int:
     path = run_dir / "run_manifest.json"
     manifest = json.loads(path.read_text(encoding="utf-8"))
-    print("Workflow status")
-    print("=" * len("Workflow status"))
-    print(f"{manifest['workflow_id']} / {manifest['run_id']}: {manifest['status']}\n")
-    rows = [
-        (
-            str(index),
-            name,
-            str(record["status"]),
-            str(record.get("description") or "-"),
+    console = Console()
+    overall_status = str(manifest["status"])
+    console.print(
+        Panel(
+            _summary_table(
+                [
+                    ("Workflow", Text(str(manifest["workflow_id"]), style="bold cyan")),
+                    ("Run ID", Text(str(manifest["run_id"]), style="cyan")),
+                    ("Overall", _status_text(overall_status)),
+                    ("Stages", _stage_counts(manifest["stages"])),
+                    ("Updated", str(manifest.get("updated_utc", "-"))),
+                ]
+            ),
+            title="[bold bright_blue]Workflow status[/bold bright_blue]",
+            border_style=_STATUS_STYLES.get(overall_status, "bright_blue"),
+            expand=False,
         )
-        for index, (name, record) in enumerate(manifest["stages"].items(), 1)
-    ]
-    _print_table(("#", "Stage", "Status", "Description"), rows)
+    )
+    table = _stage_table(status=True)
+    for index, (name, record) in enumerate(manifest["stages"].items(), 1):
+        description = str(record.get("description") or "-")
+        if record.get("error"):
+            description = f"{description}\nError: {record['error']}"
+        table.add_row(
+            str(index),
+            Text(name),
+            _status_text(str(record.get("status", "unknown"))),
+            Text(description, style="dim" if description == "-" else ""),
+        )
+    console.print(table)
     return 0
+
+
+def _run_with_progress(runner: WorkflowRunner, *, target: str | None) -> dict[str, Any]:
+    """Run selected stages with a Rich progress bar driven by runner events."""
+    selected = _selected_stages(runner.definition, target)
+    complete_label = "Target complete" if target is not None else "Workflow complete"
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=Console(),
+        transient=False,
+    ) as progress:
+        task = progress.add_task("Preparing workflow", total=len(selected))
+
+        def on_stage(stage, state: str) -> None:
+            if state == "running":
+                progress.update(task, description=f"[cyan]Running[/] {stage.name}")
+                return
+            if state == "failed":
+                progress.update(task, description=f"[bold red]Failed[/] {stage.name}")
+                return
+
+            labels = {
+                "reused": "[dim]Reusing[/]",
+                "succeeded": "[green]Completed[/]",
+                "partial": "[yellow]Partial[/]",
+            }
+            progress.advance(task)
+            progress.update(task, description=f"{labels[state]} {stage.name}")
+
+        manifest = runner.run(target=target, on_stage=on_stage)
+        if manifest["status"] == "completed_with_partial_results":
+            final_label = f"[yellow]! {complete_label} with partial results[/]"
+        else:
+            final_label = f"[green]✓ {complete_label}[/]"
+        progress.update(task, completed=len(selected), description=final_label)
+    return manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -295,9 +384,13 @@ def main(argv: list[str] | None = None) -> int:
             _print_plan(definition, args.target)
             return 0
         run_dir = _run_dir(config, repo_root, args.run_id)
-        WorkflowRunner(
+        runner = WorkflowRunner(
             definition, config=config, repo_root=repo_root, run_dir=run_dir
-        ).run(target=getattr(args, "target", None))
+        )
+        if args.command == "run":
+            _run_with_progress(runner, target=args.target)
+        else:
+            runner.run(target=getattr(args, "target", None))
         print(run_dir)
         return 0
     except (FileNotFoundError, KeyError, RuntimeError, ValueError) as exc:

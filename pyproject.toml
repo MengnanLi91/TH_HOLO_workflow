@@ -7,10 +7,10 @@ name = "multifid-th"
 version = "0.1.0"
 description = "Multifidelity surrogates for thermal-hydraulics on MOOSE outputs"
 requires-python = ">=3.11"
-# Runtime deps (torch, physicsnemo, zarr, hydra-core, …) are pinned in
-# the Dockerfiles in docker/. Keep this list empty so `pip install -e .`
-# inside the existing images is a no-op for dependency resolution.
-dependencies = []
+# ML runtime dependencies (torch, physicsnemo, zarr, hydra-core, …) are pinned
+# in the Dockerfiles in docker/. Rich is the lightweight host-side dependency
+# used by the workflow CLI.
+dependencies = ["rich>=13"]
 
 [project.optional-dependencies]
 # Documentation build deps. Install with `pip install -e ".[docs]"`, then

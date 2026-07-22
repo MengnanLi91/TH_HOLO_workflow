@@ -78,12 +78,23 @@ def test_runner_resumes_valid_stages_and_reruns_changed_artifacts(tmp_path):
         run_dir=tmp_path / "run",
     )
 
-    manifest = runner.run()
+    events: list[tuple[str, str]] = []
+    manifest = runner.run(
+        on_stage=lambda stage, state: events.append((stage.name, state))
+    )
     assert manifest["status"] == "completed_with_partial_results"
     assert calls == {"prepare": 1, "report": 1}
+    assert events == [
+        ("prepare", "running"),
+        ("prepare", "succeeded"),
+        ("report", "running"),
+        ("report", "partial"),
+    ]
 
-    runner.run()
+    events = []
+    runner.run(on_stage=lambda stage, state: events.append((stage.name, state)))
     assert calls == {"prepare": 1, "report": 1}
+    assert events == [("prepare", "reused"), ("report", "reused")]
 
     (tmp_path / "run" / "prepared.txt").write_text("changed\n", encoding="utf-8")
     runner.run(target="prepare")
@@ -176,10 +187,12 @@ def test_runner_records_failure_and_resumes_it(tmp_path):
         run_dir=tmp_path / "run",
     )
 
+    events: list[tuple[str, str]] = []
     with pytest.raises(RuntimeError, match="expected failure"):
-        runner.run()
+        runner.run(on_stage=lambda stage, state: events.append((stage.name, state)))
     failed = json.loads((tmp_path / "run" / "run_manifest.json").read_text())
     assert failed["stages"]["flaky"]["status"] == "failed"
+    assert events == [("flaky", "running"), ("flaky", "failed")]
 
     completed = runner.run()
     assert completed["status"] == "completed"

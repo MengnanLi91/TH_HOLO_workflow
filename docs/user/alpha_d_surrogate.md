@@ -59,6 +59,9 @@ resumes validated artifacts. Select another profile model through
 `[training.alpha]` in the TOML and its Hydra YAML; see
 [Run a Reproducible Study Workflow](running_workflows.md).
 
+For a command-by-command path from raw campaign through ETL, coupled study,
+resume, and publication, use the [alpha-D running guide](running_alpha_d.md).
+
 ## Step 1: Extract alpha_D profiles (ETL)
 
 The alpha_D ETL pipeline reads each case's `simulation_out.e`, extracts the
