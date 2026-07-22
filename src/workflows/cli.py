@@ -263,7 +263,7 @@ def _workflow_tree(definition, ordered) -> Tree:
     return root
 
 
-def _print_plan(definition, target: str | None, *, tree: bool = False) -> None:
+def _print_plan(definition, target: str | None, *, tree: bool = True) -> None:
     ordered = _selected_stages(definition, target)
     console = Console()
     target_label = "All stages" if target is None else f"{target} and dependencies"
@@ -387,9 +387,9 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--config", type=Path, required=True)
     plan.add_argument("--target")
     plan.add_argument(
-        "--tree",
+        "--table",
         action="store_true",
-        help="Display the stage graph as a dependency tree",
+        help="Display the stage graph as a numbered table instead of a dependency tree",
     )
     run = subparsers.add_parser("run", help="Execute or resume a workflow")
     run.add_argument("--config", type=Path, required=True)
@@ -437,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
             _require_etl_workflow(config)
         definition = _definition(config, repo_root)
         if args.command == "plan":
-            _print_plan(definition, args.target, tree=args.tree)
+            _print_plan(definition, args.target, tree=not args.table)
             return 0
         run_dir = _run_dir(config, repo_root, args.run_id)
         runner = WorkflowRunner(

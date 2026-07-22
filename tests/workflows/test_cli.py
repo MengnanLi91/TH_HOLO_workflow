@@ -6,7 +6,7 @@ from workflows import Stage, WorkflowDefinition
 from workflows.cli import _print_plan, _run_with_progress, _status, build_parser, main
 
 
-def test_plan_output_uses_compact_dependency_summaries(capsys):
+def test_plan_table_option_uses_compact_dependency_summaries(capsys):
     noop = lambda _context: None  # noqa: E731
     exports = tuple(f"panel.case_{index}.export_closure" for index in range(3))
     definition = WorkflowDefinition(
@@ -22,7 +22,7 @@ def test_plan_output_uses_compact_dependency_summaries(capsys):
         ),
     )
 
-    _print_plan(definition, target=None)
+    _print_plan(definition, target=None, tree=False)
     output = capsys.readouterr().out
 
     assert "Workflow plan" in output
@@ -48,7 +48,7 @@ def test_plan_tree_marks_shared_dependencies(capsys):
         ),
     )
 
-    _print_plan(definition, target=None, tree=True)
+    _print_plan(definition, target=None)
     output = capsys.readouterr().out
 
     assert "display_example · 4 selected stages" in output
@@ -57,10 +57,12 @@ def test_plan_tree_marks_shared_dependencies(capsys):
     assert "also needs #3" in output
 
 
-def test_plan_parser_accepts_tree_option():
-    args = build_parser().parse_args(["plan", "--config", "workflow.toml", "--tree"])
+def test_plan_parser_defaults_to_tree_and_accepts_table_option():
+    default = build_parser().parse_args(["plan", "--config", "workflow.toml"])
+    table = build_parser().parse_args(["plan", "--config", "workflow.toml", "--table"])
 
-    assert args.tree is True
+    assert default.table is False
+    assert table.table is True
 
 
 def test_status_output_uses_color_coded_state_summary(tmp_path, capsys):
