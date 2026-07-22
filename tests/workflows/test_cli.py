@@ -3,7 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from workflows import Stage, WorkflowDefinition
-from workflows.cli import _print_plan, _run_with_progress, _status, build_parser, main
+from workflows.cli import (
+    _print_plan,
+    _run_with_progress,
+    _status,
+    _tree_stage_style,
+    build_parser,
+    main,
+)
 
 
 def test_plan_table_option_uses_compact_dependency_summaries(capsys):
@@ -55,6 +62,17 @@ def test_plan_tree_marks_shared_dependencies(capsys):
     assert "#01 prepare" in output
     assert "#04 train" in output
     assert "also needs #3" in output
+
+
+def test_tree_stage_styles_distinguish_workflow_families():
+    assert _tree_stage_style("prepare_data") == "bold bright_green"
+    assert _tree_stage_style("panel.example.select_features") == "bold bright_magenta"
+    assert _tree_stage_style("tune_alpha") == "bold bright_yellow"
+    assert _tree_stage_style("panel.example.train_direct") == "bold bright_cyan"
+    assert _tree_stage_style("panel.example.train_alpha") == "bold bright_green"
+    assert _tree_stage_style("panel.example.export_closure") == "bold bright_blue"
+    assert _tree_stage_style("solve_moose") == "bold bright_red"
+    assert _tree_stage_style("summarize") == "bold bright_white"
 
 
 def test_plan_parser_defaults_to_tree_and_accepts_table_option():

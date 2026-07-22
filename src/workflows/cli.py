@@ -221,6 +221,27 @@ def _stage_table(*, status: bool) -> Table:
     return table
 
 
+def _tree_stage_style(name: str) -> str:
+    """Return a bright semantic color for a workflow tree stage."""
+    if name in {"prepare_data", "plan_panels"}:
+        return "bold bright_green"
+    if name.endswith(".select_features"):
+        return "bold bright_magenta"
+    if name == "tune_alpha":
+        return "bold bright_yellow"
+    if name.endswith(".train_direct"):
+        return "bold bright_cyan"
+    if name.endswith(".train_alpha"):
+        return "bold bright_green"
+    if name.endswith(".export_closure"):
+        return "bold bright_blue"
+    if name == "solve_moose":
+        return "bold bright_red"
+    if name == "summarize":
+        return "bold bright_white"
+    return "bold bright_cyan"
+
+
 def _workflow_tree(definition, ordered) -> Tree:
     """Return a dependency tree with explicit references for shared DAG edges."""
     numbers = {stage.name: index for index, stage in enumerate(ordered, 1)}
@@ -241,20 +262,20 @@ def _workflow_tree(definition, ordered) -> Tree:
             f"{definition.workflow_id} · {len(ordered)} selected stages",
             style="bold cyan",
         ),
-        guide_style="bright_blue",
+        guide_style="bold bright_blue",
     )
 
     def add_stage(parent: Tree, stage) -> None:
-        label = Text(f"#{numbers[stage.name]:02d} ", style="dim")
-        label.append(stage.name, style="cyan")
+        label = Text(f"#{numbers[stage.name]:02d} ", style="bold bright_yellow")
+        label.append(stage.name, style=_tree_stage_style(stage.name))
         additional = extra_dependencies.get(stage.name, [])
         if additional:
-            label.append("  also needs ", style="dim")
+            label.append("  also needs ", style="bold bright_magenta")
             label.append(
                 ", ".join(f"#{numbers[name]}" for name in additional),
-                style="magenta",
+                style="bold bright_yellow",
             )
-        node = parent.add(label, guide_style="bright_blue")
+        node = parent.add(label, guide_style="bold bright_blue")
         for child in children[stage.name]:
             add_stage(node, child)
 
