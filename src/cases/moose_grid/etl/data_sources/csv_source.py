@@ -57,7 +57,9 @@ def find_probe_files(sim_prefix: str, data_dir: Path) -> dict[str, list[Path]]:
 
     # Sort each probe's file list by time step index
     for probe_name in probes:
-        probes[probe_name].sort(key=lambda p: int(_PROBE_PATTERN.match(p.name).group("ts")))
+        probes[probe_name].sort(
+            key=lambda p: int(_PROBE_PATTERN.match(p.name).group("ts"))
+        )
 
     return probes
 
@@ -104,7 +106,9 @@ class CSVProbeSource:
                 if not probe_columns:
                     probe_columns = columns
             except Exception as exc:
-                logger.error("Failed to read probe '%s' from %s: %s", probe_name, csv_path, exc)
+                logger.error(
+                    "Failed to read probe '%s' from %s: %s", probe_name, csv_path, exc
+                )
 
         return probe_data, probe_columns
 

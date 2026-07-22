@@ -116,10 +116,14 @@ class ExodusDataSource(DataSource):
     # ------------------------------------------------------------------
 
     def _get_output_path(self, filename: str) -> Path:
-        raise NotImplementedError("ExodusDataSource is read-only; use MOOSEZarrSink for writing.")
+        raise NotImplementedError(
+            "ExodusDataSource is read-only; use MOOSEZarrSink for writing."
+        )
 
     def _write_impl_temp_file(self, data: dict[str, Any], output_path: Path) -> None:
-        raise NotImplementedError("ExodusDataSource is read-only; use MOOSEZarrSink for writing.")
+        raise NotImplementedError(
+            "ExodusDataSource is read-only; use MOOSEZarrSink for writing."
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -167,9 +171,13 @@ class ExodusDataSource(DataSource):
                 if var_name not in ds.variables:
                     var_name = f"vals_elem_var{fi + 1}"
                 if var_name in ds.variables:
-                    fields[:, :, fi] = np.array(ds.variables[var_name][:], dtype=np.float32)
+                    fields[:, :, fi] = np.array(
+                        ds.variables[var_name][:], dtype=np.float32
+                    )
                 else:
-                    logger.warning("Element variable index %d not found in %s", fi + 1, sim_name)
+                    logger.warning(
+                        "Element variable index %d not found in %s", fi + 1, sim_name
+                    )
 
         return MOOSERawData(
             coords=coords,

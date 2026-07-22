@@ -5,7 +5,9 @@ from training.models import register_model
 
 
 def build(model_cfg: dict, dataset_info: dict):
-    pix2pix_cls = import_physicsnemo_attr("physicsnemo.models.pix2pix.pix2pix", "Pix2Pix")
+    pix2pix_cls = import_physicsnemo_attr(
+        "physicsnemo.models.pix2pix.pix2pix", "Pix2Pix"
+    )
     resolved = {
         "in_channels": dataset_info["in_channels"],
         "out_channels": dataset_info["out_channels"],

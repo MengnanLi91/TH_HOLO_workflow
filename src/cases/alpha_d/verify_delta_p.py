@@ -30,7 +30,9 @@ def _require_positive_finite(value: float, *, label: str) -> float:
     return value
 
 
-def read_moose_inlet_pressure(csv_path: Path, *, inlet_area_m2: float = INLET_AREA_M2) -> float:
+def read_moose_inlet_pressure(
+    csv_path: Path, *, inlet_area_m2: float = INLET_AREA_M2
+) -> float:
     """Read inlet-p (pressure × inlet_area integral) and divide by area.
 
     The MOOSE SideIntegralVariablePostprocessor returns ∫ pressure dA;
@@ -43,23 +45,35 @@ def read_moose_inlet_pressure(csv_path: Path, *, inlet_area_m2: float = INLET_AR
     with csv_path.open(newline="", encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
         names = reader.fieldnames or []
-        inlet_name = next((name for name in ("inlet-p", "inletp") if name in names), None)
+        inlet_name = next(
+            (name for name in ("inlet-p", "inletp") if name in names), None
+        )
         if inlet_name is None:
-            raise ValueError(f"MOOSE CSV does not contain the inlet-p postprocessor: {csv_path}")
+            raise ValueError(
+                f"MOOSE CSV does not contain the inlet-p postprocessor: {csv_path}"
+            )
         rows = list(reader)
     if not rows:
         raise ValueError(f"MOOSE CSV contains no postprocessor rows: {csv_path}")
     raw_integral = rows[-1].get(inlet_name)
     if raw_integral in (None, ""):
-        raise ValueError(f"MOOSE CSV does not contain the inlet-p postprocessor: {csv_path}")
+        raise ValueError(
+            f"MOOSE CSV does not contain the inlet-p postprocessor: {csv_path}"
+        )
     integral = _require_positive_finite(raw_integral, label="MOOSE inlet-p integral")
-    return _require_positive_finite(integral / inlet_area_m2, label="MOOSE pressure drop")
+    return _require_positive_finite(
+        integral / inlet_area_m2, label="MOOSE pressure drop"
+    )
 
 
 def compare(*, sidecar_path: Path, delta_p_moose: float) -> dict:
     sidecar = json.loads(sidecar_path.read_text())
-    truth = _require_positive_finite(sidecar["delta_p_truth"], label="truth pressure drop")
-    surro = _require_positive_finite(sidecar["delta_p_surrogate"], label="surrogate pressure drop")
+    truth = _require_positive_finite(
+        sidecar["delta_p_truth"], label="truth pressure drop"
+    )
+    surro = _require_positive_finite(
+        sidecar["delta_p_surrogate"], label="surrogate pressure drop"
+    )
     delta_p_moose = _require_positive_finite(delta_p_moose, label="MOOSE pressure drop")
     return {
         "verification_schema": 1,

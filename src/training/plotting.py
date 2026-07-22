@@ -50,7 +50,9 @@ def resolve_plot_indices(
     deduped: list[int] = []
     for idx in explicit:
         if idx >= num_cases:
-            raise ValueError(f"plot_case_indices contains {idx}, but dataset size is {num_cases}.")
+            raise ValueError(
+                f"plot_case_indices contains {idx}, but dataset size is {num_cases}."
+            )
         if idx not in deduped:
             deduped.append(idx)
     return deduped[:max_cases]
@@ -91,7 +93,9 @@ def select_best_worst_pointwise_cases(
 
     for label, key in (("best", "best_cases"), ("worst", "worst_cases")):
         candidates = [
-            entry for entry in extended_metrics.get(key, []) if entry.get("field") == field_name
+            entry
+            for entry in extended_metrics.get(key, [])
+            if entry.get("field") == field_name
         ]
         if not candidates:
             continue
@@ -158,7 +162,9 @@ def save_pointwise_profile_plots(
     if not output_fields:
         raise ValueError("No output fields are available for plotting.")
     if not hasattr(dataset, "_case_ids_unique"):
-        raise ValueError("Pointwise profile plotting requires a case-indexed tabular dataset.")
+        raise ValueError(
+            "Pointwise profile plotting requires a case-indexed tabular dataset."
+        )
 
     plot_dir_path = Path(plot_dir)
     plot_dir_path.mkdir(parents=True, exist_ok=True)
@@ -218,7 +224,14 @@ def save_pointwise_profile_plots(
                     baseline_phys = baseline_unordered[order.numpy()]
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
-            ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
+            ax.plot(
+                z_axis,
+                target_phys,
+                label="Ground Truth",
+                linewidth=2.5,
+                marker="o",
+                ms=3,
+            )
             ax.plot(z_axis, pred_phys, label="Predicted", linewidth=2.0, linestyle="--")
             if baseline_phys is not None:
                 ax.plot(
@@ -239,9 +252,14 @@ def save_pointwise_profile_plots(
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            ax.set_title(f"{entry['label'].title()} {profile_label} Profile | {case_name}")
+            ax.set_title(
+                f"{entry['label'].title()} {profile_label} Profile | {case_name}"
+            )
 
-            out_path = plot_dir_path / f"{entry['label']}_{case_name}_{profile_label}_profile.png"
+            out_path = (
+                plot_dir_path
+                / f"{entry['label']}_{case_name}_{profile_label}_profile.png"
+            )
             fig.savefig(out_path, dpi=plot_dpi)
             plt.close(fig)
             output_files.append(str(out_path))
@@ -280,7 +298,9 @@ def save_profile_prediction_plots(
         raise ValueError("plot_dpi must be >= 1.")
     if not output_fields:
         raise ValueError("No output fields are available for plotting.")
-    if not hasattr(dataset, "_case_ids_unique") or not hasattr(dataset, "_row_case_idx"):
+    if not hasattr(dataset, "_case_ids_unique") or not hasattr(
+        dataset, "_row_case_idx"
+    ):
         raise ValueError("Profile prediction plotting requires a case-indexed dataset.")
 
     plot_dir_path = Path(plot_dir)
@@ -350,7 +370,14 @@ def save_profile_prediction_plots(
                     baseline_phys = baseline_unordered[order.numpy()]
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
-            ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
+            ax.plot(
+                z_axis,
+                target_phys,
+                label="Ground Truth",
+                linewidth=2.5,
+                marker="o",
+                ms=3,
+            )
             ax.plot(z_axis, pred_phys, label="Predicted", linewidth=2.0, linestyle="--")
             if baseline_phys is not None:
                 ax.plot(
@@ -371,9 +398,14 @@ def save_profile_prediction_plots(
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            ax.set_title(f"{entry['label'].title()} {profile_label} Profile | {case_name}")
+            ax.set_title(
+                f"{entry['label'].title()} {profile_label} Profile | {case_name}"
+            )
 
-            out_path = plot_dir_path / f"{entry['label']}_{case_name}_{profile_label}_profile.png"
+            out_path = (
+                plot_dir_path
+                / f"{entry['label']}_{case_name}_{profile_label}_profile.png"
+            )
             fig.savefig(out_path, dpi=plot_dpi)
             plt.close(fig)
             output_files.append(str(out_path))
@@ -521,7 +553,11 @@ def save_parity_plot(
                     s=10,
                     alpha=0.5,
                     color=color,
-                    label=name.replace("is_", "").capitalize() if name != "other" else "Other",
+                    label=(
+                        name.replace("is_", "").capitalize()
+                        if name != "other"
+                        else "Other"
+                    ),
                 )
         else:
             ax.scatter(target_all, pred_all, s=10, alpha=0.5, color="#1f77b4")
@@ -530,7 +566,14 @@ def save_parity_plot(
         hi = float(np.nanmax([target_all.max(), pred_all.max()]))
         if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
             lo, hi = lo - 1.0, hi + 1.0
-        ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
+        ax.plot(
+            [lo, hi],
+            [lo, hi],
+            color="black",
+            linestyle="--",
+            linewidth=1.0,
+            label="y = x",
+        )
         ax.plot(
             [lo, hi],
             [1.1 * lo, 1.1 * hi],
@@ -601,7 +644,9 @@ def save_delta_p_parity_plot(
     gt = np.array([float(e["delta_p_gt"]) for e in per_case], dtype=np.float64)
     pred = np.array([float(e["delta_p_pred"]) for e in per_case], dtype=np.float64)
     drs = np.array([float(e.get("Dr", np.nan)) for e in per_case], dtype=np.float64)
-    rel_err = np.array([float(e.get("relative_error", np.nan)) for e in per_case], dtype=np.float64)
+    rel_err = np.array(
+        [float(e.get("relative_error", np.nan)) for e in per_case], dtype=np.float64
+    )
 
     fig, ax = plt.subplots(figsize=(6.8, 6.4), constrained_layout=True)
 
@@ -609,7 +654,14 @@ def save_delta_p_parity_plot(
     if have_dr:
         cmap = plt.get_cmap("viridis")
         scatter = ax.scatter(
-            gt, pred, s=30, c=drs, cmap=cmap, alpha=0.85, edgecolors="white", linewidths=0.4
+            gt,
+            pred,
+            s=30,
+            c=drs,
+            cmap=cmap,
+            alpha=0.85,
+            edgecolors="white",
+            linewidths=0.4,
         )
         cbar = fig.colorbar(scatter, ax=ax)
         cbar.set_label("Dr (D_throat / D_big)")
@@ -620,9 +672,16 @@ def save_delta_p_parity_plot(
     hi = float(np.nanmax([gt.max(), pred.max()]))
     if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
         lo, hi = max(lo, 1e-3), max(hi, 1e-3) * 10.0
-    ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
     ax.plot(
-        [lo, hi], [1.1 * lo, 1.1 * hi], color="black", linestyle=":", linewidth=0.8, label="±10%"
+        [lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x"
+    )
+    ax.plot(
+        [lo, hi],
+        [1.1 * lo, 1.1 * hi],
+        color="black",
+        linestyle=":",
+        linewidth=0.8,
+        label="±10%",
     )
     ax.plot(
         [lo, hi],
@@ -710,7 +769,9 @@ def save_grid_prediction_plots(
                 speed_true = np.sqrt(target_u**2 + target_v**2)
                 speed_pred = np.sqrt(pred_u**2 + pred_v**2)
                 speed_err = np.abs(speed_pred - speed_true)
-                vector_err = np.sqrt((pred_u - target_u) ** 2 + (pred_v - target_v) ** 2)
+                vector_err = np.sqrt(
+                    (pred_u - target_u) ** 2 + (pred_v - target_v) ** 2
+                )
 
                 yy, xx = np.mgrid[0 : target_u.shape[0], 0 : target_u.shape[1]]
                 step = max(1, quiver_step)
@@ -743,7 +804,9 @@ def save_grid_prediction_plots(
                 im = _add_imshow(axes[1, 0], speed_err, "Absolute Error |v|", "magma")
                 fig.colorbar(im, ax=axes[1, 0], fraction=0.046, pad=0.04)
 
-                im = _add_imshow(axes[1, 1], vector_err, "Vector Error Magnitude", "magma")
+                im = _add_imshow(
+                    axes[1, 1], vector_err, "Vector Error Magnitude", "magma"
+                )
                 fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04)
 
                 out_path = plot_dir_path / f"{idx:03d}_{case_name}_velocity.png"
@@ -764,10 +827,14 @@ def save_grid_prediction_plots(
                 )
                 fig.colorbar(im, ax=axes[0], fraction=0.046, pad=0.04)
 
-                im = _add_imshow(axes[1], pred_scalar, f"Predicted {field_name}", plot_cmap)
+                im = _add_imshow(
+                    axes[1], pred_scalar, f"Predicted {field_name}", plot_cmap
+                )
                 fig.colorbar(im, ax=axes[1], fraction=0.046, pad=0.04)
 
-                im = _add_imshow(axes[2], abs_err, f"Absolute Error {field_name}", "magma")
+                im = _add_imshow(
+                    axes[2], abs_err, f"Absolute Error {field_name}", "magma"
+                )
                 fig.colorbar(im, ax=axes[2], fraction=0.046, pad=0.04)
 
                 out_path = plot_dir_path / f"{idx:03d}_{case_name}_{field_name}.png"

@@ -86,7 +86,9 @@ class AlphaDExperiment(Experiment):
             output_fields,
         )
 
-        local_vel_norm = bool(getattr(eval_dataset, "local_velocity_normalization", False))
+        local_vel_norm = bool(
+            getattr(eval_dataset, "local_velocity_normalization", False)
+        )
         dp_metrics = compute_delta_p_metrics(
             self.model,
             eval_dataset,

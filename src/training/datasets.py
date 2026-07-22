@@ -31,7 +31,9 @@ def resolve_time_idx(time_idx: int, num_steps: int, label: str) -> int:
     """Resolve negative time indexing and validate the index."""
     resolved = time_idx if time_idx >= 0 else num_steps + time_idx
     if resolved < 0 or resolved >= num_steps:
-        raise ValueError(f"{label}={time_idx} is out of range for {num_steps} time step(s).")
+        raise ValueError(
+            f"{label}={time_idx} is out of range for {num_steps} time step(s)."
+        )
     return resolved
 
 
@@ -57,11 +59,15 @@ class GridPairDataset(Dataset):
         self.input_fields = input_fields or list(self.field_names)
         self.output_fields = output_fields or list(self.input_fields)
 
-        missing_inputs = [name for name in self.input_fields if name not in self.field_to_index]
+        missing_inputs = [
+            name for name in self.input_fields if name not in self.field_to_index
+        ]
         if missing_inputs:
             raise ValueError(f"Unknown input field(s): {missing_inputs}")
 
-        missing_outputs = [name for name in self.output_fields if name not in self.field_to_index]
+        missing_outputs = [
+            name for name in self.output_fields if name not in self.field_to_index
+        ]
         if missing_outputs:
             raise ValueError(f"Unknown output field(s): {missing_outputs}")
 
@@ -147,11 +153,15 @@ class GraphPairDataset(Dataset):
         self.input_fields = input_fields or list(self.field_names)
         self.output_fields = output_fields or list(self.input_fields)
 
-        missing_inputs = [name for name in self.input_fields if name not in self.field_to_index]
+        missing_inputs = [
+            name for name in self.input_fields if name not in self.field_to_index
+        ]
         if missing_inputs:
             raise ValueError(f"Unknown input field(s): {missing_inputs}")
 
-        missing_outputs = [name for name in self.output_fields if name not in self.field_to_index]
+        missing_outputs = [
+            name for name in self.output_fields if name not in self.field_to_index
+        ]
         if missing_outputs:
             raise ValueError(f"Unknown output field(s): {missing_outputs}")
 
@@ -163,7 +173,9 @@ class GraphPairDataset(Dataset):
 
         coords = reference["coords"]
         if coords.ndim != 2:
-            raise ValueError(f"Expected coords with shape [N, D], got {tuple(coords.shape)}")
+            raise ValueError(
+                f"Expected coords with shape [N, D], got {tuple(coords.shape)}"
+            )
 
         self.num_time_steps = int(node_fields.shape[0])
         self.coord_dim = int(coords.shape[1])
@@ -200,7 +212,9 @@ class GraphPairDataset(Dataset):
         edge_index = sample["edge_index"].long().contiguous()
 
         x = self._select_channels(node_fields, self.input_time_idx, self.input_indices)
-        y = self._select_channels(node_fields, self.target_time_idx, self.output_indices)
+        y = self._select_channels(
+            node_fields, self.target_time_idx, self.output_indices
+        )
         edge_attr = self._build_edge_attr(coords, edge_index)
 
         data = self._pyg_data_cls(
@@ -223,7 +237,9 @@ class GraphPairDataset(Dataset):
         return tensor.contiguous()
 
     @staticmethod
-    def _build_edge_attr(coords: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    def _build_edge_attr(
+        coords: torch.Tensor, edge_index: torch.Tensor
+    ) -> torch.Tensor:
         src = edge_index[0]
         dst = edge_index[1]
         displacement = coords[dst] - coords[src]
@@ -339,9 +355,13 @@ def split_indices(
 ) -> tuple[list[int], list[int], list[str], list[str]]:
     """Return split indices and simulation-name lists."""
     if num_cases != len(sim_names):
-        raise ValueError(f"sim_names length {len(sim_names)} does not match num_cases {num_cases}.")
+        raise ValueError(
+            f"sim_names length {len(sim_names)} does not match num_cases {num_cases}."
+        )
     if num_cases < 2:
-        raise ValueError(f"Need at least 2 cases to split train/test, but found {num_cases}.")
+        raise ValueError(
+            f"Need at least 2 cases to split train/test, but found {num_cases}."
+        )
 
     strategy = str(split_cfg.get("strategy", "sequential"))
 
@@ -403,7 +423,9 @@ def split_indices(
         test_idx = sorted({sim_to_idx[name] for name in test_names})
 
         if not train_idx or not test_idx:
-            raise ValueError("Both train and test split files must contain at least one case.")
+            raise ValueError(
+                "Both train and test split files must contain at least one case."
+            )
 
     else:
         raise ValueError(

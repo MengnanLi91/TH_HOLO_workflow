@@ -233,7 +233,9 @@ def load_feature_matrix(
                     f"features: {missing}"
                 )
             if target not in raw_target_names:
-                raise ValueError(f"target={target!r} not in zarr target_names={raw_target_names}")
+                raise ValueError(
+                    f"target={target!r} not in zarr target_names={raw_target_names}"
+                )
             tgt_col = raw_target_names.index(target)
 
             if local_velocity_normalization and is_alpha_d_target(target):
@@ -249,7 +251,9 @@ def load_feature_matrix(
         row_cols: list[np.ndarray] = []
         for name in feat_cols:
             if name in raw_feature_names:
-                row_cols.append(features[:, raw_feature_names.index(name)].astype(np.float32))
+                row_cols.append(
+                    features[:, raw_feature_names.index(name)].astype(np.float32)
+                )
             else:
                 row_cols.append(engineered[name])
         x_chunks.append(np.column_stack(row_cols).astype(np.float32))
@@ -272,7 +276,9 @@ def load_feature_matrix(
 
     X = np.concatenate(x_chunks, axis=0)
     y = np.concatenate(y_chunks, axis=0)
-    groups = np.concatenate([np.full(n, i, dtype=np.int32) for i, n in enumerate(rows_per_case)])
+    groups = np.concatenate(
+        [np.full(n, i, dtype=np.int32) for i, n in enumerate(rows_per_case)]
+    )
 
     return FeatureAnalysisData(
         X=X,

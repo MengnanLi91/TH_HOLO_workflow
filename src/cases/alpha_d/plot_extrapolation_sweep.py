@@ -88,13 +88,26 @@ def plot(records, axis, out_png):
     xs = [r["axis_value"] for r in records]
     fig, ax = plt.subplots(figsize=(8.5, 6.0), constrained_layout=True)
     ax.axhline(0.0, color="#444", lw=1.0, ls="--", alpha=0.5)
-    for m, color in (("linear_regression", "#1f77b4"), ("mlp", "#9467bd"),
-                     ("random_forest", "#d62728")):
-        ax.plot(xs, [abs(r[f"{m}_relerr"]) * 100 for r in records], "o-",
-                color=color, label=f"regressor: {m}" + (" (cannot extrapolate)"
-                if m == "random_forest" else ""))
-    ax.plot(xs, [abs(r["coupled_relerr"]) * 100 for r in records], "s-",
-            color="#2ca02c", label="coupled (α_D→integral)")
+    for m, color in (
+        ("linear_regression", "#1f77b4"),
+        ("mlp", "#9467bd"),
+        ("random_forest", "#d62728"),
+    ):
+        ax.plot(
+            xs,
+            [abs(r[f"{m}_relerr"]) * 100 for r in records],
+            "o-",
+            color=color,
+            label=f"regressor: {m}"
+            + (" (cannot extrapolate)" if m == "random_forest" else ""),
+        )
+    ax.plot(
+        xs,
+        [abs(r["coupled_relerr"]) * 100 for r in records],
+        "s-",
+        color="#2ca02c",
+        label="coupled (α_D→integral)",
+    )
     ax.set_xlabel(axis)
     ax.set_ylabel("|relative error vs CFD truth| (%)")
     ax.set_title(f"Extrapolation along {axis}: regressor vs coupled")
@@ -110,20 +123,31 @@ def main(argv=None):
     p.add_argument("--axis", required=True)
     p.add_argument("--eval-metrics", required=True)
     p.add_argument("--coupled-dir", required=True)
-    p.add_argument("--shell-names-file", required=True,
-                   help="Newline-delimited shell case names (extrapolation.py --emit shell-names).")
+    p.add_argument(
+        "--shell-names-file",
+        required=True,
+        help="Newline-delimited shell case names (extrapolation.py --emit shell-names).",
+    )
     p.add_argument("--out-png", required=True)
     ns = p.parse_args(argv)
 
     shell_names = [s for s in Path(ns.shell_names_file).read_text().split() if s]
-    records = collect(axis=ns.axis, eval_metrics_path=ns.eval_metrics,
-                      coupled_dir=ns.coupled_dir, shell_names=shell_names)
+    records = collect(
+        axis=ns.axis,
+        eval_metrics_path=ns.eval_metrics,
+        coupled_dir=ns.coupled_dir,
+        shell_names=shell_names,
+    )
     if not records:
-        raise SystemExit("No records collected — check eval_metrics / coupled sidecars exist.")
+        raise SystemExit(
+            "No records collected — check eval_metrics / coupled sidecars exist."
+        )
     for m in HEADLINE_MODELS:
-        xo = find_crossover([r["axis_value"] for r in records],
-                            [r[f"{m}_relerr"] for r in records],
-                            [r["coupled_relerr"] for r in records])
+        xo = find_crossover(
+            [r["axis_value"] for r in records],
+            [r[f"{m}_relerr"] for r in records],
+            [r["coupled_relerr"] for r in records],
+        )
         print(f"[crossover] headline model {m}: {xo}")
     out = plot(records, ns.axis, ns.out_png)
     print(f"Saved {out} over {len(records)} shell cases.")

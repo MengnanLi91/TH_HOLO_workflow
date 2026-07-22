@@ -31,7 +31,9 @@ from physicsnemo_curator.etl.processing_config import ProcessingConfig
 from physicsnemo_curator.utils import utils as curator_utils
 
 
-@hydra.main(version_base="1.3", config_path="cases/moose_grid/configs", config_name="etl")
+@hydra.main(
+    version_base="1.3", config_path="cases/moose_grid/configs", config_name="etl"
+)
 def main(cfg: DictConfig) -> None:
     """Run the MOOSE ETL pipeline."""
 

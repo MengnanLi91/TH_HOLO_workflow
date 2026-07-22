@@ -123,7 +123,9 @@ class MOOSEDataset(Dataset):
     # Mode-specific loaders
     # ------------------------------------------------------------------
 
-    def _load_graph(self, root, field_names: list[str], probe_columns: list[str]) -> dict:
+    def _load_graph(
+        self, root, field_names: list[str], probe_columns: list[str]
+    ) -> dict:
         mesh = root["mesh"]
         coords = to_tensor(mesh["coords"])  # [N, D]
         connectivity = torch.from_numpy(np.array(mesh["connectivity"], dtype=np.int64))
@@ -140,7 +142,9 @@ class MOOSEDataset(Dataset):
 
         # Probes
         probes_grp = root["probes"]
-        probe_data = {name: to_tensor(probes_grp[name]) for name in probes_grp.array_keys()}
+        probe_data = {
+            name: to_tensor(probes_grp[name]) for name in probes_grp.array_keys()
+        }
 
         return {
             "coords": coords,

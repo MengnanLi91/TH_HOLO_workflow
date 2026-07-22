@@ -150,7 +150,9 @@ class CasePressureDropDataset:
         missing = [name for name in requested if name not in available]
         if missing:
             raise ValueError(f"Unknown candidate feature(s): {missing}")
-        return np.column_stack([available[name] for name in requested]).astype(np.float64)
+        return np.column_stack([available[name] for name in requested]).astype(
+            np.float64
+        )
 
     def groups(self) -> np.ndarray:
         return np.arange(len(self.sim_names), dtype=np.int32)

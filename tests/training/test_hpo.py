@@ -37,11 +37,15 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         root = zarr.open(store=str(store_path), mode="w")
         root.create_array(
             "features",
-            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32),
+            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
+                np.float32
+            ),
         )
         root.create_array(
             "targets",
-            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32),
+            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
+                np.float32
+            ),
         )
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
@@ -62,7 +66,10 @@ class TestSearchSpace:
         search_space = {
             "training.lr": {"type": "float", "low": 1e-5, "high": 1e-1, "log": True},
             "model.params.num_layers": {"type": "int", "low": 2, "high": 10},
-            "model.params.activation_fn": {"type": "categorical", "choices": ["silu", "relu"]},
+            "model.params.activation_fn": {
+                "type": "categorical",
+                "choices": ["silu", "relu"],
+            },
         }
         study = optuna.create_study()
         trial = study.ask()
@@ -77,7 +84,10 @@ class TestSearchSpace:
     def test_apply_overrides_valid(self) -> None:
         from training.hpo.search_space import apply_overrides
 
-        base = {"training": {"lr": 0.001, "epochs": 10}, "model": {"params": {"size": 128}}}
+        base = {
+            "training": {"lr": 0.001, "epochs": 10},
+            "model": {"params": {"size": 128}},
+        }
         result = apply_overrides(base, {"training.lr": 0.01, "model.params.size": 256})
         assert result["training"]["lr"] == 0.01
         assert result["model"]["params"]["size"] == 256
@@ -105,7 +115,9 @@ class TestSearchSpace:
 
         base = {"model": {"name": "mlp"}, "training": {"lr": 0.001}}
         with pytest.raises(ValueError, match="not allowed"):
-            validate_search_space({"model.name": {"type": "categorical", "choices": ["fno"]}}, base)
+            validate_search_space(
+                {"model.name": {"type": "categorical", "choices": ["fno"]}}, base
+            )
 
     def test_validate_rejects_nonexistent_path(self) -> None:
         from training.hpo.search_space import validate_search_space
@@ -206,7 +218,9 @@ class TestObjective:
 
         prepared = prepare_training(base_cfg)
         dataset = prepared["dataset"]
-        split_cfg = normalize_split_cfg(dict(base_cfg["data"]["split"]), default_seed=42)
+        split_cfg = normalize_split_cfg(
+            dict(base_cfg["data"]["split"]), default_seed=42
+        )
         train_idx, test_idx, _, _ = split_indices(
             num_cases=len(dataset.sim_names),
             split_cfg=split_cfg,
@@ -254,10 +268,12 @@ class TestTrainPoolGuard:
             sp = small_dir / f"c{i}.zarr"
             root = zarr.open(store=str(sp), mode="w")
             root.create_array(
-                "features", data=rng.standard_normal((5, len(FEATURE_NAMES))).astype(np.float32)
+                "features",
+                data=rng.standard_normal((5, len(FEATURE_NAMES))).astype(np.float32),
             )
             root.create_array(
-                "targets", data=rng.standard_normal((5, len(TARGET_NAMES))).astype(np.float32)
+                "targets",
+                data=rng.standard_normal((5, len(TARGET_NAMES))).astype(np.float32),
             )
             meta = root.require_group("metadata")
             meta.attrs["case_id"] = f"c{i}"

@@ -57,7 +57,9 @@ def _log1p(values):
 
 
 def _pow(values, exponent: float):
-    return values.pow(exponent) if _is_torch_tensor(values) else np.power(values, exponent)
+    return (
+        values.pow(exponent) if _is_torch_tensor(values) else np.power(values, exponent)
+    )
 
 
 def _pow10(values):
@@ -68,7 +70,11 @@ def _pow10(values):
 
 
 def _clamp_min(values, minimum: float):
-    return values.clamp(min=minimum) if _is_torch_tensor(values) else np.maximum(values, minimum)
+    return (
+        values.clamp(min=minimum)
+        if _is_torch_tensor(values)
+        else np.maximum(values, minimum)
+    )
 
 
 def encode_alpha_d_target(
@@ -124,7 +130,9 @@ def alpha_d_bulk_to_values(
     alpha_d = alpha_d_bulk
     if local_velocity_normalization:
         if d_over_D is None:
-            raise ValueError("d_over_D is required when local_velocity_normalization=True.")
+            raise ValueError(
+                "d_over_D is required when local_velocity_normalization=True."
+            )
         alpha_d = alpha_d * _pow(_clamp_min(d_over_D, 1e-12), 4.0)
     return encode_alpha_d_target(alpha_d, target_name=target_name)
 

@@ -82,7 +82,9 @@ def make_objective(
         lr = float(training_cfg.get("lr", 1e-3))
         weight_decay = float(training_cfg.get("weight_decay", 0.0))
         if weight_decay > 0:
-            optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+            optimizer = torch.optim.AdamW(
+                model.parameters(), lr=lr, weight_decay=weight_decay
+            )
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         loss_fn = get_loss_fn(str(training_cfg.get("loss", "mse")))
@@ -129,13 +131,18 @@ def make_objective(
             warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
             if warmup_epochs > 0 and warmup_epochs < epochs:
                 warmup_sched = torch.optim.lr_scheduler.LinearLR(
-                    optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
+                    optimizer,
+                    start_factor=1e-3,
+                    end_factor=1.0,
+                    total_iters=warmup_epochs,
                 )
                 cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
                     optimizer, T_max=epochs - warmup_epochs, eta_min=1e-7
                 )
                 scheduler = torch.optim.lr_scheduler.SequentialLR(
-                    optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_epochs]
+                    optimizer,
+                    schedulers=[warmup_sched, cosine_sched],
+                    milestones=[warmup_epochs],
                 )
             else:
                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

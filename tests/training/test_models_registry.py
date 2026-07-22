@@ -44,7 +44,9 @@ def test_custom_entrypoint_requires_adapter(monkeypatch: pytest.MonkeyPatch) -> 
         get_build_fn_and_adapter({"entrypoint": "tmp_custom_model:build"})
 
 
-def test_custom_entrypoint_signature_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_custom_entrypoint_signature_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = types.ModuleType("tmp_bad_signature")
 
     def build_only_one_arg(model_cfg):
@@ -54,7 +56,9 @@ def test_custom_entrypoint_signature_validation(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setitem(sys.modules, "tmp_bad_signature", module)
 
     with pytest.raises(TypeError, match=r"must accept \(model_cfg, dataset_info\)"):
-        get_build_fn_and_adapter({"entrypoint": "tmp_bad_signature:build", "adapter": "grid"})
+        get_build_fn_and_adapter(
+            {"entrypoint": "tmp_bad_signature:build", "adapter": "grid"}
+        )
 
 
 def test_custom_entrypoint_valid(monkeypatch: pytest.MonkeyPatch) -> None:

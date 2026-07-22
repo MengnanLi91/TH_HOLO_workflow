@@ -47,9 +47,17 @@ def _amean_pct(xs) -> float:
 def _panel_data(tag: str, axis: str, data_root: Path):
     recs = collect(
         axis=axis,
-        eval_metrics_path=str(data_root / f"models/case_pressure_drop__ext_{tag}/eval_metrics.json"),
+        eval_metrics_path=str(
+            data_root / f"models/case_pressure_drop__ext_{tag}/eval_metrics.json"
+        ),
         coupled_dir=str(data_root / f"cases/extrap/{tag}/coupled"),
-        shell_names=[s for s in (data_root / f"cases/extrap/{tag}/shell_names.txt").read_text().split() if s],
+        shell_names=[
+            s
+            for s in (data_root / f"cases/extrap/{tag}/shell_names.txt")
+            .read_text()
+            .split()
+            if s
+        ],
     )
     for r in recs:  # add baseline rel-error alongside the model rel-errors
         r["baseline_relerr"] = (r["baseline"] - r["truth"]) / r["truth"]
@@ -68,11 +76,25 @@ def build_figure(data_root: Path, out_png: Path) -> Path:
         width = 0.8 / len(SERIES)
         for i, (key, label, color) in enumerate(SERIES):
             vals = [_amean_pct([r[key] for r in by[lvl]]) for lvl in levels]
-            bars = ax.bar(x + (i - (len(SERIES) - 1) / 2) * width, vals, width,
-                          color=color, label=label, edgecolor="black", linewidth=0.4)
+            bars = ax.bar(
+                x + (i - (len(SERIES) - 1) / 2) * width,
+                vals,
+                width,
+                color=color,
+                label=label,
+                edgecolor="black",
+                linewidth=0.4,
+            )
             for b, v in zip(bars, vals):
-                ax.text(b.get_x() + b.get_width() / 2, v * 1.05, f"{v:.0f}",
-                        ha="center", va="bottom", fontsize=7, rotation=90)
+                ax.text(
+                    b.get_x() + b.get_width() / 2,
+                    v * 1.05,
+                    f"{v:.0f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    rotation=90,
+                )
         ax.axhline(INDIST_COUPLED_PCT, color="#2ca02c", ls=":", lw=1.0, alpha=0.7)
         ax.set_yscale("log")
         ax.set_ylim(0.5, 1e5)
@@ -82,13 +104,22 @@ def build_figure(data_root: Path, out_png: Path) -> Path:
         ax.set_ylabel("mean |rel. error| vs CFD truth (%)")
         ax.grid(True, axis="y", which="both", alpha=0.2)
         n = sum(len(v) for v in by.values())
-        ax.text(0.98, 0.96, f"n={n}", transform=ax.transAxes, ha="right", va="top",
-                fontsize=8, color="#555")
+        ax.text(
+            0.98,
+            0.96,
+            f"n={n}",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontsize=8,
+            color="#555",
+        )
     axes.flat[0].legend(loc="upper left", fontsize=8, framealpha=0.95)
     fig.suptitle(
         "When does the coupled approach beat direct ΔP regression? "
         "(dotted line = coupled in-distribution +10.2%)",
-        fontsize=13, fontweight="600",
+        fontsize=13,
+        fontweight="600",
     )
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=140, bbox_inches="tight")
@@ -98,8 +129,11 @@ def build_figure(data_root: Path, out_png: Path) -> Path:
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--data-root", type=Path, default=Path("data"))
-    p.add_argument("--out-png", type=Path,
-                   default=Path("docs/_static/alpha_d_extrapolation_crossover.png"))
+    p.add_argument(
+        "--out-png",
+        type=Path,
+        default=Path("docs/_static/alpha_d_extrapolation_crossover.png"),
+    )
     ns = p.parse_args(argv)
     out = build_figure(ns.data_root, ns.out_png)
     print(f"Saved {out}")

@@ -101,7 +101,9 @@ class BaselineGeometry:
 
     @property
     def z_throat_end_norm(self) -> float:
-        return (self.Lr * self.outer_height_m + self.buffer_diams * self.D_big) / self.L_roi
+        return (
+            self.Lr * self.outer_height_m + self.buffer_diams * self.D_big
+        ) / self.L_roi
 
 
 def _blasius_friction_factor(re: float | np.ndarray) -> float | np.ndarray:

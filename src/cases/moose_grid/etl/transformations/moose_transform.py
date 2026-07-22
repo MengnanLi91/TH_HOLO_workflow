@@ -82,7 +82,9 @@ class MOOSEDataTransformation(DataTransformation):
         edge_src, edge_dst = self._build_edges(connectivity)
 
         # 3. Interpolate to regular grid
-        grid_fields, grid_x, grid_y = self._interpolate_to_grid(coords, connectivity, norm_fields)
+        grid_fields, grid_x, grid_y = self._interpolate_to_grid(
+            coords, connectivity, norm_fields
+        )
 
         processed = MOOSEProcessedData(
             coords=coords,
@@ -205,7 +207,9 @@ class MOOSEDataTransformation(DataTransformation):
 
         num_time = fields.shape[0]
         num_fields = fields.shape[2]
-        grid_fields = np.zeros((num_time, self.grid_nx, self.grid_ny, num_fields), dtype=np.float32)
+        grid_fields = np.zeros(
+            (num_time, self.grid_nx, self.grid_ny, num_fields), dtype=np.float32
+        )
 
         for t in range(num_time):
             for fi in range(num_fields):

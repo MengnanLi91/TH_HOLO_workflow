@@ -32,9 +32,14 @@ def save_prediction_plots(
     parity_path = output_dir / "parity_plot.png"
     fig, ax = plt.subplots(figsize=(7, 6))
     max_val = float(
-        max([float(y_true.max())] + [float(np.max(pred)) for pred in predictions.values()])
+        max(
+            [float(y_true.max())]
+            + [float(np.max(pred)) for pred in predictions.values()]
+        )
     )
-    ax.plot([0.0, max_val], [0.0, max_val], linestyle="--", color="black", linewidth=1.0)
+    ax.plot(
+        [0.0, max_val], [0.0, max_val], linestyle="--", color="black", linewidth=1.0
+    )
     for model_name, pred in predictions.items():
         ax.scatter(
             y_true,
