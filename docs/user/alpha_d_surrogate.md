@@ -1,8 +1,10 @@
-# Alpha-D Surrogate: Axial-Profile MLP Tutorial
+# Alpha-D Surrogate Components
 
-This guide walks through extracting Darcy resistance coefficient profiles from
-the flow contraction-expansion parametric study and training an MLP surrogate
-model.
+This guide documents the retained direct ETL, feature-selection, MLP, and
+evaluation commands for developing individual alpha-D components. For a
+complete, reproducible study—including held-out panels, the default Conv1D
+profile method, MOOSE coupling, and evidence reporting—start with
+[Running the Alpha-D Case](running_alpha_d.md).
 
 ## Problem overview
 
@@ -451,7 +453,12 @@ Then inspect:
 python -c "import json; m=json.load(open('../data/cases/train_mlp/metrics.json')); print(json.dumps(m, indent=2))"
 ```
 
-## Quick-reference command summary
+## Component-level MLP command summary
+
+These commands run isolated components in a prepared heavy environment. They
+do not construct the panel study, enforce its per-panel feature-selection
+boundary, run MOOSE coupling, or create the coupled-study report. Use the
+workflow in [Running the Alpha-D Case](running_alpha_d.md) for those results.
 
 ```bash
 # 1. Extract alpha_D profiles from CFD

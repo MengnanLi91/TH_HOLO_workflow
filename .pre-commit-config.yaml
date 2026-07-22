@@ -1,11 +1,10 @@
 # Pre-commit hooks for MULTIFID-TH.
 #
-# Install once per clone, into a dedicated Conda env (avoids polluting
-# the ETL / training envs; the multifid-th Apptainer image is also a
-# poor fit because it's read-only at runtime):
-#     conda create -n multifid-th-dev python=3.11 -y
-#     conda activate multifid-th-dev
-#     pip install pre-commit ruff==0.14.5
+# Install once per clone as user-scoped uv tools (avoids polluting the
+# ETL / training environments; the multifid-th Apptainer image is read-only
+# at runtime):
+#     uv tool install pre-commit
+#     uv tool install ruff==0.14.5
 #     pre-commit install
 #
 # After that, the hooks run automatically on every `git commit`. To run

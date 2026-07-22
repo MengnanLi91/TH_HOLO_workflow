@@ -8,7 +8,17 @@ variants share the same ETL + feature pipeline:
 - **MLP (`train_mlp`)** — pointwise FullyConnected predicting one row at
   a time. HPO over ~10 hyperparameters is enabled by default.
 - **Conv1D profile (`train_conv1d`)** — 1D convolutional surrogate that
-  consumes the full 50-station profile per case. No HPO by default.
+  consumes the full 50-station profile per case. Its standalone YAML has no
+  HPO block; the coupled study enables HPO once for its reference panel.
+
+For the current reproducible alpha-D result, use
+`src/cases/alpha_d/configs/coupling_study.toml` with `multifid-workflow`.
+That study selects the Conv1D profile method, constructs held-out panels,
+runs HPO once, exports the Forchheimer closure, couples it to MOOSE, and
+writes a provenance-tracked evidence report. See
+[`docs/user/running_alpha_d.md`](../../../docs/user/running_alpha_d.md) for
+the complete run procedure. The commands below are component-level entry
+points for focused development and debugging.
 
 ## Layout
 
@@ -27,7 +37,7 @@ cases/alpha_d/
 └── README.md          # this file
 ```
 
-## End-to-end (from `src/`)
+## Component-level development (from `src/`)
 
 ### 1. ETL: MOOSE → per-case Zarr
 

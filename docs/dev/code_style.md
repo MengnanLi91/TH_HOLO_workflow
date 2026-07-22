@@ -6,15 +6,13 @@ formatting. The full configuration lives in `pyproject.toml` under
 
 ## One-time setup
 
-Pre-commit and ruff live in a dedicated Conda env so they stay isolated
-from the ETL / training / MOOSE envs you already have. (The multifid-th
-Apptainer image is also a poor fit — it's read-only at runtime, so
-`pip install`s into it don't persist.)
+Install pre-commit and ruff as user-scoped `uv` tools so they stay isolated
+from the ETL / training / MOOSE environments. The multifid-th Apptainer image
+is read-only at runtime, so it is not an appropriate place to install them.
 
 ```bash
-conda create -n multifid-th-dev python=3.11 -y
-conda activate multifid-th-dev
-pip install pre-commit ruff==0.14.5
+uv tool install pre-commit
+uv tool install ruff==0.14.5
 pre-commit install                  # run from the repo root
 ```
 

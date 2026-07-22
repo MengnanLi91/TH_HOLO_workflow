@@ -1,14 +1,15 @@
 # Alpha-D Case
 
-This page mirrors `src/cases/alpha_d/README.md` for the docs site. The
-α_D surrogate predicts a per-station Darcy resistance coefficient along
-a pipe contraction-expansion as a function of `(Re, Dr, Lr, z)`. Two
-model variants share the same ETL + feature pipeline:
+The α_D surrogate predicts a per-station Darcy resistance coefficient along
+a pipe contraction-expansion as a function of `(Re, Dr, Lr, z)`. The tracked
+study selects the Conv1D profile method and couples its exported closure back
+to MOOSE. Two model variants remain available for component development:
 
 - **MLP (`train_mlp`)** — pointwise `FullyConnected` predicting one row
   at a time. HPO over ~10 hyperparameters is enabled by default.
 - **Conv1D profile (`train_conv1d`)** — 1D convolutional surrogate that
-  consumes the full 50-station profile per case. No HPO by default.
+  consumes the full 50-station profile per case. Its standalone YAML has no
+  HPO block; the coupled study enables HPO once for its reference panel.
 
 ## Layout
 
@@ -22,7 +23,7 @@ flowchart LR
     R --> FD["feature_data.py<br/>ALLOWLIST · engineered features"]
     R --> Met["metrics.py<br/>per-region MSE/RMSE · Δp eval"]
     R --> Tr["transforms.py<br/>signed-log1p residual target"]
-    R --> Run["run_etl.py · train.py"]
+    R --> Run["study_workflow.py<br/>run_etl.py · train.py"]
 ```
 
 Tree form (matches the on-disk listing):
@@ -42,7 +43,34 @@ cases/alpha_d/
 └── README.md          # source-of-truth, also rendered here
 ```
 
-## End-to-end (from `src/`)
+## Current reproducible study
+
+Run the coupled study from the repository root when you need a complete,
+resumable result rather than one isolated model artifact:
+
+```bash
+uv sync
+export MULTIFID_PYTHON_IMAGE=/absolute/path/to/multifid-th.sif
+export MULTIFID_MOOSE_IMAGE=/absolute/path/to/moose-dev.sif
+
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-001
+```
+
+The workflow constructs the configured held-out panels, tunes the selected
+method once, trains and exports each panel, runs MOOSE coupling, and writes
+the report under `data/workflows/alpha_d_coupling/<run-id>/`. See
+[Running the Alpha-D Case](../user/running_alpha_d.md) for raw-data ETL,
+resume, and publication.
+
+## Component-level development (from `src/`)
+
+The commands below are useful for changing or debugging one ETL, feature
+selection, training, or evaluation component. They do not substitute for the
+coupled-study workflow above and do not create its provenance or report.
 
 ### 1. ETL — MOOSE to per-case Zarr
 

@@ -79,27 +79,34 @@ docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path
   output.plot_dir=../data/models/lid_driven_fno_plots'
 ```
 
-## Train an MLP Surrogate for Darcy Resistance
+## Run the Alpha-D Coupled Study
 
-The alpha-D workflow extracts Darcy resistance coefficient profiles from a
-parametric study of flow contraction-expansion simulations, then trains a
-PhysicsNeMo `FullyConnected` MLP surrogate.
+The current alpha-D workflow is a resumable, TOML-driven study. It performs
+panel construction, leakage-safe feature selection, Conv1D profile-model HPO
+and training, closure export, MOOSE coupling, and evidence reporting in one
+provenance-tracked run. After building the Python and MOOSE Apptainer images,
+run it from the repository root. The checked-in study defaults to a processed
+Zarr tree at `data/flow_contraction_expansion/parametric_study/processed`; see
+the running guide to create it from raw Exodus output or select another tree:
 
 ```bash
-# 1. Extract alpha_D profiles from CFD output
-docker compose run --rm etl bash -lc 'cd src && python cases/alpha_d/run_etl.py'
+uv sync
+export MULTIFID_PYTHON_IMAGE=/absolute/path/to/multifid-th.sif
+export MULTIFID_MOOSE_IMAGE=/absolute/path/to/moose-dev.sif
 
-# 2. Train (HPO + retrain best, all in one command)
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
 
-# 2b. Or skip HPO and train directly
-docker compose run --rm etl bash -lc 'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
-
-# 3. Evaluate
-docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-001
 ```
 
-See [Alpha-D Surrogate Tutorial](docs/user/alpha_d_surrogate.md) for the full walkthrough.
+Use [Running the Alpha-D Case](docs/user/running_alpha_d.md) for the complete
+raw-data, resume, and publication procedure. The
+[Alpha-D surrogate component tutorial](docs/user/alpha_d_surrogate.md)
+documents the retained direct ETL, MLP, and evaluation commands for focused
+development; those commands do not produce the coupled-study evidence report.
 
 ## Documentation
 
@@ -126,11 +133,11 @@ read correctly both on GitHub and on the hosted site.
 ### Build the docs locally
 
 ```bash
-pip install -e ".[docs]"
-make -C docs html
+uv sync --extra docs
+uv run --no-sync sphinx-build -E -b html docs docs/_build/html
 # Open docs/_build/html/index.html in a browser
 ```
 
-For live reload while editing: `make -C docs livehtml` and browse to
+For live reload while editing: `uv run --no-sync make -C docs livehtml` and browse to
 <http://localhost:8000>. See [docs/dev/building_docs.md](docs/dev/building_docs.md)
 for strict mode, the Apptainer fallback, and the full target list.
