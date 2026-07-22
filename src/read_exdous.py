@@ -207,9 +207,7 @@ class ExodusReader:
                         self._print_line(f"{indent}    {dname} = {size}", style="green")
 
                 if group.variables:
-                    self._section(
-                        f"  Variables ({len(group.variables)})", indent=indent
-                    )
+                    self._section(f"  Variables ({len(group.variables)})", indent=indent)
                     if self.use_rich and self.console is not None:
                         table = Table(show_header=True, header_style="bold magenta")
                         table.add_column("name", style="magenta")
@@ -218,14 +216,10 @@ class ExodusReader:
                         table.add_column("resolved", style="yellow")
                         for vname, var in group.variables.items():
                             resolved = (
-                                self.resolve_exodus_var_name(
-                                    vname, names_by_kind, entity_names
-                                )
+                                self.resolve_exodus_var_name(vname, names_by_kind, entity_names)
                                 or ""
                             )
-                            table.add_row(
-                                vname, str(var.dtype), str(var.shape), resolved
-                            )
+                            table.add_row(vname, str(var.dtype), str(var.shape), resolved)
                         self.console.print(table)
                         for vname, var in group.variables.items():
                             for attr in var.ncattrs():

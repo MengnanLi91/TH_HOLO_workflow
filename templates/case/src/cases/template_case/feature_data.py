@@ -29,6 +29,4 @@ def load_feature_matrix(
     ``X``.
     """
     del zarr_dir, target, selected_from_allowlist, exclude_cases
-    raise NotImplementedError(
-        "TODO(case): implement the leakage-safe FeatureAnalysisData loader"
-    )
+    raise NotImplementedError("TODO(case): implement the leakage-safe FeatureAnalysisData loader")

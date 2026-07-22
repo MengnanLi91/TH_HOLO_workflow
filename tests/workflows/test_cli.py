@@ -156,12 +156,8 @@ def test_run_command_renders_stage_progress(monkeypatch, tmp_path, capsys):
     run_dir = tmp_path / "run"
     repo_root = Path(__file__).resolve().parents[2]
     monkeypatch.setattr("workflows.cli._repo_root", lambda _start: repo_root)
-    monkeypatch.setattr(
-        "workflows.cli._definition", lambda _config, _repo_root: definition
-    )
-    monkeypatch.setattr(
-        "workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir
-    )
+    monkeypatch.setattr("workflows.cli._definition", lambda _config, _repo_root: definition)
+    monkeypatch.setattr("workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir)
 
     assert main(["run", "--config", str(config_path), "--run-id", "run-001"]) == 0
     output = capsys.readouterr().out

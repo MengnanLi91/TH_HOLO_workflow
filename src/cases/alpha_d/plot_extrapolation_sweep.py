@@ -98,8 +98,7 @@ def plot(records, axis, out_png):
             [abs(r[f"{m}_relerr"]) * 100 for r in records],
             "o-",
             color=color,
-            label=f"regressor: {m}"
-            + (" (cannot extrapolate)" if m == "random_forest" else ""),
+            label=f"regressor: {m}" + (" (cannot extrapolate)" if m == "random_forest" else ""),
         )
     ax.plot(
         xs,
@@ -139,9 +138,7 @@ def main(argv=None):
         shell_names=shell_names,
     )
     if not records:
-        raise SystemExit(
-            "No records collected — check eval_metrics / coupled sidecars exist."
-        )
+        raise SystemExit("No records collected — check eval_metrics / coupled sidecars exist.")
     for m in HEADLINE_MODELS:
         xo = find_crossover(
             [r["axis_value"] for r in records],

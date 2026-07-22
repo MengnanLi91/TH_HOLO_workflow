@@ -87,10 +87,7 @@ def test_alpha_d_workflow_has_published_stage_families():
 
     assert len(stages) == 33
     assert "conv1d_profile" in definition.stage_map()["tune_alpha"].description
-    assert (
-        "conv1d_profile"
-        in definition.stage_map()["panel.indist_panel.train_alpha"].description
-    )
+    assert "conv1d_profile" in definition.stage_map()["panel.indist_panel.train_alpha"].description
 
 
 def test_default_alpha_training_method_is_explicit():
@@ -222,12 +219,8 @@ def test_alternate_method_drives_tune_train_and_export_commands(tmp_path):
     assert any(value.endswith("checkpoints/cnn.mdlus") for value in train.argv)
     assert any(value.endswith("metadata/cnn.json") for value in train.argv)
     assert export.argv[2] == "user_methods.export_profile"
-    assert export.argv[export.argv.index("--checkpoint") + 1].endswith(
-        "checkpoints/cnn.mdlus"
-    )
-    assert export.argv[export.argv.index("--run-meta") + 1].endswith(
-        "metadata/cnn.json"
-    )
+    assert export.argv[export.argv.index("--checkpoint") + 1].endswith("checkpoints/cnn.mdlus")
+    assert export.argv[export.argv.index("--run-meta") + 1].endswith("metadata/cnn.json")
 
 
 @pytest.mark.parametrize(
@@ -235,27 +228,19 @@ def test_alternate_method_drives_tune_train_and_export_commands(tmp_path):
     [
         (lambda config: config.pop("training"), "training.alpha"),
         (
-            lambda config: config["training"]["alpha"].update(
-                artifact_contract="unknown"
-            ),
+            lambda config: config["training"]["alpha"].update(artifact_contract="unknown"),
             "artifact_contract",
         ),
         (
-            lambda config: config["training"]["alpha"]["export"].update(
-                contract="unknown"
-            ),
+            lambda config: config["training"]["alpha"]["export"].update(contract="unknown"),
             "export.contract",
         ),
         (
-            lambda config: config["training"]["alpha"].update(
-                checkpoint="../outside.mdlus"
-            ),
+            lambda config: config["training"]["alpha"].update(checkpoint="../outside.mdlus"),
             "artifact directory",
         ),
         (
-            lambda config: config["training"]["alpha"].update(
-                runner_module="not-a-module"
-            ),
+            lambda config: config["training"]["alpha"].update(runner_module="not-a-module"),
             "dotted Python module",
         ),
     ],
@@ -282,9 +267,7 @@ def test_low_dr_direct_floor_and_dr_report_guards_are_explicit():
 
     assert panels["Dr_low_pure"]["reg_min_dr"] == 0.1
     assert all(
-        panel["reg_min_dr"] == 0.333
-        for tag, panel in panels.items()
-        if tag != "Dr_low_pure"
+        panel["reg_min_dr"] == 0.333 for tag, panel in panels.items() if tag != "Dr_low_pure"
     )
     assert panels["Dr_low_pure"]["guard_axes"] == ["Re", "Lr"]
     assert panels["Dr_high_guarded"]["guard_axes"] == ["Re", "Lr"]
@@ -329,9 +312,7 @@ def _valid_training_artifacts(tmp_path: Path) -> tuple[RunContext, Panel, Path]:
 def test_alpha_training_contract_accepts_profile_method(tmp_path):
     context, panel, _ = _valid_training_artifacts(tmp_path)
 
-    _require_alpha_training_contract(
-        context, panel, parse_alpha_training_method(context.config)
-    )
+    _require_alpha_training_contract(context, panel, parse_alpha_training_method(context.config))
 
 
 @pytest.mark.parametrize(
@@ -343,16 +324,12 @@ def test_alpha_training_contract_accepts_profile_method(tmp_path):
             "output_columns",
         ),
         (
-            lambda metadata: metadata["data"].update(
-                norm_stats={"x_mean": [], "x_std": []}
-            ),
+            lambda metadata: metadata["data"].update(norm_stats={"x_mean": [], "x_std": []}),
             "normalization statistics",
         ),
     ],
 )
-def test_alpha_training_contract_rejects_incompatible_metadata(
-    tmp_path, mutation, message
-):
+def test_alpha_training_contract_rejects_incompatible_metadata(tmp_path, mutation, message):
     context, panel, run_meta = _valid_training_artifacts(tmp_path)
     metadata = json.loads(run_meta.read_text(encoding="utf-8"))
     mutation(metadata)
@@ -398,9 +375,7 @@ def _valid_export_artifacts(tmp_path: Path) -> tuple[RunContext, Panel, Path]:
 def test_export_contract_accepts_valid_profile(tmp_path):
     context, panel, _ = _valid_export_artifacts(tmp_path)
 
-    _require_export_contract(
-        context, panel, parse_alpha_training_method(context.config)
-    )
+    _require_export_contract(context, panel, parse_alpha_training_method(context.config))
 
 
 @pytest.mark.parametrize("failure", ["empty_csv", "wrong_case", "nonfinite"])
@@ -418,9 +393,7 @@ def test_export_contract_rejects_invalid_profile(tmp_path, failure):
         sidecar.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises((KeyError, OSError, TypeError, ValueError)):
-        _require_export_contract(
-            context, panel, parse_alpha_training_method(context.config)
-        )
+        _require_export_contract(context, panel, parse_alpha_training_method(context.config))
 
 
 def test_export_action_replaces_semantically_invalid_existing_profile(tmp_path):
@@ -459,9 +432,7 @@ def test_export_action_replaces_semantically_invalid_existing_profile(tmp_path):
 
 
 @pytest.mark.skipif(
-    not (
-        REPO_ROOT / "data/flow_contraction_expansion/parametric_study/processed"
-    ).is_dir(),
+    not (REPO_ROOT / "data/flow_contraction_expansion/parametric_study/processed").is_dir(),
     reason="Processed alpha-D campaign is not present",
 )
 def test_panel_plan_matches_published_membership_counts(tmp_path):
@@ -475,10 +446,7 @@ def test_panel_plan_matches_published_membership_counts(tmp_path):
 
     _plan_panels(context)
     index = json.loads((tmp_path / "panels/index.json").read_text(encoding="utf-8"))
-    counts = {
-        row["tag"]: (row["heldout_count"], row["report_count"])
-        for row in index["panels"]
-    }
+    counts = {row["tag"]: (row["heldout_count"], row["report_count"]) for row in index["panels"]}
 
     assert counts == {
         "indist_panel": (36, 36),
@@ -490,9 +458,7 @@ def test_panel_plan_matches_published_membership_counts(tmp_path):
         "Lr_high": (127, 127),
     }
     manifest = json.loads(
-        (tmp_path / "panels/indist_panel/panel_manifest.json").read_text(
-            encoding="utf-8"
-        )
+        (tmp_path / "panels/indist_panel/panel_manifest.json").read_text(encoding="utf-8")
     )
     assert manifest["panel_manifest_schema"] == 3
     assert manifest["alpha_method"]["id"] == "conv1d_profile"
@@ -506,9 +472,7 @@ def test_publish_is_only_docs_copy_and_check_detects_drift(tmp_path):
     run_dir = repo / "data/workflows/example/run-1"
     report = run_dir / "report"
     report.mkdir(parents=True)
-    (report / "pressure_drop_comparison_errors.svg").write_text(
-        "<svg/>\n", encoding="utf-8"
-    )
+    (report / "pressure_drop_comparison_errors.svg").write_text("<svg/>\n", encoding="utf-8")
     (report / "pressure_drop_comparison.json").write_text(
         json.dumps({"summaries": [{"tag": "panel"}], "conclusion": ["done"]}),
         encoding="utf-8",

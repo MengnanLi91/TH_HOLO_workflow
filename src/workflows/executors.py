@@ -22,9 +22,7 @@ class LocalExecutor:
 
     repo_root: Path
 
-    def execute(
-        self, command: Command, *, log_path: Path, command_path: Path
-    ) -> CommandResult:
+    def execute(self, command: Command, *, log_path: Path, command_path: Path) -> CommandResult:
         argv = [str(value) for value in command.argv]
         cwd = Path(command.cwd) if command.cwd is not None else self.repo_root
         if not cwd.is_absolute():
@@ -67,9 +65,7 @@ class ApptainerExecutor:
             )
         return image
 
-    def execute(
-        self, command: Command, *, log_path: Path, command_path: Path
-    ) -> CommandResult:
+    def execute(self, command: Command, *, log_path: Path, command_path: Path) -> CommandResult:
         cwd = Path(command.cwd) if command.cwd is not None else self.repo_root
         if not cwd.is_absolute():
             cwd = self.repo_root / cwd
@@ -101,9 +97,7 @@ class ApptainerExecutor:
 
 def build_executors(config: dict, repo_root: Path):
     """Construct named executors from a resolved workflow configuration."""
-    executors: dict[str, LocalExecutor | ApptainerExecutor] = {
-        "local": LocalExecutor(repo_root)
-    }
+    executors: dict[str, LocalExecutor | ApptainerExecutor] = {"local": LocalExecutor(repo_root)}
     for name, raw in (config.get("executors") or {}).items():
         kind = str(raw.get("kind", "local"))
         if kind == "local":

@@ -52,11 +52,7 @@ def _panel_data(tag: str, axis: str, data_root: Path):
         ),
         coupled_dir=str(data_root / f"cases/extrap/{tag}/coupled"),
         shell_names=[
-            s
-            for s in (data_root / f"cases/extrap/{tag}/shell_names.txt")
-            .read_text()
-            .split()
-            if s
+            s for s in (data_root / f"cases/extrap/{tag}/shell_names.txt").read_text().split() if s
         ],
     )
     for r in recs:  # add baseline rel-error alongside the model rel-errors

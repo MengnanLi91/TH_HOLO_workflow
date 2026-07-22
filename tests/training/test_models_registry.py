@@ -56,9 +56,7 @@ def test_custom_entrypoint_signature_validation(
     monkeypatch.setitem(sys.modules, "tmp_bad_signature", module)
 
     with pytest.raises(TypeError, match=r"must accept \(model_cfg, dataset_info\)"):
-        get_build_fn_and_adapter(
-            {"entrypoint": "tmp_bad_signature:build", "adapter": "grid"}
-        )
+        get_build_fn_and_adapter({"entrypoint": "tmp_bad_signature:build", "adapter": "grid"})
 
 
 def test_custom_entrypoint_valid(monkeypatch: pytest.MonkeyPatch) -> None:

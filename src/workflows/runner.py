@@ -29,9 +29,7 @@ def _canonical_hash(value: Any) -> str:
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
 
 
@@ -71,9 +69,7 @@ def _git_version(repo_root: Path) -> dict[str, Any]:
     dirty_digest.update(status.encode("utf-8"))
     dirty_digest.update(b"\0")
     dirty_digest.update(diff.encode("utf-8"))
-    for raw_path in run_bytes("ls-files", "--others", "--exclude-standard", "-z").split(
-        b"\0"
-    ):
+    for raw_path in run_bytes("ls-files", "--others", "--exclude-standard", "-z").split(b"\0"):
         if not raw_path:
             continue
         relative = raw_path.decode("utf-8", errors="surrogateescape")
@@ -101,9 +97,7 @@ def validate_workflow(definition: WorkflowDefinition) -> list[Stage]:
             raise ValueError(f"Invalid stage name {stage.name!r}")
         missing = sorted(set(stage.dependencies) - set(stage_map))
         if missing:
-            raise ValueError(
-                f"Stage {stage.name!r} has missing dependencies: {missing}"
-            )
+            raise ValueError(f"Stage {stage.name!r} has missing dependencies: {missing}")
 
     ordered: list[Stage] = []
     temporary: set[str] = set()
@@ -131,9 +125,7 @@ def _target_stages(ordered: list[Stage], target: str | None) -> list[Stage]:
         return ordered
     stage_map = {stage.name: stage for stage in ordered}
     if target not in stage_map:
-        raise ValueError(
-            f"Unknown target stage {target!r}; available: {sorted(stage_map)}"
-        )
+        raise ValueError(f"Unknown target stage {target!r}; available: {sorted(stage_map)}")
     needed: set[str] = set()
 
     def add(name: str) -> None:
@@ -206,9 +198,7 @@ class WorkflowRunner:
         if self.definition.input_paths is not None:
             paths = list(self.definition.input_paths(self.config, self.repo_root))
         else:
-            paths = list(
-                (self.config.get("workflow") or {}).get("fingerprint_paths") or []
-            )
+            paths = list((self.config.get("workflow") or {}).get("fingerprint_paths") or [])
         cache_path = self.run_dir / "fingerprint_cache.json"
         cache = load_cache(cache_path)
         refreshed: dict[str, Any] = {}
@@ -315,12 +305,9 @@ class WorkflowRunner:
             try:
                 result = stage.action(context) or StageResult()
                 if stage.validator is not None and not stage.validator(context):
-                    raise ValueError(
-                        f"Stage {stage.name!r} outputs failed semantic validation"
-                    )
+                    raise ValueError(f"Stage {stage.name!r} outputs failed semantic validation")
                 artifact_records = [
-                    _artifact_record(artifact, self.run_dir)
-                    for artifact in result.artifacts
+                    _artifact_record(artifact, self.run_dir) for artifact in result.artifacts
                 ]
                 record.update(
                     {
@@ -333,9 +320,7 @@ class WorkflowRunner:
                 )
                 any_partial = any_partial or result.status == "partial"
             except Exception as exc:
-                record.update(
-                    {"status": "failed", "completed_utc": _now(), "error": str(exc)}
-                )
+                record.update({"status": "failed", "completed_utc": _now(), "error": str(exc)})
                 manifest["status"] = "failed"
                 manifest["updated_utc"] = _now()
                 _atomic_json(self.manifest_path, manifest)
@@ -347,13 +332,10 @@ class WorkflowRunner:
             if on_stage is not None:
                 on_stage(stage, result.status)
         all_terminal = all(
-            item.get("status") in ("succeeded", "partial")
-            for item in manifest["stages"].values()
+            item.get("status") in ("succeeded", "partial") for item in manifest["stages"].values()
         )
         if all_terminal:
-            manifest["status"] = (
-                "completed_with_partial_results" if any_partial else "completed"
-            )
+            manifest["status"] = "completed_with_partial_results" if any_partial else "completed"
         else:
             manifest["status"] = "partial_run"
         manifest["updated_utc"] = _now()
@@ -362,9 +344,7 @@ class WorkflowRunner:
 
     def publish(self, *, check: bool) -> StageResult:
         if self.definition.publisher is None:
-            raise ValueError(
-                f"Workflow {self.definition.workflow_id!r} has no publisher"
-            )
+            raise ValueError(f"Workflow {self.definition.workflow_id!r} has no publisher")
         if not self.manifest_path.is_file():
             raise FileNotFoundError(f"Run manifest not found: {self.manifest_path}")
         context = RunContext(

@@ -54,9 +54,7 @@ def test_build_dataframe_preserves_names_target_and_row_groups():
     assert list(df.columns) == data.feature_names + [data.target_name, "case_id"]
     assert len(df) == data.X.shape[0]
     # Feature matrix round-trips numerically.
-    np.testing.assert_allclose(
-        df[data.feature_names].to_numpy(dtype=np.float32), data.X
-    )
+    np.testing.assert_allclose(df[data.feature_names].to_numpy(dtype=np.float32), data.X)
     # Target round-trips.
     np.testing.assert_allclose(df[data.target_name].to_numpy(dtype=np.float32), data.y)
     # Each row's case_id matches the integer group index via case_ids map.
@@ -115,9 +113,7 @@ def test_selected_features_txt_roundtrips_through_adapter_contract(tmp_path: Pat
     assert "\n\n" not in text, "blank line would corrupt adapter parsing"
     assert not text.startswith("#"), "no header allowed"
 
-    roundtripped = [
-        line.strip() for line in path.read_text().splitlines() if line.strip()
-    ]
+    roundtripped = [line.strip() for line in path.read_text().splitlines() if line.strip()]
     assert roundtripped == selected
 
 

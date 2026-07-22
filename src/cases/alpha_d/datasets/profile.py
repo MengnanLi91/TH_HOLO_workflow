@@ -156,9 +156,7 @@ class AlphaDProfileDataset(Dataset):
 
     def subset_by_case_indices(self, case_indices) -> "AlphaDProfileDataset":
         case_indices = [int(i) for i in case_indices]
-        return AlphaDProfileDataset._from_inner(
-            self._inner.subset_by_case_indices(case_indices)
-        )
+        return AlphaDProfileDataset._from_inner(self._inner.subset_by_case_indices(case_indices))
 
     def add_baseline_to_encoded(self, encoded, row_mask=None, field_idx=None):
         """Delegate to the inner TabularPairDataset."""
@@ -183,8 +181,7 @@ class AlphaDProfileDataset(Dataset):
             "normalize": bool(self.normalize),
             "norm_stats": norm_stats,
             "target_transform": (
-                f"{alpha_d_residual_transform.__module__}:"
-                f"{alpha_d_residual_transform.__name__}"
+                f"{alpha_d_residual_transform.__module__}:{alpha_d_residual_transform.__name__}"
             ),
             "has_target_baseline": bool(self.has_target_baseline),
             "analytical_baseline": (
@@ -258,8 +255,6 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         downstream_weight=_opt_float("downstream_weight"),
         include_case_idx=bool(data_cfg.get("include_case_idx", False)),
         exclude_cases=exclude_cases,
-        local_velocity_normalization=bool(
-            data_cfg.get("local_velocity_normalization", False)
-        ),
+        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
         min_Dr=_opt_float("min_Dr"),
     )

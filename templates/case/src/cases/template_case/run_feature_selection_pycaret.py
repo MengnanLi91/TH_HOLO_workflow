@@ -48,9 +48,7 @@ def main(cfg: DictConfig) -> None:
     )
     manifest["config"]["data"]["exclude_cases"] = exclude_cases
     write_manifest(manifest, output_dir)
-    (output_dir / "result.json").write_text(
-        json.dumps(result, indent=2) + "\n", encoding="utf-8"
-    )
+    (output_dir / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

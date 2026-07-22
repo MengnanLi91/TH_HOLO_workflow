@@ -90,12 +90,8 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
 
     # --- Outer train/test split (same as normal training) ---
     data_cfg = prepared["data_cfg"]
-    split_cfg = normalize_split_cfg(
-        dict(data_cfg.get("split") or {}), default_seed=seed
-    )
-    num_cases = (
-        len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
-    )
+    split_cfg = normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
+    num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=num_cases,
         split_cfg=split_cfg,
@@ -128,9 +124,7 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
         )
 
     # Fit tabular normalization only on inner-train cases (prevents val/test leakage).
-    if prepared["adapter_name"] == "pointwise" and bool(
-        data_cfg.get("normalize", False)
-    ):
+    if prepared["adapter_name"] == "pointwise" and bool(data_cfg.get("normalize", False)):
         normalized_data_cfg = dict(data_cfg)
         normalized_data_cfg["norm_from_case_indices"] = train_inner_idx
         normalized_dataset = prepared["adapter"].build_dataset(normalized_data_cfg)

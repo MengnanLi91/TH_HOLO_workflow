@@ -81,9 +81,7 @@ class AlphaDZarrSink(DataSource):
         root.create_array("targets", data=data["targets"], overwrite=True)
 
         if "sample_weight" in data:
-            root.create_array(
-                "sample_weight", data=data["sample_weight"], overwrite=True
-            )
+            root.create_array("sample_weight", data=data["sample_weight"], overwrite=True)
 
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
@@ -99,6 +97,4 @@ class AlphaDZarrSink(DataSource):
             if key in data:
                 meta.attrs[key] = float(data[key])
 
-        self.logger.info(
-            "  Wrote %d stations to %s", data["features"].shape[0], output_path
-        )
+        self.logger.info("  Wrote %d stations to %s", data["features"].shape[0], output_path)

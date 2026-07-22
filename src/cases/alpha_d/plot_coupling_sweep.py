@@ -88,9 +88,7 @@ ax.plot(
     zorder=0,
     label="±10%",
 )
-ax.plot(
-    [lo, hi], [0.9 * lo, 0.9 * hi], color="#888", linewidth=0.8, linestyle=":", zorder=0
-)
+ax.plot([lo, hi], [0.9 * lo, 0.9 * hi], color="#888", linewidth=0.8, linestyle=":", zorder=0)
 
 if constF is not None:
     ax.scatter(

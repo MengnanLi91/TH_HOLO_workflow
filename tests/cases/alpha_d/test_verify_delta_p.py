@@ -45,15 +45,11 @@ def test_compare_emits_two_relative_errors(tmp_path):
 
 
 @pytest.mark.parametrize("inlet_integral", ["0.0", "nan", "inf"])
-def test_read_moose_inlet_pressure_rejects_invalid_final_value(
-    tmp_path, inlet_integral
-):
+def test_read_moose_inlet_pressure_rejects_invalid_final_value(tmp_path, inlet_integral):
     from cases.alpha_d.verify_delta_p import read_moose_inlet_pressure
 
     csv_path = tmp_path / "out.csv"
-    csv_path.write_text(
-        f"time,inlet-p,outlet-u\n0,{inlet_integral},1.0\n", encoding="utf-8"
-    )
+    csv_path.write_text(f"time,inlet-p,outlet-u\n0,{inlet_integral},1.0\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="finite and positive"):
         read_moose_inlet_pressure(csv_path)

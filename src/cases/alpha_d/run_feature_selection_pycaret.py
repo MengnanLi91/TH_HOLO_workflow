@@ -53,9 +53,7 @@ def main(cfg: DictConfig) -> None:
         zarr_dir=data_cfg["zarr_dir"],
         target=data_cfg.get("target", "log_alpha_D"),
         selected_from_allowlist=data_cfg.get("selected_from_allowlist"),
-        local_velocity_normalization=bool(
-            data_cfg.get("local_velocity_normalization", True)
-        ),
+        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", True)),
         min_Dr=data_cfg.get("min_Dr"),
         exclude_cases=exclude_cases,
     )

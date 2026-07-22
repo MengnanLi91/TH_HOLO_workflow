@@ -35,9 +35,7 @@ def _rich_grid():
 
 def test_build_split_re_high_respects_floor():
     cases = _mini_grid()
-    res = build_split(
-        cases, axis="Re", side="high", k=1, dr_floor=0.333, exclude_below_dr=0.1
-    )
+    res = build_split(cases, axis="Re", side="high", k=1, dr_floor=0.333, exclude_below_dr=0.1)
     assert res.shell_axis_values == [250000.0]
     assert all(c.Re == 250000 and c.Dr >= 0.333 for c in res.shell)
     assert all(c.Dr >= 0.333 and c.Re != 250000 for c in res.interior)
@@ -48,9 +46,7 @@ def test_build_split_re_high_respects_floor():
 
 def test_build_split_dr_low_reaches_below_floor():
     cases = _mini_grid()
-    res = build_split(
-        cases, axis="Dr", side="low", k=2, dr_floor=0.333, exclude_below_dr=0.1
-    )
+    res = build_split(cases, axis="Dr", side="low", k=2, dr_floor=0.333, exclude_below_dr=0.1)
     assert res.shell_axis_values == pytest.approx([0.144, 0.239])
     assert all(c.Dr in (0.144, 0.239) for c in res.shell)
     assert all(c.Dr >= 0.333 for c in res.interior)

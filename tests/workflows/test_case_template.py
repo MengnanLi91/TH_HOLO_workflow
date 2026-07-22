@@ -31,9 +31,7 @@ def test_case_template_python_files_compile_and_configs_are_present():
         compile(path.read_text(encoding="utf-8"), str(path), "exec")
 
     assert (TEMPLATE_PACKAGE / "configs" / "pycaret.yaml").is_file()
-    training = (TEMPLATE_PACKAGE / "configs" / "train_model.yaml").read_text(
-        encoding="utf-8"
-    )
+    training = (TEMPLATE_PACKAGE / "configs" / "train_model.yaml").read_text(encoding="utf-8")
     assert "retrain_best: true" in training
     assert "search_space:" in training
     assert "input_columns_file:" in training

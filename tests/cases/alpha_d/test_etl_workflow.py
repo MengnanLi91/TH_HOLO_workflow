@@ -58,16 +58,12 @@ def test_etl_extract_records_command_and_partial_coverage(tmp_path):
         value == f"etl.sink.output_dir={context.run_dir / 'data/processed'}"
         for value in commands[0].argv
     )
-    summary = json.loads(
-        (context.run_dir / "data/etl_summary.json").read_text(encoding="utf-8")
-    )
+    summary = json.loads((context.run_dir / "data/etl_summary.json").read_text(encoding="utf-8"))
     assert summary["missing_cases"] == ["case-b"]
     assert _extract_valid(context)
 
 
-def test_etl_subcommand_overrides_raw_dir_and_binds_external_input(
-    monkeypatch, tmp_path, capsys
-):
+def test_etl_subcommand_overrides_raw_dir_and_binds_external_input(monkeypatch, tmp_path, capsys):
     captured = {}
 
     class FakeRunner:
@@ -112,9 +108,7 @@ def test_etl_subcommand_overrides_raw_dir_and_binds_external_input(
 def test_etl_subcommand_rejects_a_complete_study_config(capsys):
     study_config = REPO_ROOT / "src/cases/alpha_d/configs/coupling_study.toml"
 
-    status = workflow_cli.main(
-        ["etl", "--config", str(study_config), "--run-id", "not-an-etl-run"]
-    )
+    status = workflow_cli.main(["etl", "--config", str(study_config), "--run-id", "not-an-etl-run"])
 
     assert status == 2
     assert "requires workflow.kind = 'etl'" in capsys.readouterr().err

@@ -104,9 +104,7 @@ class AlphaDSource(DataSource):
             if exodus_path.exists():
                 files.append(str(exodus_path))
         if not files:
-            logger.warning(
-                "No '%s' files found under %s", self.exodus_filename, self.input_dir
-            )
+            logger.warning("No '%s' files found under %s", self.exodus_filename, self.input_dir)
         return files
 
     def read_file(self, filename: str) -> dict[str, Any]:
@@ -193,9 +191,7 @@ class AlphaDSource(DataSource):
                 var_name = f"vals_elem_var{fi + 1}eb{block_id}"
                 if var_name not in ds.variables:
                     break
-                block_arrays.append(
-                    np.array(ds.variables[var_name][:], dtype=np.float64)
-                )
+                block_arrays.append(np.array(ds.variables[var_name][:], dtype=np.float64))
                 block_id += 1
 
             if block_arrays:
@@ -203,9 +199,7 @@ class AlphaDSource(DataSource):
             else:
                 var_name = f"vals_elem_var{fi + 1}"
                 if var_name in ds.variables:
-                    fields[:, :, fi] = np.array(
-                        ds.variables[var_name][:], dtype=np.float64
-                    )
+                    fields[:, :, fi] = np.array(ds.variables[var_name][:], dtype=np.float64)
 
         return coords, connectivity, elem_field_names, fields, time_steps
 

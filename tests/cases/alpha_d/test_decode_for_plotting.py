@@ -207,9 +207,7 @@ def test_save_profile_prediction_plots_overlays_baseline_curve(
     class _ZeroConv1d(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             # x: [B, C, S] -> [B, 1, S]
-            return torch.zeros(
-                (x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device
-            )
+            return torch.zeros((x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device)
 
     experiment = AlphaDExperiment(
         model=_ZeroConv1d(),
@@ -270,9 +268,7 @@ def test_save_profile_prediction_plots_without_baseline_fn_omits_baseline_curve(
 
     class _ZeroConv1d(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return torch.zeros(
-                (x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device
-            )
+            return torch.zeros((x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device)
 
     experiment = AlphaDExperiment(
         model=_ZeroConv1d(),
@@ -325,9 +321,7 @@ def test_save_parity_plot_profile_dataset_decoded_physical_space(
 
     class _ZeroConv1d(torch.nn.Module):
         def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return torch.zeros(
-                (x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device
-            )
+            return torch.zeros((x.shape[0], 1, x.shape[-1]), dtype=x.dtype, device=x.device)
 
     experiment = AlphaDExperiment(
         model=_ZeroConv1d(),
@@ -371,12 +365,12 @@ def test_save_parity_plot_profile_dataset_decoded_physical_space(
     # Scatter creates a PathCollection; the y=x reference line is a Line2D.
     assert ax.collections, "Expected scatter points on the parity axes."
     line_labels = [line.get_label() for line in ax.get_lines()]
-    assert any(
-        "y" in lbl.lower() or "1:1" in lbl or "x" in lbl.lower() for lbl in line_labels
-    ), f"Expected a y=x reference line; got labels {line_labels}"
-    assert any(
-        "10%" in lbl for lbl in line_labels
-    ), f"Expected ±10% deviation lines; got labels {line_labels}"
+    assert any("y" in lbl.lower() or "1:1" in lbl or "x" in lbl.lower() for lbl in line_labels), (
+        f"Expected a y=x reference line; got labels {line_labels}"
+    )
+    assert any("10%" in lbl for lbl in line_labels), (
+        f"Expected ±10% deviation lines; got labels {line_labels}"
+    )
     # Decoded alpha_D is positive, so the X/Y label should reflect the
     # physical (alpha_D) space, not the encoded (log_alpha_D) space.
     assert "alpha_D" in ax.get_xlabel()
@@ -466,12 +460,12 @@ def test_save_delta_p_parity_plot(
     ax = captured["ax"]
     assert ax.collections, "Expected scatter points on the Δp parity axes."
     line_labels = [line.get_label() for line in ax.get_lines()]
-    assert any(
-        "y" in lbl.lower() or "1:1" in lbl for lbl in line_labels
-    ), f"Expected a y=x reference line; got labels {line_labels}"
-    assert any(
-        "10%" in lbl for lbl in line_labels
-    ), f"Expected ±10% deviation lines; got labels {line_labels}"
+    assert any("y" in lbl.lower() or "1:1" in lbl for lbl in line_labels), (
+        f"Expected a y=x reference line; got labels {line_labels}"
+    )
+    assert any("10%" in lbl for lbl in line_labels), (
+        f"Expected ±10% deviation lines; got labels {line_labels}"
+    )
     assert "delta_p" in ax.get_xlabel().lower() or "Δp" in ax.get_xlabel()
     assert "delta_p" in ax.get_ylabel().lower() or "Δp" in ax.get_ylabel()
 

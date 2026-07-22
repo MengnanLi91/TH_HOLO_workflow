@@ -54,9 +54,7 @@ def _validate_build_signature(build_fn: Callable, entrypoint: str) -> None:
         if param.kind
         in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     )
-    has_varargs = any(
-        param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters
-    )
+    has_varargs = any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters)
 
     if positional_count < 2 and not has_varargs:
         raise TypeError(
@@ -92,9 +90,7 @@ def get_build_fn_and_adapter(model_cfg: dict) -> tuple[Callable, str]:
     if not name:
         raise ValueError("model.name is required when model.entrypoint is not set.")
     if name not in MODEL_REGISTRY:
-        raise ValueError(
-            f"Unknown model '{name}'. Registered models: {sorted(MODEL_REGISTRY)}"
-        )
+        raise ValueError(f"Unknown model '{name}'. Registered models: {sorted(MODEL_REGISTRY)}")
 
     entry = MODEL_REGISTRY[name]
     user_adapter = model_cfg.get("adapter")

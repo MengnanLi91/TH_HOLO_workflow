@@ -82,9 +82,7 @@ def make_objective(
         lr = float(training_cfg.get("lr", 1e-3))
         weight_decay = float(training_cfg.get("weight_decay", 0.0))
         if weight_decay > 0:
-            optimizer = torch.optim.AdamW(
-                model.parameters(), lr=lr, weight_decay=weight_decay
-            )
+            optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         loss_fn = get_loss_fn(str(training_cfg.get("loss", "mse")))

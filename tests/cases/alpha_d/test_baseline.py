@@ -55,9 +55,7 @@ def test_profile_integrates_to_closed_form(
     assert closed > 0.0
     rel_err = abs(integrated - closed) / closed
     # Trapezoidal of a step function at midpoints converges as O(1/N); 1 % is plenty for N=50.
-    assert (
-        rel_err < 1e-2
-    ), f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr} head={include_head}"
+    assert rel_err < 1e-2, f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr} head={include_head}"
 
 
 def test_profile_zero_outside_throat() -> None:
@@ -88,9 +86,7 @@ def test_profile_zero_outside_throat() -> None:
         (250000, 0.9, 0.179),
     ],
 )
-def test_acceleration_head_adds_analytic_delta_p(
-    Re: float, Dr: float, Lr: float
-) -> None:
+def test_acceleration_head_adds_analytic_delta_p(Re: float, Dr: float, Lr: float) -> None:
     """include vs exclude differs by exactly ΔP_accel = q_throat − q_bulk."""
     geom = BaselineGeometry(Re=Re, Dr=Dr, Lr=Lr)
     with_head = integrated_baseline_delta_p(geom)  # default True
@@ -114,9 +110,9 @@ def test_include_false_reproduces_legacy_scalar() -> None:
     L_throat = geom.Lr * geom.outer_height_m
     D_throat = geom.D_big * geom.Dr
     legacy = (K_c + f * L_throat / D_throat) * q_throat
-    assert integrated_baseline_delta_p(
-        geom, include_acceleration_head=False
-    ) == pytest.approx(legacy, rel=1e-12)
+    assert integrated_baseline_delta_p(geom, include_acceleration_head=False) == pytest.approx(
+        legacy, rel=1e-12
+    )
 
 
 def test_acceleration_head_located_at_last_upstream_cell() -> None:
@@ -159,9 +155,7 @@ def test_baseline_underpredicts_real_dp_consistently() -> None:
     # K_c contribution dominates at low Dr, matching the empirical pattern.
     geom_low = BaselineGeometry(Re=43938, Dr=0.333, Lr=0.137)
     geom_high = BaselineGeometry(Re=43938, Dr=0.9, Lr=0.137)
-    assert integrated_baseline_delta_p(geom_low) > 100 * integrated_baseline_delta_p(
-        geom_high
-    )
+    assert integrated_baseline_delta_p(geom_low) > 100 * integrated_baseline_delta_p(geom_high)
 
 
 def test_blasius_friction_decreases_with_Re() -> None:
@@ -245,9 +239,7 @@ def _write_alpha_d_zarr(
 
     rng = np.random.default_rng(int(Re + Dr * 1000 + Lr * 1e5))
     alpha_bulk = rng.uniform(-2.0, 50.0, size=n_stations).astype(np.float64)
-    log_alpha = encode_alpha_d_target(
-        np.maximum(alpha_bulk, 1e-3), target_name="log_alpha_D"
-    )
+    log_alpha = encode_alpha_d_target(np.maximum(alpha_bulk, 1e-3), target_name="log_alpha_D")
     signed = encode_alpha_d_target(alpha_bulk, target_name="signed_log1p_alpha_D")
     targets = np.column_stack([log_alpha, signed]).astype(np.float32)
 

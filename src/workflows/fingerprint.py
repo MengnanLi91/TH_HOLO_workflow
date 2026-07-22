@@ -8,9 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _file_digest(
-    path: Path, cached: dict[str, Any] | None
-) -> tuple[str, dict[str, Any]]:
+def _file_digest(path: Path, cached: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
     stat = path.stat()
     key = str(path.resolve())
     if cached:
@@ -42,11 +40,7 @@ def fingerprint_path(
     root = Path(path).expanduser().resolve()
     if not root.exists():
         raise FileNotFoundError(f"Fingerprint input does not exist: {root}")
-    files = (
-        [root]
-        if root.is_file()
-        else sorted(item for item in root.rglob("*") if item.is_file())
-    )
+    files = [root] if root.is_file() else sorted(item for item in root.rglob("*") if item.is_file())
     combined = hashlib.sha256()
     refreshed: dict[str, Any] = {}
     total_size = 0

@@ -41,17 +41,13 @@ def profile_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-            np.float32
-        )
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
         # Shuffle the z_hat column so the wrapper has work to do
         z_hat_sorted = np.linspace(0.0, 1.0, ROWS_PER_CASE, dtype=np.float32)
         perm = rng.permutation(ROWS_PER_CASE)
         features[:, z_idx] = z_hat_sorted[perm]
 
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-            np.float32
-        )
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -141,9 +137,7 @@ class TestProfileDataset:
         z = x[0].numpy()
         assert np.all(np.diff(z) >= -1e-6)
 
-    def test_subset_by_case_indices_isolates_inner(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_subset_by_case_indices_isolates_inner(self, profile_zarr_dir: Path) -> None:
         """The subset wrapper must wrap a real subset of the inner — sharing
         the parent's _inner would silently include all cases in the Phase 7
         delta_p loss path, which iterates ds._case_ids_unique.
@@ -193,9 +187,7 @@ class TestProfileDataset:
         assert ds.local_velocity_normalization is False
         assert ds.exclude_cases == []
 
-    def test_subset_preserves_residual_baseline_alignment(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_subset_preserves_residual_baseline_alignment(self, profile_zarr_dir: Path) -> None:
         from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
@@ -277,9 +269,7 @@ class TestProfileAdapter:
         expected = ((pred - target) ** 2).sum(dim=(0, 2))
         assert torch.allclose(field_se, expected)
 
-    def test_relative_l2_broadcasts_with_profile_weight(
-        self, profile_zarr_dir: Path
-    ) -> None:
+    def test_relative_l2_broadcasts_with_profile_weight(self, profile_zarr_dir: Path) -> None:
         from training.losses import relative_l2_loss
 
         pred = torch.randn(2, 1, ROWS_PER_CASE)

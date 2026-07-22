@@ -28,9 +28,7 @@ class Experiment:
 
     def training_step(self, batch) -> float:
         if self.optimizer is None or self.loss_fn is None:
-            raise RuntimeError(
-                "Experiment.training_step requires optimizer and loss_fn."
-            )
+            raise RuntimeError("Experiment.training_step requires optimizer and loss_fn.")
 
         self.model.train()
         prepared = self.adapter.build_batch(batch, self.device)

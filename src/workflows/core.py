@@ -56,9 +56,7 @@ class StageResult:
 class Executor(Protocol):
     """Execution backend used by :class:`RunContext`."""
 
-    def execute(
-        self, command: Command, *, log_path: Path, command_path: Path
-    ) -> CommandResult:
+    def execute(self, command: Command, *, log_path: Path, command_path: Path) -> CommandResult:
         """Execute ``command`` and return its recorded result."""
 
 

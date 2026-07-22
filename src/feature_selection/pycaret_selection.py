@@ -178,10 +178,7 @@ def _extract_ranking(exp, ranker_id: str) -> list[dict[str, Any]]:
         importances = np.abs(coef)
 
     if importances is None or len(importances) != len(names):
-        return [
-            {"feature": n, "importance": None, "rank": i + 1}
-            for i, n in enumerate(names)
-        ]
+        return [{"feature": n, "importance": None, "rank": i + 1} for i, n in enumerate(names)]
 
     order = np.argsort(-importances)
     return [
@@ -294,9 +291,7 @@ def run_pycaret_selection(
                 {
                     "rank": row["rank"],
                     "feature": row["feature"],
-                    "importance": (
-                        "" if row["importance"] is None else f"{row['importance']:.8e}"
-                    ),
+                    "importance": ("" if row["importance"] is None else f"{row['importance']:.8e}"),
                 }
             )
 
@@ -309,9 +304,7 @@ def run_pycaret_selection(
         "ranker": ranker_id,
         "seed": seed,
         "test_ratio": test_ratio,
-        "ranking_source": (
-            f"create_model('{ranker_id}') feature_importances_ / |coef_|"
-        ),
+        "ranking_source": (f"create_model('{ranker_id}') feature_importances_ / |coef_|"),
     }
     (output_dir / "pycaret_setup.json").write_text(
         json.dumps(setup_record, indent=2, sort_keys=True)

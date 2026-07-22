@@ -166,9 +166,7 @@ def _status_text(status: str) -> Text:
 
 def _stage_counts(records: dict[str, Any]) -> Text:
     """Return a compact color-coded count of stages by state."""
-    counts = Counter(
-        str(record.get("status", "unknown")) for record in records.values()
-    )
+    counts = Counter(str(record.get("status", "unknown")) for record in records.values())
     parts: list[Text] = []
     for status in sorted(counts):
         if parts:
@@ -215,9 +213,7 @@ def _stage_table(*, status: bool) -> Table:
             no_wrap=True,
             overflow="ellipsis",
         )
-    table.add_column(
-        "Description", min_width=18, ratio=1, no_wrap=True, overflow="ellipsis"
-    )
+    table.add_column("Description", min_width=18, ratio=1, no_wrap=True, overflow="ellipsis")
     return table
 
 
@@ -318,9 +314,7 @@ def _print_plan(definition, target: str | None, *, tree: bool = True) -> None:
             str(index),
             Text(stage.name),
             Text(_dependency_summary(stage.dependencies)),
-            Text(
-                stage.description or "-", style="dim" if not stage.description else ""
-            ),
+            Text(stage.description or "-", style="dim" if not stage.description else ""),
         )
     console.print(table)
 
@@ -426,9 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status = subparsers.add_parser("status", help="Display a saved run manifest")
     status.add_argument("--run-dir", type=Path, required=True)
-    publish = subparsers.add_parser(
-        "publish", help="Publish or check declared docs artifacts"
-    )
+    publish = subparsers.add_parser("publish", help="Publish or check declared docs artifacts")
     publish.add_argument("--run-dir", type=Path, required=True)
     publish.add_argument("--check", action="store_true")
     return parser
@@ -441,14 +433,12 @@ def main(argv: list[str] | None = None) -> int:
             return _status(args.run_dir.resolve())
         if args.command == "publish":
             run_dir = args.run_dir.resolve()
-            config = json.loads(
-                (run_dir / "resolved_config.json").read_text(encoding="utf-8")
-            )
+            config = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
             repo_root = _repo_root(run_dir)
             definition = _definition(config, repo_root)
-            WorkflowRunner(
-                definition, config=config, repo_root=repo_root, run_dir=run_dir
-            ).publish(check=args.check)
+            WorkflowRunner(definition, config=config, repo_root=repo_root, run_dir=run_dir).publish(
+                check=args.check
+            )
             return 0
         config_path = args.config.resolve()
         config = load_config(config_path)
@@ -461,9 +451,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_plan(definition, args.target, tree=not args.table)
             return 0
         run_dir = _run_dir(config, repo_root, args.run_id)
-        runner = WorkflowRunner(
-            definition, config=config, repo_root=repo_root, run_dir=run_dir
-        )
+        runner = WorkflowRunner(definition, config=config, repo_root=repo_root, run_dir=run_dir)
         if args.command == "run":
             _run_with_progress(runner, target=args.target)
         else:

@@ -23,9 +23,7 @@ def _require_sklearn() -> None:
 def _effective_n_splits(requested: int, n_cases: int) -> int:
     effective = min(int(requested), int(n_cases))
     if effective < 2:
-        raise ValueError(
-            f"Need at least 2 cases for cross-validation, found {n_cases}."
-        )
+        raise ValueError(f"Need at least 2 cases for cross-validation, found {n_cases}.")
     return effective
 
 
@@ -421,9 +419,7 @@ def run_feature_selection(
             stability=(ranks <= top_k_effective).mean(axis=0),
         )
 
-    borda = np.stack([result.mean_rank for result in results.values()], axis=0).sum(
-        axis=0
-    )
+    borda = np.stack([result.mean_rank for result in results.values()], axis=0).sum(axis=0)
     mean_stability = np.stack(
         [result.stability for result in results.values()],
         axis=0,
@@ -499,18 +495,14 @@ def run_feature_selection(
             "selected": list(selected),
             "borda_order": [feature_names[idx] for idx in order],
             "borda_score": {
-                feature_names[idx]: float(borda[idx])
-                for idx in range(len(feature_names))
+                feature_names[idx]: float(borda[idx]) for idx in range(len(feature_names))
             },
             "mean_stability": {
-                feature_names[idx]: float(mean_stability[idx])
-                for idx in range(len(feature_names))
+                feature_names[idx]: float(mean_stability[idx]) for idx in range(len(feature_names))
             },
             "stability_min": float(stability_min),
             "redundancy_threshold": (
-                float(redundancy_threshold)
-                if redundancy_threshold is not None
-                else None
+                float(redundancy_threshold) if redundancy_threshold is not None else None
             ),
             "redundancy_dropped": [
                 {"feature": dropped, "blocked_by": blocker, "r2": round(r2, 4)}

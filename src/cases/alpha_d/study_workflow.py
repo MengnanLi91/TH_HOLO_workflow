@@ -112,14 +112,8 @@ def _module_name(mapping: dict[str, Any], key: str, prefix: str) -> str:
 def _artifact_path(mapping: dict[str, Any], key: str, prefix: str) -> Path:
     raw = _required_string(mapping, key, prefix)
     path = Path(raw)
-    if (
-        path.is_absolute()
-        or not path.parts
-        or any(part in {".", ".."} for part in path.parts)
-    ):
-        raise ValueError(
-            f"{prefix}.{key} must stay beneath the method artifact directory"
-        )
+    if path.is_absolute() or not path.parts or any(part in {".", ".."} for part in path.parts):
+        raise ValueError(f"{prefix}.{key} must stay beneath the method artifact directory")
     return path
 
 
@@ -179,9 +173,7 @@ def parse_alpha_training_method(config: dict[str, Any]) -> AlphaTrainingMethod:
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
 
 
@@ -222,9 +214,7 @@ def _panels(config: dict[str, Any]) -> tuple[Panel, ...]:
         )
         if kind == "indist" and panel.count is None:
             raise ValueError(f"In-distribution panel {tag!r} requires count")
-        if kind == "ood" and (
-            panel.axis is None or panel.side is None or panel.k is None
-        ):
+        if kind == "ood" and (panel.axis is None or panel.side is None or panel.k is None):
             raise ValueError(f"OOD panel {tag!r} requires axis, side, and k")
         panels.append(panel)
     if not panels:
@@ -257,9 +247,7 @@ def _panel_dir(context: RunContext, panel: Panel) -> Path:
     return context.run_dir / "panels" / panel.tag
 
 
-def _case_file(
-    context: RunContext, panel: Panel, name: str = "heldout_cases.txt"
-) -> Path:
+def _case_file(context: RunContext, panel: Panel, name: str = "heldout_cases.txt") -> Path:
     return _panel_dir(context, panel) / name
 
 
@@ -271,9 +259,7 @@ def _python_command(
 ) -> Command:
     return Command(
         argv=tuple(str(value) for value in ("python", *argv)),
-        executor=str(
-            (context.config.get("study") or {}).get("python_executor", "python")
-        ),
+        executor=str((context.config.get("study") or {}).get("python_executor", "python")),
         cwd=cwd or context.repo_root,
         env={"PYTHONPATH": str(context.repo_root / "src")},
         label=label,
@@ -286,11 +272,7 @@ def _write_case_file(path: Path, cases: list[str]) -> None:
 
 
 def _read_case_file(path: Path) -> list[str]:
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _prepare_data(context: RunContext) -> StageResult:
@@ -324,9 +306,7 @@ def _prepare_data(context: RunContext) -> StageResult:
     )
     artifacts = [Artifact(summary.relative_to(context.run_dir), "resolved data input")]
     if mode == "raw_etl":
-        artifacts.append(
-            Artifact(zarr_dir.relative_to(context.run_dir), "processed dataset")
-        )
+        artifacts.append(Artifact(zarr_dir.relative_to(context.run_dir), "processed dataset"))
     return StageResult(artifacts=artifacts, details={"case_count": len(stores)})
 
 
@@ -387,9 +367,7 @@ def _plan_panels(context: RunContext) -> StageResult:
             "alpha_feature_manifest": "artifacts/alpha_feature_selection/manifest.json",
             "alpha_selected_features": "artifacts/alpha_feature_selection/selected_features.txt",
             "alpha_method": method.manifest(),
-            "alpha_checkpoint": (
-                Path("artifacts/alpha") / method.checkpoint
-            ).as_posix(),
+            "alpha_checkpoint": (Path("artifacts/alpha") / method.checkpoint).as_posix(),
             "alpha_run_meta": (Path("artifacts/alpha") / method.run_meta).as_posix(),
             "hpo_overrides": "../../tuning/best_overrides.txt",
             "coupled_dir": "coupled",
@@ -410,9 +388,7 @@ def _plan_panels(context: RunContext) -> StageResult:
     for panel in _panels(context.config):
         for name in ("heldout_cases.txt", "report_cases.txt", "panel_manifest.json"):
             artifacts.append(
-                Artifact(
-                    (_panel_dir(context, panel) / name).relative_to(context.run_dir)
-                )
+                Artifact((_panel_dir(context, panel) / name).relative_to(context.run_dir))
             )
     return StageResult(
         artifacts=artifacts,
@@ -424,9 +400,7 @@ def _select_features_action(panel: Panel):
     def action(context: RunContext) -> StageResult:
         study = context.config.get("study") or {}
         output = _panel_dir(context, panel) / "artifacts" / "alpha_feature_selection"
-        pool = (
-            "[" + ",".join(str(value) for value in study["geometry_feature_pool"]) + "]"
-        )
+        pool = "[" + ",".join(str(value) for value in study["geometry_feature_pool"]) + "]"
         context.run(
             _python_command(
                 context,
@@ -441,11 +415,7 @@ def _select_features_action(panel: Panel):
             )
         )
         return StageResult(
-            artifacts=[
-                Artifact(
-                    output.relative_to(context.run_dir), "feature selection artifacts"
-                )
-            ]
+            artifacts=[Artifact(output.relative_to(context.run_dir), "feature selection artifacts")]
         )
 
     return action
@@ -454,11 +424,7 @@ def _select_features_action(panel: Panel):
 def _best_overrides(params: dict[str, Any]) -> str:
     parts = []
     for key, value in sorted(params.items()):
-        rendered = (
-            value
-            if isinstance(value, str)
-            else json.dumps(value, separators=(",", ":"))
-        )
+        rendered = value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
         parts.append(f"{key}={rendered}")
     return " ".join(parts)
 
@@ -501,9 +467,7 @@ def _tune_alpha_action(method: AlphaTrainingMethod, reference: Panel):
                 raise FileNotFoundError(f"HPO did not produce {params_path}")
             params = json.loads(params_path.read_text(encoding="utf-8"))
             _atomic_json(tuning / "best_params.json", params)
-        (tuning / "best_overrides.txt").write_text(
-            _best_overrides(params) + "\n", encoding="utf-8"
-        )
+        (tuning / "best_overrides.txt").write_text(_best_overrides(params) + "\n", encoding="utf-8")
         return StageResult(
             artifacts=[Artifact("tuning", f"frozen {method.method_id} parameters")],
             details={"method": method.manifest()},
@@ -543,9 +507,7 @@ def _train_direct_action(panel: Panel):
         )
         direct = artifact_root / "direct"
         return StageResult(
-            artifacts=[
-                Artifact(direct.relative_to(context.run_dir), "direct regression")
-            ]
+            artifacts=[Artifact(direct.relative_to(context.run_dir), "direct regression")]
         )
 
     return action
@@ -562,18 +524,12 @@ def _require_alpha_training_contract(
     checkpoint = alpha / method.checkpoint
     run_meta_path = alpha / method.run_meta
     if not checkpoint.is_file() or checkpoint.stat().st_size == 0:
-        raise ValueError(
-            f"{method.artifact_contract} requires a nonempty checkpoint: {checkpoint}"
-        )
+        raise ValueError(f"{method.artifact_contract} requires a nonempty checkpoint: {checkpoint}")
     if not run_meta_path.is_file():
-        raise ValueError(
-            f"{method.artifact_contract} requires training metadata: {run_meta_path}"
-        )
+        raise ValueError(f"{method.artifact_contract} requires training metadata: {run_meta_path}")
     metadata = json.loads(run_meta_path.read_text(encoding="utf-8"))
     if metadata.get("training_run_meta_schema") != 2:
-        raise ValueError(
-            f"{method.artifact_contract} requires training_run_meta_schema 2"
-        )
+        raise ValueError(f"{method.artifact_contract} requires training_run_meta_schema 2")
     if metadata.get("adapter") != "profile":
         raise ValueError(f"{method.artifact_contract} requires adapter='profile'")
     if not isinstance(metadata.get("entrypoint"), str) or not metadata["entrypoint"]:
@@ -584,8 +540,7 @@ def _require_alpha_training_contract(
         raise ValueError(f"{method.artifact_contract} requires a data metadata object")
     if data.get("output_columns") != ["signed_log1p_alpha_D"]:
         raise ValueError(
-            f"{method.artifact_contract} requires output_columns="
-            "['signed_log1p_alpha_D']"
+            f"{method.artifact_contract} requires output_columns=['signed_log1p_alpha_D']"
         )
     input_columns = data.get("input_columns")
     if (
@@ -595,15 +550,11 @@ def _require_alpha_training_contract(
     ):
         raise ValueError(f"{method.artifact_contract} requires nonempty input_columns")
     if not isinstance(data.get("effective"), dict):
-        raise ValueError(
-            f"{method.artifact_contract} requires effective dataset metadata"
-        )
+        raise ValueError(f"{method.artifact_contract} requires effective dataset metadata")
     if bool(data.get("normalize", False)):
         stats = data.get("norm_stats")
         if not isinstance(stats, dict):
-            raise ValueError(
-                f"{method.artifact_contract} requires normalization statistics"
-            )
+            raise ValueError(f"{method.artifact_contract} requires normalization statistics")
         means = stats.get("x_mean")
         stds = stats.get("x_std")
         if (
@@ -613,8 +564,7 @@ def _require_alpha_training_contract(
             or len(stds) != len(input_columns)
         ):
             raise ValueError(
-                f"{method.artifact_contract} normalization statistics do not match "
-                "input_columns"
+                f"{method.artifact_contract} normalization statistics do not match input_columns"
             )
         if not all(math.isfinite(float(value)) for value in (*means, *stds)) or not all(
             float(value) > 0 for value in stds
@@ -639,15 +589,8 @@ def _alpha_training_validator(panel: Panel, method: AlphaTrainingMethod):
 def _train_alpha_action(panel: Panel, method: AlphaTrainingMethod):
     def action(context: RunContext) -> StageResult:
         panel_dir = _panel_dir(context, panel)
-        feature_file = (
-            panel_dir
-            / "artifacts"
-            / "alpha_feature_selection"
-            / "selected_features.txt"
-        )
-        overrides = (context.run_dir / "tuning" / "best_overrides.txt").read_text(
-            encoding="utf-8"
-        )
+        feature_file = panel_dir / "artifacts" / "alpha_feature_selection" / "selected_features.txt"
+        overrides = (context.run_dir / "tuning" / "best_overrides.txt").read_text(encoding="utf-8")
         artifact_root = panel_dir / "artifacts"
         argv: list[str | Path] = [
             "-m",
@@ -685,33 +628,23 @@ def _require_export_case(
 ) -> None:
     sidecar = output.with_suffix(".meta.json")
     if not output.is_file() or output.stat().st_size == 0:
-        raise ValueError(
-            f"{method.export.contract} requires a nonempty CSV for {panel.tag}/{case}"
-        )
+        raise ValueError(f"{method.export.contract} requires a nonempty CSV for {panel.tag}/{case}")
     with output.open(newline="", encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
         if reader.fieldnames != ["z", "F"]:
-            raise ValueError(
-                f"{method.export.contract} requires CSV columns ['z', 'F']"
-            )
+            raise ValueError(f"{method.export.contract} requires CSV columns ['z', 'F']")
         rows = list(reader)
-    if not rows or not all(
-        math.isfinite(float(row[axis])) for row in rows for axis in ("z", "F")
-    ):
+    if not rows or not all(math.isfinite(float(row[axis])) for row in rows for axis in ("z", "F")):
         raise ValueError(
-            f"{method.export.contract} requires finite profile rows for "
-            f"{panel.tag}/{case}"
+            f"{method.export.contract} requires finite profile rows for {panel.tag}/{case}"
         )
     metadata = json.loads(sidecar.read_text(encoding="utf-8"))
     if metadata.get("case_id") != case:
-        raise ValueError(
-            f"{method.export.contract} sidecar case mismatch for {panel.tag}/{case}"
-        )
+        raise ValueError(f"{method.export.contract} sidecar case mismatch for {panel.tag}/{case}")
     for key in ("delta_p_surrogate", "delta_p_truth"):
         if not math.isfinite(float(metadata[key])):
             raise ValueError(
-                f"{method.export.contract} requires finite {key} for "
-                f"{panel.tag}/{case}"
+                f"{method.export.contract} requires finite {key} for {panel.tag}/{case}"
             )
 
 
@@ -719,9 +652,7 @@ def _require_export_contract(
     context: RunContext, panel: Panel, method: AlphaTrainingMethod
 ) -> None:
     for case in _read_case_file(_case_file(context, panel, "report_cases.txt")):
-        output = (
-            _panel_dir(context, panel) / "coupled" / case / "forchheimer_profile.csv"
-        )
+        output = _panel_dir(context, panel) / "coupled" / case / "forchheimer_profile.csv"
         _require_export_case(output, case, panel, method)
 
 
@@ -766,9 +697,7 @@ def _export_action(panel: Panel, method: AlphaTrainingMethod):
             )
         _require_export_contract(context, panel, method)
         return StageResult(
-            artifacts=[
-                Artifact(coupled.relative_to(context.run_dir), "coupling profiles")
-            ],
+            artifacts=[Artifact(coupled.relative_to(context.run_dir), "coupling profiles")],
             details={"method": method.manifest()},
         )
 
@@ -788,10 +717,7 @@ def _validate_moose_output(sidecar: Path, output_csv: Path) -> dict[str, Any]:
 
     pressure = read_moose_inlet_pressure(output_csv)
     result = compare(sidecar_path=sidecar, delta_p_moose=pressure)
-    if (
-        not math.isfinite(float(result["delta_p_moose"]))
-        or float(result["delta_p_moose"]) <= 0
-    ):
+    if not math.isfinite(float(result["delta_p_moose"])) or float(result["delta_p_moose"]) <= 0:
         raise ValueError("MOOSE pressure output must be positive and finite")
     return result
 
@@ -885,9 +811,7 @@ def _run_moose_case(context: RunContext, panel: Panel, case: str) -> bool:
         }
         if result.returncode == 0:
             try:
-                verification = _validate_moose_output(
-                    sidecar, destination / f"moose_{attempt}.csv"
-                )
+                verification = _validate_moose_output(sidecar, destination / f"moose_{attempt}.csv")
                 _atomic_json(destination / f"verify_{attempt}.json", verification)
                 record["verification_status"] = "valid"
                 selected = attempt
@@ -1003,15 +927,11 @@ def _validate_moose_matrix(context: RunContext) -> bool:
         return False
     try:
         for panel, case in _moose_matrix(context):
-            status_path = (
-                _panel_dir(context, panel) / "moose" / case / "run_status.json"
-            )
+            status_path = _panel_dir(context, panel) / "moose" / case / "run_status.json"
             status = json.loads(status_path.read_text(encoding="utf-8"))
             if status.get("status") not in {"success", "failed"}:
                 return False
-            if status["status"] == "success" and not _moose_case_valid(
-                status_path.parent
-            ):
+            if status["status"] == "success" and not _moose_case_valid(status_path.parent):
                 return False
         return True
     except (KeyError, OSError, TypeError, ValueError):
@@ -1050,9 +970,7 @@ def _published_manifest(context: RunContext) -> dict[str, Any]:
     if workflow_manifest["stages"]["summarize"].get("status") != "succeeded":
         raise ValueError("Refusing to publish before summarize succeeds")
     report = json.loads(
-        (context.run_dir / "report" / "pressure_drop_comparison.json").read_text(
-            encoding="utf-8"
-        )
+        (context.run_dir / "report" / "pressure_drop_comparison.json").read_text(encoding="utf-8")
     )
     figures = []
     for raw in (context.config.get("publish") or {}).get("files") or []:
@@ -1064,9 +982,7 @@ def _published_manifest(context: RunContext) -> dict[str, Any]:
                 "sha256": _sha256(source),
             }
         )
-    matrix = json.loads(
-        (context.run_dir / "moose_matrix.json").read_text(encoding="utf-8")
-    )
+    matrix = json.loads((context.run_dir / "moose_matrix.json").read_text(encoding="utf-8"))
     workflow_contract = {
         "workflow_id": workflow_manifest["workflow_id"],
         "workflow_version": workflow_manifest["workflow_version"],
@@ -1121,16 +1037,11 @@ def _publish(context: RunContext, check: bool) -> StageResult:
         ):
             drift.append(str(manifest_path))
         if drift:
-            raise ValueError(
-                "Published alpha-D artifacts have drifted: " + ", ".join(drift)
-            )
+            raise ValueError("Published alpha-D artifacts have drifted: " + ", ".join(drift))
     else:
         _atomic_json(manifest_path, expected)
     return StageResult(
-        artifacts=[
-            Artifact(path, "published result")
-            for path in (*destinations, manifest_path)
-        ],
+        artifacts=[Artifact(path, "published result") for path in (*destinations, manifest_path)],
         details={"checked": check, "files": len(destinations)},
     )
 
@@ -1144,9 +1055,7 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
     panel_map = {panel.tag: panel for panel in panels}
     reference_tag = method.hpo.reference_panel
     if reference_tag not in panel_map:
-        raise ValueError(
-            f"training.alpha.hpo.reference_panel {reference_tag!r} is not a panel"
-        )
+        raise ValueError(f"training.alpha.hpo.reference_panel {reference_tag!r} is not a panel")
     reference = panel_map[reference_tag]
     stages: list[Stage] = [
         Stage(
@@ -1196,8 +1105,7 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                     _train_alpha_action(panel, method),
                     dependencies=(f"panel.{panel.tag}.select_features", "tune_alpha"),
                     description=(
-                        f"train held-out alpha-D method {method.method_id} with "
-                        "frozen settings"
+                        f"train held-out alpha-D method {method.method_id} with frozen settings"
                     ),
                     validator=_alpha_training_validator(panel, method),
                 ),
@@ -1205,9 +1113,7 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                     export,
                     _export_action(panel, method),
                     dependencies=(alpha,),
-                    description=(
-                        f"export {method.method_id} through {method.export.contract}"
-                    ),
+                    description=(f"export {method.method_id} through {method.export.contract}"),
                     validator=_export_validator(panel, method),
                 ),
             )
@@ -1226,8 +1132,7 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                 "summarize",
                 _summarize,
                 dependencies=tuple(
-                    ["solve_moose"]
-                    + [f"panel.{panel.tag}.train_direct" for panel in panels]
+                    ["solve_moose"] + [f"panel.{panel.tag}.train_direct" for panel in panels]
                 ),
                 description="assemble distinct direct, integrated, and coupled evidence",
             ),

@@ -155,9 +155,7 @@ class GraphAdapter(ModelAdapter):
     ) -> tuple[torch.Tensor, int]:
         batch_obj = self._last_batch
         if batch_obj is None:
-            raise RuntimeError(
-                "GraphAdapter has no batch metadata for metric accumulation."
-            )
+            raise RuntimeError("GraphAdapter has no batch metadata for metric accumulation.")
 
         if pred.shape != target.shape:
             raise ValueError(
@@ -177,14 +175,10 @@ class GraphAdapter(ModelAdapter):
         graph_sum = torch.zeros(
             (num_graphs, squared.shape[1]), dtype=squared.dtype, device=squared.device
         )
-        graph_count = torch.zeros(
-            num_graphs, dtype=squared.dtype, device=squared.device
-        )
+        graph_count = torch.zeros(num_graphs, dtype=squared.dtype, device=squared.device)
 
         graph_sum.index_add_(0, graph_ids, squared)
-        graph_count.index_add_(
-            0, graph_ids, torch.ones_like(graph_ids, dtype=squared.dtype)
-        )
+        graph_count.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=squared.dtype))
         graph_mean = graph_sum / graph_count.clamp_min(1.0).unsqueeze(-1)
 
         field_se = graph_mean.sum(dim=0)
@@ -214,9 +208,7 @@ class PointwiseAdapter(ModelAdapter):
             if not cols_path.exists():
                 raise FileNotFoundError(f"input_columns_file not found: {cols_path}")
             input_columns = [
-                line.strip()
-                for line in cols_path.read_text().splitlines()
-                if line.strip()
+                line.strip() for line in cols_path.read_text().splitlines() if line.strip()
             ]
             if not input_columns:
                 raise ValueError(f"input_columns_file is empty: {cols_path}")
@@ -238,9 +230,7 @@ class PointwiseAdapter(ModelAdapter):
         eng_builder = None
         if eng_ep is not None:
             module_name, fn_name = str(eng_ep).split(":", 1)
-            eng_names, eng_builder = getattr(
-                importlib.import_module(module_name), fn_name
-            )()
+            eng_names, eng_builder = getattr(importlib.import_module(module_name), fn_name)()
 
         tt_ep = data_cfg.get("target_transform")
         target_transform = None
@@ -259,9 +249,7 @@ class PointwiseAdapter(ModelAdapter):
             downstream_weight=_opt_float("downstream_weight"),
             include_case_idx=bool(data_cfg.get("include_case_idx", False)),
             exclude_cases=exclude_cases,
-            local_velocity_normalization=bool(
-                data_cfg.get("local_velocity_normalization", False)
-            ),
+            local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
             min_Dr=_opt_float("min_Dr"),
             target_transform=target_transform,
             engineered_feature_names=eng_names,

@@ -191,9 +191,7 @@ def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
 
     raw_x = np.stack(columns, axis=0)  # (C, L)
     normalize = bool(
-        run_meta["data"].get(
-            "normalize", run_meta["data"].get("norm_stats") is not None
-        )
+        run_meta["data"].get("normalize", run_meta["data"].get("norm_stats") is not None)
     )
     if normalize:
         stats = run_meta["data"].get("norm_stats") or {}
@@ -365,9 +363,7 @@ def main(argv: list[str] | None = None) -> int:
     # ---- Write outputs ----
     # z is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
     # No pre-shift needed; PiecewiseLinear spans [0, roi_length].
-    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get(
-        "input_columns", []
-    )
+    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
     sidecar = {
         "coupling_export_schema": 1,
         "case_id": case.case_id,

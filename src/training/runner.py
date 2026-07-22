@@ -92,9 +92,7 @@ def _resolve_path(raw_path: str | Path) -> Path:
     return Path(raw_path).expanduser().resolve()
 
 
-def _resolve_metrics_out_path(
-    output_cfg: dict[str, Any], checkpoint_path: Path
-) -> Path | None:
+def _resolve_metrics_out_path(output_cfg: dict[str, Any], checkpoint_path: Path) -> Path | None:
     """Resolve where evaluation metrics JSON should be written."""
     metrics_out_value = output_cfg.get("metrics_out")
     if metrics_out_value is None:
@@ -147,9 +145,7 @@ def build_experiment(
     )
 
     if not hasattr(experiment, "training_step") or not hasattr(experiment, "eval_step"):
-        raise TypeError(
-            "Experiment class must define training_step() and eval_step() methods."
-        )
+        raise TypeError("Experiment class must define training_step() and eval_step() methods.")
 
     return experiment
 
@@ -321,9 +317,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     lr = float(training_cfg.get("lr", 1.0e-3))
     weight_decay = float(training_cfg.get("weight_decay", 0.0))
     if weight_decay > 0:
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=lr, weight_decay=weight_decay
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -339,12 +333,8 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         **experiment_kwargs,
     )
 
-    split_cfg = _normalize_split_cfg(
-        dict(data_cfg.get("split") or {}), default_seed=seed
-    )
-    num_cases = (
-        len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
-    )
+    split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
+    num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=num_cases,
         split_cfg=split_cfg,
@@ -366,9 +356,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         val_case_idx = shuffled_train[:n_val_cases]
         train_case_idx = shuffled_train[n_val_cases:]
     if not train_case_idx:
-        raise ValueError(
-            "Training split is empty after validation split. Reduce val_ratio."
-        )
+        raise ValueError("Training split is empty after validation split. Reduce val_ratio.")
 
     # Pointwise normalization must be fit on training cases only.
     if adapter_name == "pointwise" and bool(data_cfg.get("normalize", False)):
@@ -378,9 +366,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
 
     if hasattr(dataset, "subset_by_case_indices"):
         train_dataset = dataset.subset_by_case_indices(train_case_idx)
-        val_dataset = (
-            dataset.subset_by_case_indices(val_case_idx) if use_early_stopping else None
-        )
+        val_dataset = dataset.subset_by_case_indices(val_case_idx) if use_early_stopping else None
     else:
         train_dataset = Subset(dataset, train_case_idx)
         val_dataset = Subset(dataset, val_case_idx) if use_early_stopping else None
@@ -456,9 +442,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             f"train case(s), {len(test_idx)} test case(s), device={device}."
         )
     if use_early_stopping:
-        print(
-            f"Early stopping enabled (patience={patience}, val_cases={len(val_case_idx)})."
-        )
+        print(f"Early stopping enabled (patience={patience}, val_cases={len(val_case_idx)}).")
 
     best_val_loss = float("inf")
     best_state_dict = None
@@ -510,9 +494,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
                     f"val_loss={val_loss:.6e} patience={patience_counter}/{patience}"
                 )
             if patience_counter >= patience:
-                print(
-                    f"Early stopping at epoch {epoch} (best val_loss={best_val_loss:.6e})."
-                )
+                print(f"Early stopping at epoch {epoch} (best val_loss={best_val_loss:.6e}).")
                 break
         else:
             if epoch_progress is not None:
@@ -531,9 +513,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     model.save(str(checkpoint_path))
 
-    model_params_resolved = _collect_resolved_model_params(
-        model, model_params, dataset_info
-    )
+    model_params_resolved = _collect_resolved_model_params(model, model_params, dataset_info)
     split_meta: dict[str, Any] = {
         "strategy": split_cfg["strategy"],
         "train_sims": train_sims,
@@ -566,9 +546,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "dataset_entrypoint": data_cfg.get("dataset_entrypoint"),
             "exclude_cases": getattr(dataset, "exclude_cases", []) or [],
             "min_Dr": (
-                float(data_cfg.get("min_Dr"))
-                if data_cfg.get("min_Dr") is not None
-                else None
+                float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None
             ),
             "effective": effective_data,
         }
@@ -644,9 +622,7 @@ def _log_hpo_summary(results: dict[str, Any]) -> None:
     print(f"\nHPO complete: {n_complete} finished, {n_pruned} pruned, {n_trials} total")
 
     if n_complete > 0:
-        print(
-            f"Best trial #{results['best_trial_number']}: val_loss={results['best_value']:.6e}"
-        )
+        print(f"Best trial #{results['best_trial_number']}: val_loss={results['best_value']:.6e}")
         print(f"Best params: {json.dumps(results['best_params'], indent=2)}")
         print(f"Artifacts saved to: {results['output_dir']}")
 
@@ -684,9 +660,7 @@ def _indices_for_test_split(
         sim_to_idx = {name: idx for idx, name in enumerate(sim_names)}
         unknown_test = [name for name in test_sims if name not in sim_to_idx]
         if unknown_test:
-            raise ValueError(
-                f"run_meta split contains unknown test sim name(s): {unknown_test}"
-            )
+            raise ValueError(f"run_meta split contains unknown test sim name(s): {unknown_test}")
         test_idx = [sim_to_idx[name] for name in test_sims]
         return test_idx, train_sims, test_sims
 
@@ -762,9 +736,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
 
     dataset = adapter.build_dataset(data_cfg)
     split_meta = dict(run_meta.get("split") or {})
-    test_idx, train_sims, test_sims = _indices_for_test_split(
-        dataset.sim_names, split_meta
-    )
+    test_idx, train_sims, test_sims = _indices_for_test_split(dataset.sim_names, split_meta)
     if hasattr(dataset, "subset_by_case_indices"):
         eval_dataset = dataset.subset_by_case_indices(test_idx)
     else:
@@ -795,13 +767,11 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     model = module_cls.from_checkpoint(str(checkpoint_path)).to(device)
 
     loss_name = str(run_meta.get("training", {}).get("loss", "mse"))
-    loss_fn = get_loss_fn(
-        loss_name if loss_name in {"mse", "l1", "relative_l2"} else "mse"
-    )
+    loss_fn = get_loss_fn(loss_name if loss_name in {"mse", "l1", "relative_l2"} else "mse")
 
-    experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get(
-        "training", {}
-    ).get("experiment")
+    experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get("training", {}).get(
+        "experiment"
+    )
     experiment = _build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
@@ -870,9 +840,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                     vel_y_field=str(output_cfg.get("plot_velocity_y_field", "vel_y")),
                 )
             elif adapter.family == "pointwise":
-                plot_cases = select_best_worst_pointwise_cases(
-                    extended_metrics, output_fields
-                )
+                plot_cases = select_best_worst_pointwise_cases(extended_metrics, output_fields)
                 plot_files = save_pointwise_profile_plots(
                     model=model,
                     dataset=eval_dataset,
@@ -885,9 +853,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                     baseline_fn=experiment.baseline_for_plotting,
                 )
             elif adapter.family == "profile":
-                plot_cases = select_best_worst_pointwise_cases(
-                    extended_metrics, output_fields
-                )
+                plot_cases = select_best_worst_pointwise_cases(extended_metrics, output_fields)
                 plot_files = save_profile_prediction_plots(
                     model=model,
                     dataset=eval_dataset,
@@ -955,9 +921,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         ],
         "plots": {
             "plot_dir": (
-                str(_resolve_path(str(plot_dir_value)))
-                if plot_dir_value is not None
-                else None
+                str(_resolve_path(str(plot_dir_value))) if plot_dir_value is not None else None
             ),
             "num_saved": len(plot_files),
             "files": plot_files,

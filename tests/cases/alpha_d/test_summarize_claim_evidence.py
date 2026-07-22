@@ -40,16 +40,12 @@ def _write_case_artifacts(
     force_test = heldout if force_test is None else force_test
 
     (tag_dir / "heldout_cases.txt").parent.mkdir(parents=True, exist_ok=True)
-    (tag_dir / "heldout_cases.txt").write_text(
-        "\n".join(heldout) + "\n", encoding="utf-8"
-    )
+    (tag_dir / "heldout_cases.txt").write_text("\n".join(heldout) + "\n", encoding="utf-8")
     (tag_dir / "heldout_cases_hydra.txt").write_text(
         "[" + ",".join(heldout) + "]\n",
         encoding="utf-8",
     )
-    (tag_dir / "report_cases.txt").write_text(
-        "\n".join(report_cases) + "\n", encoding="utf-8"
-    )
+    (tag_dir / "report_cases.txt").write_text("\n".join(report_cases) + "\n", encoding="utf-8")
     (tag_dir / "report_cases_hydra.txt").write_text(
         "[" + ",".join(report_cases) + "]\n",
         encoding="utf-8",
@@ -127,9 +123,7 @@ def _write_case_artifacts(
     if include_moose:
         case_moose_dir = moose_dir / heldout[0]
         (case_moose_dir / "moose_primary.csv").parent.mkdir(parents=True, exist_ok=True)
-        (case_moose_dir / "moose_primary.csv").write_text(
-            "time,inlet-p\n0,1.0\n", encoding="utf-8"
-        )
+        (case_moose_dir / "moose_primary.csv").write_text("time,inlet-p\n0,1.0\n", encoding="utf-8")
         _write_json(
             case_moose_dir / "run_status.json",
             {
@@ -163,16 +157,10 @@ def test_summarize_study_computes_paired_statistics(tmp_path):
     summary = result["summaries"][0]
     assert summary["n"] == 2
     assert summary["predictors"]["coupled"]["mean_abs_relerr"] == pytest.approx(0.1)
-    assert summary["predictors"]["random_forest"]["mean_abs_relerr"] == pytest.approx(
-        0.125
-    )
+    assert summary["predictors"]["random_forest"]["mean_abs_relerr"] == pytest.approx(0.125)
     assert summary["paired"]["random_forest"]["coupled_win_rate"] == pytest.approx(0.5)
-    assert summary["paired"]["random_forest"]["mean_abs_error_diff"] == pytest.approx(
-        -0.025
-    )
-    assert result["moose_spotchecks"][0][
-        "moose_minus_integral_relerr"
-    ] == pytest.approx(1.0 / 90.0)
+    assert summary["paired"]["random_forest"]["mean_abs_error_diff"] == pytest.approx(-0.025)
+    assert result["moose_spotchecks"][0]["moose_minus_integral_relerr"] == pytest.approx(1.0 / 90.0)
 
 
 def test_summarize_study_reads_new_panel_and_moose_status_schemas(tmp_path):
@@ -223,9 +211,7 @@ def test_summarize_study_uses_report_cases_for_statistics(tmp_path):
     assert result["consistency"][0]["heldout_count"] == len(heldout)
     assert result["consistency"][0]["report_count"] == 1
     assert result["summaries"][0]["n"] == 1
-    assert result["summaries"][0]["predictors"]["coupled"][
-        "mean_abs_relerr"
-    ] == pytest.approx(0.1)
+    assert result["summaries"][0]["predictors"]["coupled"]["mean_abs_relerr"] == pytest.approx(0.1)
 
 
 def test_summarize_study_fails_when_report_cases_are_not_held_out(tmp_path):
@@ -321,12 +307,7 @@ def test_summarize_study_fails_on_holdout_mismatch(tmp_path):
 def test_summarize_study_reports_missing_coupled_sidecar(tmp_path):
     heldout = _write_case_artifacts(tmp_path)
     sidecar = (
-        tmp_path
-        / "indist"
-        / "target"
-        / "coupled"
-        / heldout[1]
-        / "forchheimer_profile.meta.json"
+        tmp_path / "indist" / "target" / "coupled" / heldout[1] / "forchheimer_profile.meta.json"
     )
     sidecar.unlink()
 
@@ -351,8 +332,7 @@ def test_primary_low_dr_without_moose_is_labeled_integral_only(tmp_path):
     result = summarize_study(tmp_path)
 
     assert any(
-        "No validated primary low-Dr MOOSE-coupled result" in line
-        for line in result["conclusion"]
+        "No validated primary low-Dr MOOSE-coupled result" in line for line in result["conclusion"]
     )
 
 
@@ -364,9 +344,7 @@ def test_summarize_study_rejects_zero_moose_result(tmp_path):
         axis="Dr",
         side="low",
     )
-    verifier = (
-        tmp_path / "axes" / "Dr_low_pure" / "moose" / heldout[0] / "verify_delta_p.json"
-    )
+    verifier = tmp_path / "axes" / "Dr_low_pure" / "moose" / heldout[0] / "verify_delta_p.json"
     payload = json.loads(verifier.read_text(encoding="utf-8"))
     payload["delta_p_moose"] = 0.0
     _write_json(verifier, payload)
@@ -377,8 +355,7 @@ def test_summarize_study_rejects_zero_moose_result(tmp_path):
     assert result["moose_failures"][0]["case"] == heldout[0]
     assert "not finite and positive" in result["moose_failures"][0]["reason"]
     assert any(
-        "No validated primary low-Dr MOOSE-coupled result" in line
-        for line in result["conclusion"]
+        "No validated primary low-Dr MOOSE-coupled result" in line for line in result["conclusion"]
     )
 
 
@@ -413,9 +390,7 @@ def test_claim_evidence_runbook_stronger_dry_runs():
         [
             "bash",
             "-lc",
-            (
-                f"export CLAIM_DRY_RUN=1 STUDY_TAG=dryrun; source {script}; claim_stronger_matrix"
-            ),
+            (f"export CLAIM_DRY_RUN=1 STUDY_TAG=dryrun; source {script}; claim_stronger_matrix"),
         ],
         cwd=repo,
         check=True,
@@ -530,9 +505,7 @@ def test_claim_moose_spotcheck_writes_validated_case_artifacts(tmp_path):
 
     assert completed.returncode == 0
     status = json.loads((case_dir / "run_status.json").read_text(encoding="utf-8"))
-    verifier = json.loads(
-        (case_dir / "verify_delta_p.json").read_text(encoding="utf-8")
-    )
+    verifier = json.loads((case_dir / "verify_delta_p.json").read_text(encoding="utf-8"))
     assert status["status"] == "success"
     assert status["selected_attempt"] == "primary"
     assert verifier["verification_status"] == "valid"

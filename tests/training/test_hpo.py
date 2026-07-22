@@ -37,15 +37,11 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         root = zarr.open(store=str(store_path), mode="w")
         root.create_array(
             "features",
-            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-                np.float32
-            ),
+            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32),
         )
         root.create_array(
             "targets",
-            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-                np.float32
-            ),
+            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32),
         )
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
@@ -115,9 +111,7 @@ class TestSearchSpace:
 
         base = {"model": {"name": "mlp"}, "training": {"lr": 0.001}}
         with pytest.raises(ValueError, match="not allowed"):
-            validate_search_space(
-                {"model.name": {"type": "categorical", "choices": ["fno"]}}, base
-            )
+            validate_search_space({"model.name": {"type": "categorical", "choices": ["fno"]}}, base)
 
     def test_validate_rejects_nonexistent_path(self) -> None:
         from training.hpo.search_space import validate_search_space
@@ -218,9 +212,7 @@ class TestObjective:
 
         prepared = prepare_training(base_cfg)
         dataset = prepared["dataset"]
-        split_cfg = normalize_split_cfg(
-            dict(base_cfg["data"]["split"]), default_seed=42
-        )
+        split_cfg = normalize_split_cfg(dict(base_cfg["data"]["split"]), default_seed=42)
         train_idx, test_idx, _, _ = split_indices(
             num_cases=len(dataset.sim_names),
             split_cfg=split_cfg,

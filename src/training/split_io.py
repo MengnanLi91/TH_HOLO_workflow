@@ -6,19 +6,13 @@ from typing import Any
 
 
 def _clean_sim_names(sim_names: list[str] | tuple[str, ...]) -> list[str]:
-    cleaned = [
-        str(name).strip().removesuffix(".zarr")
-        for name in sim_names
-        if str(name).strip()
-    ]
+    cleaned = [str(name).strip().removesuffix(".zarr") for name in sim_names if str(name).strip()]
     if not cleaned:
         raise ValueError("Expected at least one simulation name.")
     return cleaned
 
 
-def write_sim_name_list(
-    path: str | Path, sim_names: list[str] | tuple[str, ...]
-) -> Path:
+def write_sim_name_list(path: str | Path, sim_names: list[str] | tuple[str, ...]) -> Path:
     """Write one simulation name per line and return the resolved output path."""
     cleaned = _clean_sim_names(sim_names)
     output_path = Path(path).expanduser().resolve()

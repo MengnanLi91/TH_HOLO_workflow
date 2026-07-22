@@ -45,9 +45,7 @@ def parse_case_params(name: str) -> CaseParams:
     def f(x: str) -> float:
         return float(x.replace("p", "."))
 
-    return CaseParams(
-        name=name, Re=f(parts["Re"]), Dr=f(parts["Dr"]), Lr=f(parts["Lr"])
-    )
+    return CaseParams(name=name, Re=f(parts["Re"]), Dr=f(parts["Dr"]), Lr=f(parts["Lr"]))
 
 
 def enumerate_cases(zarr_dir: str | Path) -> list[CaseParams]:
@@ -79,8 +77,7 @@ def _inner_axis_values(
         return vals
     if 2 * guard_k >= len(vals):
         raise ValueError(
-            f"guard_k={guard_k} leaves no interior {axis} values "
-            f"from {len(vals)} distinct levels"
+            f"guard_k={guard_k} leaves no interior {axis} values from {len(vals)} distinct levels"
         )
     return vals[guard_k:-guard_k]
 
@@ -128,9 +125,7 @@ def build_split(
     shell_set = set(shell_vals)
 
     shell = [c for c in pool if getattr(c, axis) in shell_set]
-    interior = [
-        c for c in usable if c.Dr >= dr_floor and getattr(c, axis) not in shell_set
-    ]
+    interior = [c for c in usable if c.Dr >= dr_floor and getattr(c, axis) not in shell_set]
     guard_axes = tuple(ax for ax in _parse_axes(report_guard_axes) if ax != axis)
     report = list(shell)
     if guard_axes and report_guard_k > 0:
@@ -149,10 +144,7 @@ def build_split(
         report = [
             c
             for c in shell
-            if all(
-                getattr(c, guard_axis) in values
-                for guard_axis, values in allowed.items()
-            )
+            if all(getattr(c, guard_axis) in values for guard_axis, values in allowed.items())
         ]
     return SplitResult(
         interior=interior,
@@ -187,11 +179,7 @@ def build_indist_panel(
         for axis in AXES
     }
     candidates = sorted(
-        (
-            c
-            for c in usable
-            if all(getattr(c, axis) in values for axis, values in allowed.items())
-        ),
+        (c for c in usable if all(getattr(c, axis) in values for axis, values in allowed.items())),
         key=lambda c: (c.Re, c.Dr, c.Lr, c.name),
     )
     if not candidates:
@@ -260,9 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if ns.axis is None or ns.side is None or ns.k is None:
-        p.error(
-            "--axis, --side, and --k are required unless emitting an in-distribution panel"
-        )
+        p.error("--axis, --side, and --k are required unless emitting an in-distribution panel")
 
     res = build_split(
         cases,

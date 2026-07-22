@@ -153,9 +153,7 @@ def test_end_to_end_coupling_within_tolerance(tmp_path):
     staged_csv = moose_work_dir / "forchheimer_profile.csv"
     shutil.copyfile(MOOSE_DIR / "2d-porous-flow_alphaD.i", staged_input)
     shutil.copyfile(out_csv, staged_csv)
-    delta_p_initial = json.loads(sidecar.read_text(encoding="utf-8"))[
-        "delta_p_surrogate"
-    ]
+    delta_p_initial = json.loads(sidecar.read_text(encoding="utf-8"))["delta_p_surrogate"]
 
     # 3) Run MOOSE — runs inside the MOOSE SIF (libwasphit, libvtk)
     pp_csv = tmp_path / "2d-porous-flow_alphaD_out.csv"

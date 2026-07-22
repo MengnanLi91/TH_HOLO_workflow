@@ -63,9 +63,7 @@ def _region_flags(
     """
     upstream = (z_hat < z_norm_throat_start).astype(np.float32)
     downstream = (z_hat > z_norm_throat_end).astype(np.float32)
-    throat = ((z_hat >= z_norm_throat_start) & (z_hat <= z_norm_throat_end)).astype(
-        np.float32
-    )
+    throat = ((z_hat >= z_norm_throat_start) & (z_hat <= z_norm_throat_end)).astype(np.float32)
     return {
         "is_upstream": upstream,
         "is_throat": throat,
@@ -195,11 +193,7 @@ class AlphaDTransformation(DataTransformation):
         counts = np.zeros(self.n_stations, dtype=np.int32)
 
         for s in range(self.n_stations):
-            mask = (
-                roi_mask
-                & (elem_z >= station_edges[s])
-                & (elem_z < station_edges[s + 1])
-            )
+            mask = roi_mask & (elem_z >= station_edges[s]) & (elem_z < station_edges[s + 1])
             if mask.sum() == 0:
                 continue
             # Area-weighted average: weight by r for axisymmetric
@@ -218,17 +212,13 @@ class AlphaDTransformation(DataTransformation):
         # Skip if too many empty stations
         valid = counts > 0
         if valid.sum() < 5:
-            logger.warning(
-                "Skipping %s: too few valid stations (%d).", case_name, valid.sum()
-            )
+            logger.warning("Skipping %s: too few valid stations (%d).", case_name, valid.sum())
             return None
 
         # Interpolate missing stations
         if not valid.all():
             p_avg[~valid] = np.interp(station_z[~valid], station_z[valid], p_avg[valid])
-            vz_avg[~valid] = np.interp(
-                station_z[~valid], station_z[valid], vz_avg[valid]
-            )
+            vz_avg[~valid] = np.interp(station_z[~valid], station_z[valid], vz_avg[valid])
 
         # --- Compute pressure gradient dP/dz ---
         dz = station_z[1] - station_z[0]
@@ -238,9 +228,7 @@ class AlphaDTransformation(DataTransformation):
         # alpha_D = -dP/dz / (0.5 * rho * V_bulk^2 / D_h)
         # V_bulk = inlet_u = 1.0 m/s (from simulation.i)
         V_bulk = 1.0
-        D_local = _local_diameter(
-            station_z, z_throat_start, z_throat_end, D_big, D_contraction_m
-        )
+        D_local = _local_diameter(station_z, z_throat_start, z_throat_end, D_big, D_contraction_m)
         D_h = D_local  # hydraulic diameter = pipe diameter for circular cross-section
 
         # Darcy friction formulation: -dP/dz = alpha_D * (rho * V^2) / (2 * D_h)
@@ -329,9 +317,7 @@ class AlphaDTransformation(DataTransformation):
             ]
         )  # [n_out, 13]
 
-        targets = np.column_stack([log_alpha_D, signed_log1p_alpha_D]).astype(
-            np.float32
-        )
+        targets = np.column_stack([log_alpha_D, signed_log1p_alpha_D]).astype(np.float32)
 
         self.logger.info(
             "  %s: %d stations, delta_p=%.4f Pa, "

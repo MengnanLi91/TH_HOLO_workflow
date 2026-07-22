@@ -79,9 +79,7 @@ def test_runner_resumes_valid_stages_and_reruns_changed_artifacts(tmp_path):
     )
 
     events: list[tuple[str, str]] = []
-    manifest = runner.run(
-        on_stage=lambda stage, state: events.append((stage.name, state))
-    )
+    manifest = runner.run(on_stage=lambda stage, state: events.append((stage.name, state)))
     assert manifest["status"] == "completed_with_partial_results"
     assert calls == {"prepare": 1, "report": 1}
     assert events == [
@@ -148,8 +146,7 @@ def test_runner_validates_outputs_before_marking_first_run_successful(tmp_path):
             Stage(
                 "produce",
                 produce,
-                validator=lambda context: context.resolve("value.txt").read_text()
-                == "valid",
+                validator=lambda context: context.resolve("value.txt").read_text() == "valid",
             ),
         ),
     )

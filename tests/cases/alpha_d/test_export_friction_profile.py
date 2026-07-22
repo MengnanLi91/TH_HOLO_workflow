@@ -329,9 +329,7 @@ def test_stepfence_inserts_duplicate_z_around_each_boundary():
     z = np.array([0.05, 0.18, 0.22, 0.30, 0.40], dtype=np.float64)
     cf = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float64)
     eps = 1e-4
-    z_out, cf_out = _stepfence_porosity_boundaries(
-        z, cf, boundaries=(0.20,), step_eps=eps
-    )
+    z_out, cf_out = _stepfence_porosity_boundaries(z, cf, boundaries=(0.20,), step_eps=eps)
     assert np.all(np.diff(z_out) > 0)
     assert len(z_out) == len(z) + 2
     assert (0.20 - eps) in z_out
@@ -351,9 +349,7 @@ def test_stepfence_handles_two_boundaries():
     z = np.array([0.0, 0.1, 0.18, 0.22, 0.265, 0.28, 0.4], dtype=np.float64)
     cf = np.array([1.0, 1.5, 5.0, 0.7, 1.0, 0.5, 0.2], dtype=np.float64)
     eps = 1e-4
-    z_out, _ = _stepfence_porosity_boundaries(
-        z, cf, boundaries=(0.20, 0.27), step_eps=eps
-    )
+    z_out, _ = _stepfence_porosity_boundaries(z, cf, boundaries=(0.20, 0.27), step_eps=eps)
     assert np.all(np.diff(z_out) > 0)
     assert len(z_out) == len(z) + 4  # two fences × two new rows each
     assert (0.20 - eps) in z_out and (0.20 + eps) in z_out
@@ -367,9 +363,7 @@ def test_stepfence_skips_boundary_outside_csv_range():
 
     z = np.array([0.1, 0.2, 0.3], dtype=np.float64)
     cf = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-    z_out, cf_out = _stepfence_porosity_boundaries(
-        z, cf, boundaries=(0.05, 0.50), step_eps=1e-4
-    )
+    z_out, cf_out = _stepfence_porosity_boundaries(z, cf, boundaries=(0.05, 0.50), step_eps=1e-4)
     np.testing.assert_array_equal(z_out, z)
     np.testing.assert_array_equal(cf_out, cf)
 
@@ -501,8 +495,6 @@ def test_end_to_end_sidecar_records_end_length(tmp_path):
     # F = α_D · porosity² / D_h:
     #   throat:  porosity=Dr², D_h=Dr·D_outer → multiplier = Dr³/D_outer
     #   buffer:  porosity=1,   D_h=D_outer    → multiplier = 1/D_outer
-    assert meta["forchheimer_multiplier_throat"] == pytest.approx(
-        0.522**3 / 0.2, rel=1e-2
-    )
+    assert meta["forchheimer_multiplier_throat"] == pytest.approx(0.522**3 / 0.2, rel=1e-2)
     assert meta["forchheimer_multiplier_buffer"] == pytest.approx(1.0 / 0.2, rel=1e-3)
     assert meta["throat_length_m"] == pytest.approx(0.0733, rel=1e-2)
