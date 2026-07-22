@@ -156,11 +156,11 @@ uv run multifid-workflow publish \
 
 | run artifact | published use |
 |---|---|
-| `report/claim_evidence.json` | result summaries, evidence classes, and coverage in the published-results manifest |
-| `report/claim_evidence.md` | auditable generated comparison report |
+| `report/pressure_drop_comparison.json` | result summaries, evidence classes, and coverage in the published-results manifest |
+| `report/pressure_drop_comparison.md` | auditable generated pressure-drop comparison report |
 | `report/paired_case_errors.csv` | direct scalar regression vs direct alpha-D integration rows |
 | `report/moose_paired_case_errors.csv` | validated MOOSE-coupled alpha-D rows only |
-| `report/claim_error_summary.svg` | `docs/_static/alpha_d_claim_error_summary.svg` |
+| `report/pressure_drop_comparison_errors.svg` | `docs/_static/alpha_d_pressure_drop_comparison_errors.svg` |
 | `moose_matrix.json` | attempted/succeeded/failed coverage in `docs/demo_cases/alpha_d_published_results.json` |
 
 ---

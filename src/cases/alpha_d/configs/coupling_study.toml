@@ -132,5 +132,5 @@ retry = true
 manifest = "docs/demo_cases/alpha_d_published_results.json"
 
 [[publish.files]]
-source = "report/claim_error_summary.svg"
-destination = "docs/_static/alpha_d_claim_error_summary.svg"
+source = "report/pressure_drop_comparison_errors.svg"
+destination = "docs/_static/alpha_d_pressure_drop_comparison_errors.svg"

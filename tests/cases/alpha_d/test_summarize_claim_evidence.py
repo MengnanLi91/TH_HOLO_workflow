@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cases.alpha_d.summarize_claim_evidence import main, summarize_study
+from cases.alpha_d.summarize_pressure_drop_comparison import main, summarize_study
 
 
 def _write_json(path: Path, data: dict):
@@ -206,7 +206,7 @@ def test_summarize_study_reads_new_panel_and_moose_status_schemas(tmp_path):
 
     result = summarize_study(tmp_path)
 
-    assert result["claim_evidence_summary_schema"] == 2
+    assert result["pressure_drop_comparison_summary_schema"] == 1
     assert result["evidence_classes"] == {
         "direct_scalar_regression": ["linear_regression", "random_forest", "mlp"],
         "direct_alpha_d_gradient_integration": "records",
@@ -274,11 +274,11 @@ def test_summarize_study_falls_back_from_legacy_absolute_paths(tmp_path):
 
 def test_summarize_cli_writes_outputs(tmp_path):
     _write_case_artifacts(tmp_path)
-    out_json = tmp_path / "claim_evidence.json"
-    out_md = tmp_path / "claim_evidence.md"
+    out_json = tmp_path / "pressure_drop_comparison.json"
+    out_md = tmp_path / "pressure_drop_comparison.md"
     out_csv = tmp_path / "paired_case_errors.csv"
     out_moose_csv = tmp_path / "moose_paired_case_errors.csv"
-    out_svg = tmp_path / "claim_error_summary.svg"
+    out_svg = tmp_path / "pressure_drop_comparison_errors.svg"
 
     assert (
         main(

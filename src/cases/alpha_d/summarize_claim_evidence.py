@@ -859,7 +859,7 @@ def summarize_study(study_root: Path) -> dict[str, Any]:
     moose_rows = collect_moose_records(manifests, failures=moose_failures)
     conclusion = build_conclusion(summaries, moose_rows, moose_failures, consistency)
     return {
-        "claim_evidence_summary_schema": 2,
+        "pressure_drop_comparison_summary_schema": 1,
         "study_root": str(study_root),
         "evidence_classes": {
             "direct_scalar_regression": list(REGRESSOR_MODELS),

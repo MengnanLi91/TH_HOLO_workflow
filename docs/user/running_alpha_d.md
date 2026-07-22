@@ -153,11 +153,11 @@ and log records; they are not counted as zero-pressure results.
 The primary outputs are:
 
 ```text
-report/claim_evidence.md
-report/claim_evidence.json
+report/pressure_drop_comparison.md
+report/pressure_drop_comparison.json
 report/paired_case_errors.csv
 report/moose_paired_case_errors.csv
-report/claim_error_summary.svg
+report/pressure_drop_comparison_errors.svg
 moose_matrix.json
 ```
 

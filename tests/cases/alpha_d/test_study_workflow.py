@@ -15,10 +15,11 @@ from cases.alpha_d.study_workflow import (
     _publish,
     _require_alpha_training_contract,
     _require_export_contract,
+    _summarize,
     build_workflow,
     parse_alpha_training_method,
 )
-from workflows import RunContext
+from workflows import CommandResult, RunContext
 from workflows.runner import validate_workflow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -28,6 +29,34 @@ CONFIG_PATH = REPO_ROOT / "src/cases/alpha_d/configs/coupling_study.toml"
 def _config():
     with CONFIG_PATH.open("rb") as stream:
         return tomllib.load(stream)
+
+
+def test_summary_stage_writes_pressure_drop_comparison_artifacts(tmp_path):
+    class RecordingExecutor:
+        command = None
+
+        def execute(self, command, *, log_path, command_path):
+            self.command = command
+            return CommandResult(command.argv, 0, log_path, command_path)
+
+    executor = RecordingExecutor()
+    context = RunContext(
+        REPO_ROOT,
+        tmp_path,
+        _config(),
+        "summarize",
+        {"python": executor},
+    )
+
+    result = _summarize(context)
+    command = executor.command.argv
+    output_names = {Path(value).name for value in command}
+
+    assert result.artifacts[0].path == "report"
+    assert "pressure_drop_comparison.json" in output_names
+    assert "pressure_drop_comparison.md" in output_names
+    assert "pressure_drop_comparison_errors.svg" in output_names
+    assert not any("claim_" in value for value in command)
 
 
 def test_alpha_d_workflow_has_published_stage_families():
@@ -477,8 +506,10 @@ def test_publish_is_only_docs_copy_and_check_detects_drift(tmp_path):
     run_dir = repo / "data/workflows/example/run-1"
     report = run_dir / "report"
     report.mkdir(parents=True)
-    (report / "claim_error_summary.svg").write_text("<svg/>\n", encoding="utf-8")
-    (report / "claim_evidence.json").write_text(
+    (report / "pressure_drop_comparison_errors.svg").write_text(
+        "<svg/>\n", encoding="utf-8"
+    )
+    (report / "pressure_drop_comparison.json").write_text(
         json.dumps({"summaries": [{"tag": "panel"}], "conclusion": ["done"]}),
         encoding="utf-8",
     )
@@ -508,7 +539,7 @@ def test_publish_is_only_docs_copy_and_check_detects_drift(tmp_path):
             "manifest": "docs/published.json",
             "files": [
                 {
-                    "source": "report/claim_error_summary.svg",
+                    "source": "report/pressure_drop_comparison_errors.svg",
                     "destination": "docs/_static/summary.svg",
                 }
             ],

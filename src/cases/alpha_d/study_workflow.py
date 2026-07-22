@@ -1024,19 +1024,19 @@ def _summarize(context: RunContext) -> StageResult:
         _python_command(
             context,
             "-m",
-            "cases.alpha_d.summarize_claim_evidence",
+            "cases.alpha_d.summarize_pressure_drop_comparison",
             "--study-root",
             context.run_dir / "panels",
             "--out-json",
-            report / "claim_evidence.json",
+            report / "pressure_drop_comparison.json",
             "--out-markdown",
-            report / "claim_evidence.md",
+            report / "pressure_drop_comparison.md",
             "--out-csv",
             report / "paired_case_errors.csv",
             "--out-moose-csv",
             report / "moose_paired_case_errors.csv",
             "--out-svg",
-            report / "claim_error_summary.svg",
+            report / "pressure_drop_comparison_errors.svg",
             label="summarize",
         )
     )
@@ -1050,7 +1050,9 @@ def _published_manifest(context: RunContext) -> dict[str, Any]:
     if workflow_manifest["stages"]["summarize"].get("status") != "succeeded":
         raise ValueError("Refusing to publish before summarize succeeds")
     report = json.loads(
-        (context.run_dir / "report" / "claim_evidence.json").read_text(encoding="utf-8")
+        (context.run_dir / "report" / "pressure_drop_comparison.json").read_text(
+            encoding="utf-8"
+        )
     )
     figures = []
     for raw in (context.config.get("publish") or {}).get("files") or []:
