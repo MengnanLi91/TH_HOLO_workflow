@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from workflows import Stage, WorkflowDefinition
-from workflows.cli import _print_plan, _run_with_progress, _status, main
+from workflows.cli import _print_plan, _run_with_progress, _status, build_parser, main
 
 
 def test_plan_output_uses_compact_dependency_summaries(capsys):
@@ -33,6 +33,34 @@ def test_plan_output_uses_compact_dependency_summaries(capsys):
     assert "panel.case_0" in output
     assert "export_closure" in output
     assert "[depends:" not in output
+
+
+def test_plan_tree_marks_shared_dependencies(capsys):
+    noop = lambda _context: None  # noqa: E731
+    definition = WorkflowDefinition(
+        workflow_id="display_example",
+        version=1,
+        stages=(
+            Stage("prepare", noop),
+            Stage("select", noop, dependencies=("prepare",)),
+            Stage("tune", noop, dependencies=("select",)),
+            Stage("train", noop, dependencies=("prepare", "tune")),
+        ),
+    )
+
+    _print_plan(definition, target=None, tree=True)
+    output = capsys.readouterr().out
+
+    assert "display_example · 4 selected stages" in output
+    assert "#01 prepare" in output
+    assert "#04 train" in output
+    assert "also needs #3" in output
+
+
+def test_plan_parser_accepts_tree_option():
+    args = build_parser().parse_args(["plan", "--config", "workflow.toml", "--tree"])
+
+    assert args.tree is True
 
 
 def test_status_output_uses_color_coded_state_summary(tmp_path, capsys):

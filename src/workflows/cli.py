@@ -24,6 +24,7 @@ from rich.progress import (
 )
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
 
 from workflows.runner import WorkflowRunner, validate_workflow
 
@@ -220,7 +221,49 @@ def _stage_table(*, status: bool) -> Table:
     return table
 
 
-def _print_plan(definition, target: str | None) -> None:
+def _workflow_tree(definition, ordered) -> Tree:
+    """Return a dependency tree with explicit references for shared DAG edges."""
+    numbers = {stage.name: index for index, stage in enumerate(ordered, 1)}
+    names = set(numbers)
+    children = {stage.name: [] for stage in ordered}
+    roots = []
+    extra_dependencies: dict[str, list[str]] = {}
+    for stage in ordered:
+        dependencies = [name for name in stage.dependencies if name in names]
+        if not dependencies:
+            roots.append(stage)
+            continue
+        children[dependencies[0]].append(stage)
+        extra_dependencies[stage.name] = dependencies[1:]
+
+    root = Tree(
+        Text(
+            f"{definition.workflow_id} · {len(ordered)} selected stages",
+            style="bold cyan",
+        ),
+        guide_style="bright_blue",
+    )
+
+    def add_stage(parent: Tree, stage) -> None:
+        label = Text(f"#{numbers[stage.name]:02d} ", style="dim")
+        label.append(stage.name, style="cyan")
+        additional = extra_dependencies.get(stage.name, [])
+        if additional:
+            label.append("  also needs ", style="dim")
+            label.append(
+                ", ".join(f"#{numbers[name]}" for name in additional),
+                style="magenta",
+            )
+        node = parent.add(label, guide_style="bright_blue")
+        for child in children[stage.name]:
+            add_stage(node, child)
+
+    for stage in roots:
+        add_stage(root, stage)
+    return root
+
+
+def _print_plan(definition, target: str | None, *, tree: bool = False) -> None:
     ordered = _selected_stages(definition, target)
     console = Console()
     target_label = "All stages" if target is None else f"{target} and dependencies"
@@ -240,6 +283,14 @@ def _print_plan(definition, target: str | None) -> None:
             expand=False,
         )
     )
+    if tree:
+        console.print(
+            "[dim]Each stage appears once beneath its first dependency; "
+            "shared DAG edges are marked as 'also needs'.[/]"
+        )
+        console.print(_workflow_tree(definition, ordered))
+        return
+
     table = _stage_table(status=False)
     for index, stage in enumerate(ordered, 1):
         table.add_row(
@@ -335,6 +386,11 @@ def build_parser() -> argparse.ArgumentParser:
     plan = subparsers.add_parser("plan", help="Validate and display the stage graph")
     plan.add_argument("--config", type=Path, required=True)
     plan.add_argument("--target")
+    plan.add_argument(
+        "--tree",
+        action="store_true",
+        help="Display the stage graph as a dependency tree",
+    )
     run = subparsers.add_parser("run", help="Execute or resume a workflow")
     run.add_argument("--config", type=Path, required=True)
     run.add_argument("--run-id", required=True)
@@ -381,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
             _require_etl_workflow(config)
         definition = _definition(config, repo_root)
         if args.command == "plan":
-            _print_plan(definition, args.target)
+            _print_plan(definition, args.target, tree=args.tree)
             return 0
         run_dir = _run_dir(config, repo_root, args.run_id)
         runner = WorkflowRunner(
