@@ -37,11 +37,15 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         root = zarr.open(store=str(store_path), mode="w")
         root.create_array(
             "features",
-            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32),
+            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
+                np.float32
+            ),
         )
         root.create_array(
             "targets",
-            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32),
+            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
+                np.float32
+            ),
         )
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
@@ -111,7 +115,9 @@ class TestSearchSpace:
 
         base = {"model": {"name": "mlp"}, "training": {"lr": 0.001}}
         with pytest.raises(ValueError, match="not allowed"):
-            validate_search_space({"model.name": {"type": "categorical", "choices": ["fno"]}}, base)
+            validate_search_space(
+                {"model.name": {"type": "categorical", "choices": ["fno"]}}, base
+            )
 
     def test_validate_rejects_nonexistent_path(self) -> None:
         from training.hpo.search_space import validate_search_space
@@ -170,6 +176,14 @@ class TestMetricsOutPath:
 
         assert resolved == checkpoint.with_name("eval_metrics.json")
 
+    def test_old_training_metadata_schema_is_rejected(self) -> None:
+        from training.runner import validate_training_run_meta
+
+        with pytest.raises(ValueError, match="requires schema 3"):
+            validate_training_run_meta(
+                {"training_run_meta_schema": 2}, "old/run_meta.json"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Objective integration test
@@ -212,7 +226,9 @@ class TestObjective:
 
         prepared = prepare_training(base_cfg)
         dataset = prepared["dataset"]
-        split_cfg = normalize_split_cfg(dict(base_cfg["data"]["split"]), default_seed=42)
+        split_cfg = normalize_split_cfg(
+            dict(base_cfg["data"]["split"]), default_seed=42
+        )
         train_idx, test_idx, _, _ = split_indices(
             num_cases=len(dataset.sim_names),
             split_cfg=split_cfg,
@@ -229,12 +245,15 @@ class TestObjective:
         objective = make_objective(
             base_cfg=base_cfg,
             search_space={},  # No search space -- use base config as-is
-            hpo_cfg={
-                "validation": {"split_ratio": 0.25, "seed": 42},
+            phase_cfg={
+                "max_epochs": 1,
+                "early_stopping": {"patience": 1, "min_delta": 0.0},
             },
+            objective_weights={"profile_val_loss": 1.0},
             prepared=prepared,
-            train_inner_idx=train_inner,
-            val_idx=val_idx,
+            train_indices=train_inner,
+            val_indices=val_idx,
+            seed=42,
         )
 
         study = optuna.create_study()
@@ -245,69 +264,248 @@ class TestObjective:
 
 
 # ---------------------------------------------------------------------------
-# Train pool guard test
+# Clean schema tests
 # ---------------------------------------------------------------------------
 
 
-class TestTrainPoolGuard:
-    def test_empty_train_inner_raises(self, tmp_path: Path) -> None:
-        """With only 2 train cases and val_ratio=1.0, inner train is empty."""
-        # Create a minimal dataset with exactly 3 cases (2 train + 1 test)
-        rng = np.random.default_rng(99)
-        small_dir = tmp_path / "small"
-        small_dir.mkdir()
-        for i in range(3):
-            sp = small_dir / f"c{i}.zarr"
-            root = zarr.open(store=str(sp), mode="w")
-            root.create_array(
-                "features",
-                data=rng.standard_normal((5, len(FEATURE_NAMES))).astype(np.float32),
-            )
-            root.create_array(
-                "targets",
-                data=rng.standard_normal((5, len(TARGET_NAMES))).astype(np.float32),
-            )
-            meta = root.require_group("metadata")
-            meta.attrs["case_id"] = f"c{i}"
-            meta.attrs["feature_names"] = json.dumps(FEATURE_NAMES)
-            meta.attrs["target_names"] = json.dumps(TARGET_NAMES)
-
-        from training.hpo.study import run_hpo
-
-        cfg = {
-            "model": {
-                "name": "mlp",
-                "params": {
-                    "layer_size": 8,
-                    "num_layers": 2,
-                    "activation_fn": "silu",
-                    "skip_connections": False,
-                },
+class TestCleanHpoSchema:
+    @staticmethod
+    def valid_config() -> dict:
+        return {
+            "study_name": "test",
+            "direction": "minimize",
+            "storage": None,
+            "load_if_exists": True,
+            "retrain_best": False,
+            "screening": {
+                "n_trials": 2,
+                "max_epochs": 2,
+                "early_stopping": {"patience": 1, "min_delta": 0.0},
             },
-            "data": {
-                "zarr_dir": str(small_dir),
-                "split": {"strategy": "sequential", "train_ratio": 0.7, "seed": 42},
-            },
-            "training": {
-                "epochs": 1,
-                "batch_size": 8,
-                "lr": 0.001,
+            "validation": {
+                "splitter_entrypoint": "training.hpo.splits:random_case_folds",
+                "n_folds": 2,
+                "screening_fold": 0,
                 "seed": 42,
-                "device": "cpu",
-                "loss": "mse",
-                "experiment": None,
             },
-            "output": {},
-            "hpo": {
-                "study_name": "guard_test",
-                "direction": "minimize",
-                "n_trials": 1,
-                "seed": 42,
-                "validation": {"split_ratio": 1.0, "seed": 42},
-                "search_space": {},
-                "output_dir": str(tmp_path / "hpo_guard_test"),
+            "objective": {"weights": {"profile_val_loss": 1.0}},
+            "confirmation": {
+                "top_k": 1,
+                "max_epochs": 2,
+                "early_stopping": {"patience": 1, "min_delta": 0.0},
+                "aggregate_std_weight": 0.5,
+                "guard_metric": None,
+                "guard_reference": None,
             },
+            "enqueue_trials": [],
+            "search_space": {},
         }
-        # 3 cases, train_ratio=0.7 -> 2 train. val_ratio=1.0 -> all go to val, train_inner empty
-        with pytest.raises(ValueError, match="empty"):
-            run_hpo(cfg)
+
+    @pytest.mark.parametrize(
+        ("mutation", "message"),
+        [
+            (lambda cfg: cfg.update(n_trials=2), "Obsolete hpo.n_trials"),
+            (
+                lambda cfg: cfg["validation"].update(split_ratio=0.2),
+                "split_ratio",
+            ),
+            (lambda cfg: cfg.pop("objective"), "missing required"),
+        ],
+    )
+    def test_rejects_obsolete_or_incomplete_shapes(self, mutation, message) -> None:
+        from training.hpo.config import validate_hpo_config
+
+        cfg = self.valid_config()
+        mutation(cfg)
+        with pytest.raises(ValueError, match=message):
+            validate_hpo_config(cfg)
+
+    def test_accepts_clean_shape(self) -> None:
+        from training.hpo.config import validate_hpo_config
+
+        validate_hpo_config(self.valid_config())
+
+    def test_rejects_pre_contract_optuna_database(self, tmp_path: Path) -> None:
+        from training.hpo.study import create_study
+
+        storage = f"sqlite:///{tmp_path / 'old.db'}"
+        old_study = optuna.create_study(
+            study_name="old-study",
+            direction="minimize",
+            storage=storage,
+        )
+        old_study.optimize(lambda trial: 1.0, n_trials=1)
+        cfg = self.valid_config()
+        cfg.update(study_name="old-study", storage=storage)
+
+        with pytest.raises(ValueError, match="predates the clean-break HPO contract"):
+            create_study(cfg)
+
+
+def test_composite_score_rejects_missing_and_nonfinite_metrics() -> None:
+    from training.hpo.objective import composite_score
+
+    assert composite_score({"a": 2.0, "b": 4.0}, {"a": 1.0, "b": 0.5}) == 4.0
+    with pytest.raises(ValueError, match="required"):
+        composite_score({"a": 2.0}, {"a": 1.0, "b": 0.5})
+    with pytest.raises(ValueError, match="non-finite"):
+        composite_score({"a": float("nan")}, {"a": 1.0})
+
+
+def test_confirmation_aggregation_uses_std_and_best_control_guard() -> None:
+    from training.hpo.study import aggregate_confirmation
+
+    candidates = [
+        {"candidate_id": "trial-1", "source": "sampled", "params": {}},
+        {"candidate_id": "control-a", "source": "control", "params": {}},
+    ]
+    rows = [
+        {"candidate_id": "trial-1", "composite_score": 0.8, "guard": 0.3},
+        {"candidate_id": "trial-1", "composite_score": 1.2, "guard": 0.4},
+        {"candidate_id": "control-a", "composite_score": 1.1, "guard": 0.2},
+        {"candidate_id": "control-a", "composite_score": 1.1, "guard": 0.2},
+    ]
+    aggregates, winner = aggregate_confirmation(
+        candidates,
+        rows,
+        std_weight=0.5,
+        guard_metric="guard",
+        guard_reference="best_control",
+    )
+
+    sampled = next(row for row in aggregates if row["source"] == "sampled")
+    assert sampled["rank_score"] == pytest.approx(1.1)
+    assert sampled["guard_passed"] is False
+    assert winner["candidate_id"] == "control-a"
+
+
+def _fake_objective_runtime(monkeypatch, validation_losses):
+    import training.hpo.objective as objective_module
+
+    class Adapter:
+        supports_fold_normalization = False
+
+        @staticmethod
+        def collate_fn():
+            return None
+
+    class FakeExperiment:
+        def __init__(self, model):
+            self.model = model
+
+        def prepare_for_training(self, train_dataset, val_dataset, device):
+            del train_dataset, val_dataset, device
+
+        def on_epoch_end(self, epoch, avg_loss):
+            del epoch, avg_loss
+
+        def on_epoch_end_extra_step(self):
+            return None
+
+        def compute_hpo_metrics(self, validation_dataset):
+            del validation_dataset
+            return {"restored_weight": float(self.model.weight.detach().item())}
+
+    def build_model(_params, _dataset_info):
+        model = torch.nn.Linear(1, 1, bias=False)
+        with torch.no_grad():
+            model.weight.zero_()
+        return model
+
+    def build_experiment(**kwargs):
+        return FakeExperiment(kwargs["model"])
+
+    def train_epoch(experiment, _loader):
+        with torch.no_grad():
+            experiment.model.weight.add_(1.0)
+        return float(experiment.model.weight.item())
+
+    losses = iter(validation_losses)
+    monkeypatch.setattr(
+        objective_module,
+        "get_build_fn_and_adapter",
+        lambda _cfg: (build_model, "fake"),
+    )
+    monkeypatch.setattr(objective_module, "build_experiment", build_experiment)
+    monkeypatch.setattr(objective_module, "train_one_epoch", train_epoch)
+    monkeypatch.setattr(
+        objective_module, "compute_val_loss", lambda _exp, _loader: next(losses)
+    )
+    dataset = torch.utils.data.TensorDataset(
+        torch.arange(6, dtype=torch.float32).unsqueeze(1)
+    )
+    return objective_module, {
+        "dataset": dataset,
+        "dataset_info": {"in_features": 1},
+        "adapter": Adapter(),
+        "adapter_name": "fake",
+        "device": torch.device("cpu"),
+        "data_cfg": {"normalize": False},
+    }
+
+
+def test_train_and_score_restores_best_validation_weights(monkeypatch) -> None:
+    objective_module, prepared = _fake_objective_runtime(
+        monkeypatch, [3.0, 1.0, 2.0, 1.0]
+    )
+
+    result = objective_module.train_and_score(
+        base_cfg={
+            "model": {"name": "fake", "params": {}},
+            "data": {},
+            "training": {"lr": 0.001, "batch_size": 2, "loss": "mse"},
+        },
+        params={},
+        phase_cfg={
+            "max_epochs": 3,
+            "early_stopping": {"patience": 3, "min_delta": 0.0},
+        },
+        objective_weights={"profile_val_loss": 1.0, "restored_weight": 0.0},
+        prepared=prepared,
+        train_indices=[0, 1, 2, 3],
+        val_indices=[4, 5],
+        seed=42,
+    )
+
+    assert result["best_epoch"] == 2
+    assert result["epochs_trained"] == 3
+    assert result["metrics"]["restored_weight"] == pytest.approx(2.0)
+    assert result["metrics"]["profile_val_loss"] == pytest.approx(1.0)
+
+
+def test_train_and_score_reports_then_prunes(monkeypatch) -> None:
+    objective_module, prepared = _fake_objective_runtime(monkeypatch, [3.0])
+
+    class PruningTrial:
+        def __init__(self):
+            self.reports = []
+
+        def report(self, value, step):
+            self.reports.append((value, step))
+
+        @staticmethod
+        def should_prune():
+            return True
+
+    trial = PruningTrial()
+    with pytest.raises(optuna.TrialPruned):
+        objective_module.train_and_score(
+            base_cfg={
+                "model": {"name": "fake", "params": {}},
+                "data": {},
+                "training": {"lr": 0.001, "batch_size": 2, "loss": "mse"},
+            },
+            params={},
+            phase_cfg={
+                "max_epochs": 3,
+                "early_stopping": {"patience": 3, "min_delta": 0.0},
+            },
+            objective_weights={"profile_val_loss": 1.0},
+            prepared=prepared,
+            train_indices=[0, 1, 2, 3],
+            val_indices=[4, 5],
+            seed=42,
+            trial=trial,
+        )
+
+    assert trial.reports == [(3.0, 1)]

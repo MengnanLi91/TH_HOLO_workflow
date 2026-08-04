@@ -70,6 +70,7 @@ def test_alpha_d_compute_extended_metrics_profile_path(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=None,
@@ -119,6 +120,7 @@ def test_alpha_d_delta_p_metrics_expose_full_per_case_list(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroProfileModel(torch.nn.Module):

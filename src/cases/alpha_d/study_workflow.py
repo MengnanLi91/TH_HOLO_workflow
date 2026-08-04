@@ -27,10 +27,21 @@ from workflows import (
     WorkflowDefinition,
 )
 
-PANEL_MANIFEST_SCHEMA = 3
-PUBLISHED_RESULTS_SCHEMA = 2
+PANEL_MANIFEST_SCHEMA = 4
+PUBLISHED_RESULTS_SCHEMA = 3
 ALPHA_ARTIFACT_CONTRACT = "alpha_d_profile_v1"
 ALPHA_EXPORT_CONTRACT = "forchheimer_profile_v1"
+ALPHA_INPUT_COLUMNS = [
+    "Dr",
+    "Lr",
+    "log10_Re_throat",
+    "z_hat",
+    "z_hat_times_Dr",
+    "z_hat_times_Lr",
+    "dist_to_throat_start",
+    "dist_to_throat_end",
+    "dist_to_nearest_step",
+]
 
 
 @dataclass(frozen=True)
@@ -51,7 +62,14 @@ class AlphaHPO:
     """Hyperparameter-search policy selected by the study configuration."""
 
     enabled: bool
-    reference_panel: str
+
+
+@dataclass(frozen=True)
+class AlphaFeatureSelection:
+    """PyCaret feature-selection entry point shared by one Conv1D study run."""
+
+    module: str
+    config_name: str
 
 
 @dataclass(frozen=True)
@@ -72,7 +90,9 @@ class AlphaTrainingMethod:
     artifact_contract: str
     checkpoint: Path
     run_meta: Path
+    include_acceleration_head: bool
     hpo: AlphaHPO
+    feature_selection: AlphaFeatureSelection
     export: AlphaExport
 
     def manifest(self) -> dict[str, Any]:
@@ -84,9 +104,13 @@ class AlphaTrainingMethod:
             "artifact_contract": self.artifact_contract,
             "checkpoint": self.checkpoint.as_posix(),
             "run_meta": self.run_meta.as_posix(),
+            "include_acceleration_head": self.include_acceleration_head,
             "hpo": {
                 "enabled": self.hpo.enabled,
-                "reference_panel": self.hpo.reference_panel,
+            },
+            "feature_selection": {
+                "module": self.feature_selection.module,
+                "config_name": self.feature_selection.config_name,
             },
             "export": {
                 "module": self.export.module,
@@ -112,8 +136,14 @@ def _module_name(mapping: dict[str, Any], key: str, prefix: str) -> str:
 def _artifact_path(mapping: dict[str, Any], key: str, prefix: str) -> Path:
     raw = _required_string(mapping, key, prefix)
     path = Path(raw)
-    if path.is_absolute() or not path.parts or any(part in {".", ".."} for part in path.parts):
-        raise ValueError(f"{prefix}.{key} must stay beneath the method artifact directory")
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {".", ".."} for part in path.parts)
+    ):
+        raise ValueError(
+            f"{prefix}.{key} must stay beneath the method artifact directory"
+        )
     return path
 
 
@@ -137,6 +167,12 @@ def parse_alpha_training_method(config: dict[str, Any]) -> AlphaTrainingMethod:
     if not isinstance(hpo.get("enabled"), bool):
         raise ValueError("training.alpha.hpo.enabled must be true or false")
 
+    feature_selection = alpha.get("feature_selection")
+    if not isinstance(feature_selection, dict):
+        raise ValueError(
+            "Configuration requires a [training.alpha.feature_selection] section"
+        )
+
     export = alpha.get("export")
     if not isinstance(export, dict):
         raise ValueError("Configuration requires a [training.alpha.export] section")
@@ -151,6 +187,10 @@ def parse_alpha_training_method(config: dict[str, Any]) -> AlphaTrainingMethod:
     run_meta = _artifact_path(alpha, "run_meta", prefix)
     if checkpoint == run_meta:
         raise ValueError("training.alpha.checkpoint and run_meta must be different")
+    if not isinstance(alpha.get("include_acceleration_head"), bool):
+        raise ValueError(
+            "training.alpha.include_acceleration_head must be true or false"
+        )
 
     return AlphaTrainingMethod(
         method_id=_required_string(alpha, "id", prefix),
@@ -159,9 +199,15 @@ def parse_alpha_training_method(config: dict[str, Any]) -> AlphaTrainingMethod:
         artifact_contract=artifact_contract,
         checkpoint=checkpoint,
         run_meta=run_meta,
-        hpo=AlphaHPO(
-            enabled=hpo["enabled"],
-            reference_panel=_required_string(hpo, "reference_panel", f"{prefix}.hpo"),
+        include_acceleration_head=alpha["include_acceleration_head"],
+        hpo=AlphaHPO(enabled=hpo["enabled"]),
+        feature_selection=AlphaFeatureSelection(
+            module=_module_name(
+                feature_selection, "module", f"{prefix}.feature_selection"
+            ),
+            config_name=_required_string(
+                feature_selection, "config_name", f"{prefix}.feature_selection"
+            ),
         ),
         export=AlphaExport(
             module=_module_name(export, "module", f"{prefix}.export"),
@@ -173,7 +219,9 @@ def parse_alpha_training_method(config: dict[str, Any]) -> AlphaTrainingMethod:
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     temporary.replace(path)
 
 
@@ -214,7 +262,9 @@ def _panels(config: dict[str, Any]) -> tuple[Panel, ...]:
         )
         if kind == "indist" and panel.count is None:
             raise ValueError(f"In-distribution panel {tag!r} requires count")
-        if kind == "ood" and (panel.axis is None or panel.side is None or panel.k is None):
+        if kind == "ood" and (
+            panel.axis is None or panel.side is None or panel.k is None
+        ):
             raise ValueError(f"OOD panel {tag!r} requires axis, side, and k")
         panels.append(panel)
     if not panels:
@@ -247,7 +297,9 @@ def _panel_dir(context: RunContext, panel: Panel) -> Path:
     return context.run_dir / "panels" / panel.tag
 
 
-def _case_file(context: RunContext, panel: Panel, name: str = "heldout_cases.txt") -> Path:
+def _case_file(
+    context: RunContext, panel: Panel, name: str = "heldout_cases.txt"
+) -> Path:
     return _panel_dir(context, panel) / name
 
 
@@ -259,7 +311,9 @@ def _python_command(
 ) -> Command:
     return Command(
         argv=tuple(str(value) for value in ("python", *argv)),
-        executor=str((context.config.get("study") or {}).get("python_executor", "python")),
+        executor=str(
+            (context.config.get("study") or {}).get("python_executor", "python")
+        ),
         cwd=cwd or context.repo_root,
         env={"PYTHONPATH": str(context.repo_root / "src")},
         label=label,
@@ -272,7 +326,11 @@ def _write_case_file(path: Path, cases: list[str]) -> None:
 
 
 def _read_case_file(path: Path) -> list[str]:
-    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def _prepare_data(context: RunContext) -> StageResult:
@@ -306,7 +364,9 @@ def _prepare_data(context: RunContext) -> StageResult:
     )
     artifacts = [Artifact(summary.relative_to(context.run_dir), "resolved data input")]
     if mode == "raw_etl":
-        artifacts.append(Artifact(zarr_dir.relative_to(context.run_dir), "processed dataset"))
+        artifacts.append(
+            Artifact(zarr_dir.relative_to(context.run_dir), "processed dataset")
+        )
     return StageResult(artifacts=artifacts, details={"case_count": len(stores)})
 
 
@@ -317,6 +377,7 @@ def _plan_panels(context: RunContext) -> StageResult:
     dr_floor = float(study.get("alpha_min_dr", 0.333))
     exclude_below_dr = float(study.get("exclude_below_dr", 0.1))
     index: list[dict[str, Any]] = []
+    hpo_exclusions: set[str] = set()
     for panel in _panels(context.config):
         if panel.kind == "indist":
             heldout_params = build_indist_panel(
@@ -344,6 +405,8 @@ def _plan_panels(context: RunContext) -> StageResult:
             shell_values = split.shell_axis_values
         heldout = [case.name for case in heldout_params]
         report = [case.name for case in report_params]
+        hpo_exclusions.update(heldout)
+        hpo_exclusions.update(report)
         panel_dir = _panel_dir(context, panel)
         _write_case_file(panel_dir / "heldout_cases.txt", heldout)
         _write_case_file(panel_dir / "report_cases.txt", report)
@@ -364,10 +427,10 @@ def _plan_panels(context: RunContext) -> StageResult:
             "regressor_run_meta": "artifacts/direct/run_meta.json",
             "regressor_eval_metrics": "artifacts/direct/eval_metrics.json",
             "regressor_feature_selection_dir": "artifacts/direct/feature_selection",
-            "alpha_feature_manifest": "artifacts/alpha_feature_selection/manifest.json",
-            "alpha_selected_features": "artifacts/alpha_feature_selection/selected_features.txt",
             "alpha_method": method.manifest(),
-            "alpha_checkpoint": (Path("artifacts/alpha") / method.checkpoint).as_posix(),
+            "alpha_checkpoint": (
+                Path("artifacts/alpha") / method.checkpoint
+            ).as_posix(),
             "alpha_run_meta": (Path("artifacts/alpha") / method.run_meta).as_posix(),
             "hpo_overrides": "../../tuning/best_overrides.txt",
             "coupled_dir": "coupled",
@@ -384,11 +447,21 @@ def _plan_panels(context: RunContext) -> StageResult:
         )
     index_path = context.run_dir / "panels" / "index.json"
     _atomic_json(index_path, {"panel_index_schema": 1, "panels": index})
-    artifacts = [Artifact(index_path.relative_to(context.run_dir), "panel index")]
+    hpo_exclusions_path = context.run_dir / "panels" / "hpo_exclude_cases.txt"
+    _write_case_file(hpo_exclusions_path, sorted(hpo_exclusions))
+    artifacts = [
+        Artifact(index_path.relative_to(context.run_dir), "panel index"),
+        Artifact(
+            hpo_exclusions_path.relative_to(context.run_dir),
+            "outer cases excluded from HPO folds",
+        ),
+    ]
     for panel in _panels(context.config):
         for name in ("heldout_cases.txt", "report_cases.txt", "panel_manifest.json"):
             artifacts.append(
-                Artifact((_panel_dir(context, panel) / name).relative_to(context.run_dir))
+                Artifact(
+                    (_panel_dir(context, panel) / name).relative_to(context.run_dir)
+                )
             )
     return StageResult(
         artifacts=artifacts,
@@ -396,40 +469,101 @@ def _plan_panels(context: RunContext) -> StageResult:
     )
 
 
-def _select_features_action(panel: Panel):
+def _best_overrides(params: dict[str, Any]) -> str:
+    parts = []
+    for key, value in sorted(params.items()):
+        rendered = (
+            value
+            if isinstance(value, str)
+            else json.dumps(value, separators=(",", ":"))
+        )
+        parts.append(f"{key}={rendered}")
+    return " ".join(parts)
+
+
+def _alpha_feature_dir(context: RunContext) -> Path:
+    """Return the one feature-selection artifact shared by Conv1D stages."""
+    return context.run_dir / "features" / "alpha"
+
+
+def _alpha_selected_features_path(context: RunContext) -> Path:
+    return _alpha_feature_dir(context) / "selected_features.txt"
+
+
+def _selected_alpha_features(context: RunContext) -> list[str]:
+    """Read and validate the frozen profile feature list for this run."""
+    selected = _read_case_file(_alpha_selected_features_path(context))
+    if not selected:
+        raise ValueError("Alpha-D feature selection produced no input columns")
+    if len(set(selected)) != len(selected):
+        raise ValueError("Alpha-D feature selection produced duplicate input columns")
+    return selected
+
+
+def _alpha_features_valid(context: RunContext) -> bool:
+    """Accept only a selection artifact made without outer panel cases."""
+    selected_path = _alpha_selected_features_path(context)
+    manifest_path = _alpha_feature_dir(context) / "manifest.json"
+    result_path = _alpha_feature_dir(context) / "result.json"
+    exclusions_path = context.run_dir / "panels" / "hpo_exclude_cases.txt"
+    if not all(path.is_file() for path in (selected_path, manifest_path, result_path)):
+        return False
+    try:
+        selected = _selected_alpha_features(context)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        excluded = _read_case_file(exclusions_path)
+        configured_exclusions = manifest["config"]["data"]["exclude_cases"]
+        return (
+            isinstance(configured_exclusions, list)
+            and sorted(configured_exclusions) == sorted(excluded)
+            and result.get("selected") == selected
+        )
+    except (json.JSONDecodeError, KeyError, OSError, TypeError, ValueError):
+        return False
+
+
+def _select_alpha_features_action(method: AlphaTrainingMethod):
+    """Select one case-safe feature set before Conv1D HPO and panel training."""
+
     def action(context: RunContext) -> StageResult:
-        study = context.config.get("study") or {}
-        output = _panel_dir(context, panel) / "artifacts" / "alpha_feature_selection"
-        pool = "[" + ",".join(str(value) for value in study["geometry_feature_pool"]) + "]"
+        output_dir = _alpha_feature_dir(context)
         context.run(
             _python_command(
                 context,
                 "-m",
-                "cases.alpha_d.run_feature_selection_pycaret",
+                method.feature_selection.module,
+                "--config-name",
+                method.feature_selection.config_name,
                 f"data.zarr_dir={_zarr_dir(context)}",
-                f"data.exclude_cases_file={_case_file(context, panel)}",
-                f"data.min_Dr={float(study.get('alpha_min_dr', 0.333))}",
-                f"data.selected_from_allowlist={pool}",
-                f"output.dir={output}",
-                label=f"select_{panel.tag}",
+                "data.exclude_cases=[]",
+                (
+                    "data.exclude_cases_file="
+                    f"{context.run_dir / 'panels' / 'hpo_exclude_cases.txt'}"
+                ),
+                f"output.dir={output_dir}",
+                label="select_alpha_features",
             )
         )
+        if not _alpha_features_valid(context):
+            raise ValueError(
+                "Alpha-D feature selection did not produce a valid artifact"
+            )
+        selected = _selected_alpha_features(context)
         return StageResult(
-            artifacts=[Artifact(output.relative_to(context.run_dir), "feature selection artifacts")]
+            artifacts=[
+                Artifact(
+                    output_dir.relative_to(context.run_dir),
+                    "PyCaret-selected Conv1D input columns",
+                )
+            ],
+            details={"input_columns": selected},
         )
 
     return action
 
 
-def _best_overrides(params: dict[str, Any]) -> str:
-    parts = []
-    for key, value in sorted(params.items()):
-        rendered = value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
-        parts.append(f"{key}={rendered}")
-    return " ".join(parts)
-
-
-def _tune_alpha_action(method: AlphaTrainingMethod, reference: Panel):
+def _tune_alpha_action(method: AlphaTrainingMethod):
     def action(context: RunContext) -> StageResult:
         tuning = context.run_dir / "tuning"
         if not method.hpo.enabled:
@@ -437,12 +571,6 @@ def _tune_alpha_action(method: AlphaTrainingMethod, reference: Panel):
             _atomic_json(tuning / "best_params.json", params)
         else:
             (tuning / "hpo").mkdir(parents=True, exist_ok=True)
-            feature_file = (
-                _panel_dir(context, reference)
-                / "artifacts"
-                / "alpha_feature_selection"
-                / "selected_features.txt"
-            )
             context.run(
                 _python_command(
                     context,
@@ -451,13 +579,14 @@ def _tune_alpha_action(method: AlphaTrainingMethod, reference: Panel):
                     "--config-name",
                     method.config_name,
                     f"data.zarr_dir={_zarr_dir(context)}",
-                    f"data.input_columns_file={feature_file}",
-                    f"data.exclude_cases_file={_case_file(context, reference)}",
+                    f"data.include_acceleration_head={str(method.include_acceleration_head).lower()}",
+                    f"data.input_columns_file={_alpha_selected_features_path(context)}",
+                    f"data.exclude_cases_file={context.run_dir / 'panels' / 'hpo_exclude_cases.txt'}",
                     f"output.root_dir={tuning}",
-                    "output.case_name=reference",
+                    "output.case_name=screening",
                     f"hpo.output_dir={tuning / 'hpo'}",
                     f"hpo.storage=sqlite:///{tuning / 'hpo' / 'study.db'}",
-                    f"hpo.study_name={context.run_dir.name}_alpha_reference",
+                    f"hpo.study_name={context.run_dir.name}_alpha_screening",
                     "hpo.retrain_best=false",
                     label="tune_alpha",
                 )
@@ -467,7 +596,9 @@ def _tune_alpha_action(method: AlphaTrainingMethod, reference: Panel):
                 raise FileNotFoundError(f"HPO did not produce {params_path}")
             params = json.loads(params_path.read_text(encoding="utf-8"))
             _atomic_json(tuning / "best_params.json", params)
-        (tuning / "best_overrides.txt").write_text(_best_overrides(params) + "\n", encoding="utf-8")
+        (tuning / "best_overrides.txt").write_text(
+            _best_overrides(params) + "\n", encoding="utf-8"
+        )
         return StageResult(
             artifacts=[Artifact("tuning", f"frozen {method.method_id} parameters")],
             details={"method": method.manifest()},
@@ -507,7 +638,9 @@ def _train_direct_action(panel: Panel):
         )
         direct = artifact_root / "direct"
         return StageResult(
-            artifacts=[Artifact(direct.relative_to(context.run_dir), "direct regression")]
+            artifacts=[
+                Artifact(direct.relative_to(context.run_dir), "direct regression")
+            ]
         )
 
     return action
@@ -524,12 +657,18 @@ def _require_alpha_training_contract(
     checkpoint = alpha / method.checkpoint
     run_meta_path = alpha / method.run_meta
     if not checkpoint.is_file() or checkpoint.stat().st_size == 0:
-        raise ValueError(f"{method.artifact_contract} requires a nonempty checkpoint: {checkpoint}")
+        raise ValueError(
+            f"{method.artifact_contract} requires a nonempty checkpoint: {checkpoint}"
+        )
     if not run_meta_path.is_file():
-        raise ValueError(f"{method.artifact_contract} requires training metadata: {run_meta_path}")
+        raise ValueError(
+            f"{method.artifact_contract} requires training metadata: {run_meta_path}"
+        )
     metadata = json.loads(run_meta_path.read_text(encoding="utf-8"))
-    if metadata.get("training_run_meta_schema") != 2:
-        raise ValueError(f"{method.artifact_contract} requires training_run_meta_schema 2")
+    if metadata.get("training_run_meta_schema") != 3:
+        raise ValueError(
+            f"{method.artifact_contract} requires training_run_meta_schema 3"
+        )
     if metadata.get("adapter") != "profile":
         raise ValueError(f"{method.artifact_contract} requires adapter='profile'")
     if not isinstance(metadata.get("entrypoint"), str) or not metadata["entrypoint"]:
@@ -543,18 +682,27 @@ def _require_alpha_training_contract(
             f"{method.artifact_contract} requires output_columns=['signed_log1p_alpha_D']"
         )
     input_columns = data.get("input_columns")
-    if (
-        not isinstance(input_columns, list)
-        or not input_columns
-        or not all(isinstance(value, str) and value for value in input_columns)
-    ):
-        raise ValueError(f"{method.artifact_contract} requires nonempty input_columns")
+    if input_columns != _selected_alpha_features(context):
+        raise ValueError(
+            f"{method.artifact_contract} requires the frozen PyCaret feature contract"
+        )
     if not isinstance(data.get("effective"), dict):
-        raise ValueError(f"{method.artifact_contract} requires effective dataset metadata")
+        raise ValueError(
+            f"{method.artifact_contract} requires effective dataset metadata"
+        )
+    if (
+        data["effective"].get("include_acceleration_head")
+        is not method.include_acceleration_head
+    ):
+        raise ValueError(
+            f"{method.artifact_contract} acceleration-head setting does not match the workflow"
+        )
     if bool(data.get("normalize", False)):
         stats = data.get("norm_stats")
         if not isinstance(stats, dict):
-            raise ValueError(f"{method.artifact_contract} requires normalization statistics")
+            raise ValueError(
+                f"{method.artifact_contract} requires normalization statistics"
+            )
         means = stats.get("x_mean")
         stds = stats.get("x_std")
         if (
@@ -589,8 +737,9 @@ def _alpha_training_validator(panel: Panel, method: AlphaTrainingMethod):
 def _train_alpha_action(panel: Panel, method: AlphaTrainingMethod):
     def action(context: RunContext) -> StageResult:
         panel_dir = _panel_dir(context, panel)
-        feature_file = panel_dir / "artifacts" / "alpha_feature_selection" / "selected_features.txt"
-        overrides = (context.run_dir / "tuning" / "best_overrides.txt").read_text(encoding="utf-8")
+        overrides = (context.run_dir / "tuning" / "best_overrides.txt").read_text(
+            encoding="utf-8"
+        )
         artifact_root = panel_dir / "artifacts"
         argv: list[str | Path] = [
             "-m",
@@ -598,7 +747,8 @@ def _train_alpha_action(panel: Panel, method: AlphaTrainingMethod):
             "--config-name",
             method.config_name,
             f"data.zarr_dir={_zarr_dir(context)}",
-            f"data.input_columns_file={feature_file}",
+            f"data.include_acceleration_head={str(method.include_acceleration_head).lower()}",
+            f"data.input_columns_file={_alpha_selected_features_path(context)}",
             f"data.exclude_cases_file={_case_file(context, panel)}",
             f"output.root_dir={artifact_root}",
             "output.case_name=alpha",
@@ -628,19 +778,27 @@ def _require_export_case(
 ) -> None:
     sidecar = output.with_suffix(".meta.json")
     if not output.is_file() or output.stat().st_size == 0:
-        raise ValueError(f"{method.export.contract} requires a nonempty CSV for {panel.tag}/{case}")
+        raise ValueError(
+            f"{method.export.contract} requires a nonempty CSV for {panel.tag}/{case}"
+        )
     with output.open(newline="", encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
         if reader.fieldnames != ["z", "F"]:
-            raise ValueError(f"{method.export.contract} requires CSV columns ['z', 'F']")
+            raise ValueError(
+                f"{method.export.contract} requires CSV columns ['z', 'F']"
+            )
         rows = list(reader)
-    if not rows or not all(math.isfinite(float(row[axis])) for row in rows for axis in ("z", "F")):
+    if not rows or not all(
+        math.isfinite(float(row[axis])) for row in rows for axis in ("z", "F")
+    ):
         raise ValueError(
             f"{method.export.contract} requires finite profile rows for {panel.tag}/{case}"
         )
     metadata = json.loads(sidecar.read_text(encoding="utf-8"))
     if metadata.get("case_id") != case:
-        raise ValueError(f"{method.export.contract} sidecar case mismatch for {panel.tag}/{case}")
+        raise ValueError(
+            f"{method.export.contract} sidecar case mismatch for {panel.tag}/{case}"
+        )
     for key in ("delta_p_surrogate", "delta_p_truth"):
         if not math.isfinite(float(metadata[key])):
             raise ValueError(
@@ -652,7 +810,9 @@ def _require_export_contract(
     context: RunContext, panel: Panel, method: AlphaTrainingMethod
 ) -> None:
     for case in _read_case_file(_case_file(context, panel, "report_cases.txt")):
-        output = _panel_dir(context, panel) / "coupled" / case / "forchheimer_profile.csv"
+        output = (
+            _panel_dir(context, panel) / "coupled" / case / "forchheimer_profile.csv"
+        )
         _require_export_case(output, case, panel, method)
 
 
@@ -697,7 +857,9 @@ def _export_action(panel: Panel, method: AlphaTrainingMethod):
             )
         _require_export_contract(context, panel, method)
         return StageResult(
-            artifacts=[Artifact(coupled.relative_to(context.run_dir), "coupling profiles")],
+            artifacts=[
+                Artifact(coupled.relative_to(context.run_dir), "coupling profiles")
+            ],
             details={"method": method.manifest()},
         )
 
@@ -717,7 +879,10 @@ def _validate_moose_output(sidecar: Path, output_csv: Path) -> dict[str, Any]:
 
     pressure = read_moose_inlet_pressure(output_csv)
     result = compare(sidecar_path=sidecar, delta_p_moose=pressure)
-    if not math.isfinite(float(result["delta_p_moose"])) or float(result["delta_p_moose"]) <= 0:
+    if (
+        not math.isfinite(float(result["delta_p_moose"]))
+        or float(result["delta_p_moose"]) <= 0
+    ):
         raise ValueError("MOOSE pressure output must be positive and finite")
     return result
 
@@ -811,7 +976,9 @@ def _run_moose_case(context: RunContext, panel: Panel, case: str) -> bool:
         }
         if result.returncode == 0:
             try:
-                verification = _validate_moose_output(sidecar, destination / f"moose_{attempt}.csv")
+                verification = _validate_moose_output(
+                    sidecar, destination / f"moose_{attempt}.csv"
+                )
                 _atomic_json(destination / f"verify_{attempt}.json", verification)
                 record["verification_status"] = "valid"
                 selected = attempt
@@ -927,11 +1094,15 @@ def _validate_moose_matrix(context: RunContext) -> bool:
         return False
     try:
         for panel, case in _moose_matrix(context):
-            status_path = _panel_dir(context, panel) / "moose" / case / "run_status.json"
+            status_path = (
+                _panel_dir(context, panel) / "moose" / case / "run_status.json"
+            )
             status = json.loads(status_path.read_text(encoding="utf-8"))
             if status.get("status") not in {"success", "failed"}:
                 return False
-            if status["status"] == "success" and not _moose_case_valid(status_path.parent):
+            if status["status"] == "success" and not _moose_case_valid(
+                status_path.parent
+            ):
                 return False
         return True
     except (KeyError, OSError, TypeError, ValueError):
@@ -970,7 +1141,9 @@ def _published_manifest(context: RunContext) -> dict[str, Any]:
     if workflow_manifest["stages"]["summarize"].get("status") != "succeeded":
         raise ValueError("Refusing to publish before summarize succeeds")
     report = json.loads(
-        (context.run_dir / "report" / "pressure_drop_comparison.json").read_text(encoding="utf-8")
+        (context.run_dir / "report" / "pressure_drop_comparison.json").read_text(
+            encoding="utf-8"
+        )
     )
     figures = []
     for raw in (context.config.get("publish") or {}).get("files") or []:
@@ -982,7 +1155,9 @@ def _published_manifest(context: RunContext) -> dict[str, Any]:
                 "sha256": _sha256(source),
             }
         )
-    matrix = json.loads((context.run_dir / "moose_matrix.json").read_text(encoding="utf-8"))
+    matrix = json.loads(
+        (context.run_dir / "moose_matrix.json").read_text(encoding="utf-8")
+    )
     workflow_contract = {
         "workflow_id": workflow_manifest["workflow_id"],
         "workflow_version": workflow_manifest["workflow_version"],
@@ -1037,11 +1212,16 @@ def _publish(context: RunContext, check: bool) -> StageResult:
         ):
             drift.append(str(manifest_path))
         if drift:
-            raise ValueError("Published alpha-D artifacts have drifted: " + ", ".join(drift))
+            raise ValueError(
+                "Published alpha-D artifacts have drifted: " + ", ".join(drift)
+            )
     else:
         _atomic_json(manifest_path, expected)
     return StageResult(
-        artifacts=[Artifact(path, "published result") for path in (*destinations, manifest_path)],
+        artifacts=[
+            Artifact(path, "published result")
+            for path in (*destinations, manifest_path)
+        ],
         details={"checked": check, "files": len(destinations)},
     )
 
@@ -1052,11 +1232,6 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
     workflow = config.get("workflow") or {}
     panels = _panels(config)
     method = parse_alpha_training_method(config)
-    panel_map = {panel.tag: panel for panel in panels}
-    reference_tag = method.hpo.reference_panel
-    if reference_tag not in panel_map:
-        raise ValueError(f"training.alpha.hpo.reference_panel {reference_tag!r} is not a panel")
-    reference = panel_map[reference_tag]
     stages: list[Stage] = [
         Stage(
             "prepare_data",
@@ -1070,20 +1245,20 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
             description="write canonical held-out and report case files",
         ),
     ]
-    for panel in panels:
-        stages.append(
-            Stage(
-                f"panel.{panel.tag}.select_features",
-                _select_features_action(panel),
-                dependencies=("plan_panels",),
-                description="geometry-only alpha-D feature selection",
-            )
+    stages.append(
+        Stage(
+            "select_alpha_features",
+            _select_alpha_features_action(method),
+            dependencies=("plan_panels",),
+            description="select one outer-case-safe PyCaret feature set for Conv1D",
+            validator=_alpha_features_valid,
         )
+    )
     stages.append(
         Stage(
             "tune_alpha",
-            _tune_alpha_action(method, reference),
-            dependencies=(f"panel.{reference_tag}.select_features",),
+            _tune_alpha_action(method),
+            dependencies=("select_alpha_features",),
             description=f"tune {method.method_id} once and freeze its parameters",
         )
     )
@@ -1103,7 +1278,7 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                 Stage(
                     alpha,
                     _train_alpha_action(panel, method),
-                    dependencies=(f"panel.{panel.tag}.select_features", "tune_alpha"),
+                    dependencies=("tune_alpha",),
                     description=(
                         f"train held-out alpha-D method {method.method_id} with frozen settings"
                     ),
@@ -1113,7 +1288,9 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                     export,
                     _export_action(panel, method),
                     dependencies=(alpha,),
-                    description=(f"export {method.method_id} through {method.export.contract}"),
+                    description=(
+                        f"export {method.method_id} through {method.export.contract}"
+                    ),
                     validator=_export_validator(panel, method),
                 ),
             )
@@ -1132,7 +1309,8 @@ def build_workflow(config: dict[str, Any], repo_root: Path) -> WorkflowDefinitio
                 "summarize",
                 _summarize,
                 dependencies=tuple(
-                    ["solve_moose"] + [f"panel.{panel.tag}.train_direct" for panel in panels]
+                    ["solve_moose"]
+                    + [f"panel.{panel.tag}.train_direct" for panel in panels]
                 ),
                 description="assemble distinct direct, integrated, and coupled evidence",
             ),

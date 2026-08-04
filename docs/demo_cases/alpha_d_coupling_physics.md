@@ -36,10 +36,10 @@ config_name = "train_conv1d"
 artifact_contract = "alpha_d_profile_v1"
 checkpoint = "model.mdlus"
 run_meta = "run_meta.json"
+include_acceleration_head = true
 
 [training.alpha.hpo]
 enabled = true
-reference_panel = "indist_panel"
 
 [training.alpha.export]
 module = "cases.alpha_d.export_friction_profile"
@@ -92,7 +92,6 @@ Typical stage costs are:
 | stage family | expected cost | resumable unit |
 |---|---|---|
 | `prepare_data`, `plan_panels` | seconds when reusing Zarr; ETL can take hours | whole stage |
-| `panel.<tag>.select_features` | minutes per panel | panel |
 | `tune_alpha` | the most expensive ML stage; one selected-method search | one reference-panel search |
 | `panel.<tag>.train_direct` | minutes per panel | panel |
 | `panel.<tag>.train_alpha` | tens of minutes to hours per panel | panel |

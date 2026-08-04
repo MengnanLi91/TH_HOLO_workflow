@@ -159,7 +159,7 @@ uv run multifid-workflow plan \
   --config src/cases/alpha_d/configs/coupling_study.toml
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001
+  --run-id alpha-d-conv1d-002
 ```
 
 See [Running the Alpha-D Case](user/running_alpha_d.md) for ETL, resume, and

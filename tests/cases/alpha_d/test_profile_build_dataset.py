@@ -28,6 +28,7 @@ def test_build_dataset_returns_alpha_d_profile_dataset(
         {
             "zarr_dir": str(alpha_d_zarr_dir),
             "output_columns": ["log_alpha_D"],
+            "include_acceleration_head": True,
         }
     )
     assert isinstance(ds, AlphaDProfileDataset)
@@ -43,6 +44,7 @@ def test_profile_adapter_resolves_dataset_entrypoint(
             "zarr_dir": str(alpha_d_zarr_dir),
             "output_columns": ["log_alpha_D"],
             "dataset_entrypoint": "cases.alpha_d.datasets.profile:build_dataset",
+            "include_acceleration_head": True,
         }
     )
     assert isinstance(ds, AlphaDProfileDataset)

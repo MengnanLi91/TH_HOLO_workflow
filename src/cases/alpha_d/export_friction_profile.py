@@ -191,7 +191,9 @@ def build_model_input(case: CaseData, run_meta: dict) -> np.ndarray:
 
     raw_x = np.stack(columns, axis=0)  # (C, L)
     normalize = bool(
-        run_meta["data"].get("normalize", run_meta["data"].get("norm_stats") is not None)
+        run_meta["data"].get(
+            "normalize", run_meta["data"].get("norm_stats") is not None
+        )
     )
     if normalize:
         stats = run_meta["data"].get("norm_stats") or {}
@@ -246,6 +248,27 @@ def forward(checkpoint_path: Path, run_meta: dict, x_normed: np.ndarray) -> np.n
     return y_t.squeeze(0).squeeze(0).cpu().numpy().astype(np.float64)
 
 
+def require_export_run_meta(run_meta: dict) -> bool:
+    """Validate the metadata schema and return the persisted baseline flag."""
+    schema = run_meta.get("training_run_meta_schema")
+    if schema != 3:
+        raise ValueError(
+            f"Unsupported training_run_meta_schema={schema!r}; alpha-D export requires schema 3."
+        )
+    effective_data = run_meta.get("data", {}).get("effective")
+    if (
+        not isinstance(effective_data, dict)
+        or "include_acceleration_head" not in effective_data
+    ):
+        raise ValueError(
+            "run_meta data.effective.include_acceleration_head is required for alpha-D export."
+        )
+    include_acceleration_head = effective_data["include_acceleration_head"]
+    if not isinstance(include_acceleration_head, bool):
+        raise ValueError("Persisted include_acceleration_head must be a boolean.")
+    return include_acceleration_head
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
@@ -257,9 +280,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.run_meta.exists():
         raise FileNotFoundError(f"run_meta.json not found: {args.run_meta}")
 
-    case = load_case_from_zarr(args.zarr)
     with args.run_meta.open() as fh:
         run_meta = json.load(fh)
+    include_acceleration_head = require_export_run_meta(run_meta)
+    effective_data = run_meta["data"]["effective"]
+    case = load_case_from_zarr(args.zarr)
 
     # ---- Model inference ----
     x = build_model_input(case, run_meta)
@@ -277,10 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     # so the model predicts residuals from a closed-form baseline. Reproduce
     # the training-time add-back by computing the encoded baseline for this
     # case's geometry and adding it to the model output BEFORE decoding.
-    effective_data = run_meta["data"].get("effective") or {}
-    # Legacy alpha-D run metadata omitted the dataset-injected transform, so
-    # absence of the new field retains the historical residual-baseline path.
-    has_target_baseline = bool(effective_data.get("has_target_baseline", True))
+    has_target_baseline = bool(effective_data.get("has_target_baseline"))
     if has_target_baseline:
         baseline_encoded = compute_baseline_encoded(
             case,
@@ -288,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
             d_local_over_D,
             local_velocity_normalization=local_norm,
             target_name=output_columns[0],
+            include_acceleration_head=include_acceleration_head,
         )
         y_encoded_total = np.asarray(y_encoded, dtype=np.float64) + baseline_encoded
     else:
@@ -363,7 +386,9 @@ def main(argv: list[str] | None = None) -> int:
     # ---- Write outputs ----
     # z is already in MOOSE mesh coordinates (ROI starts at inlet, x=0=inlet)
     # No pre-shift needed; PiecewiseLinear spans [0, roi_length].
-    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get("input_columns", [])
+    v_local_in_inputs = "V_local_over_V_bulk" in run_meta["data"].get(
+        "input_columns", []
+    )
     sidecar = {
         "coupling_export_schema": 1,
         "case_id": case.case_id,

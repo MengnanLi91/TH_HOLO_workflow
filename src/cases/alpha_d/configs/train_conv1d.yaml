@@ -10,27 +10,35 @@ hydra:
 model:
   name: conv1d_profile
   params:
-    hidden_channels: 64
-    num_blocks: 4
+    hidden_channels: 96
+    num_blocks: 3
     kernel_size: 5
     dilations: [1, 2, 4, 1]
     dropout: 0.05
 
 data:
   zarr_dir: ../data/flow_contraction_expansion/parametric_study/processed
-  # ProfileAdapter is case-agnostic; the case's build_dataset constructs
-  # AlphaDProfileDataset (which default-injects engineered features and the
-  # residual target_transform).
   dataset_entrypoint: cases.alpha_d.datasets.profile:build_dataset
-  input_columns: null
-  input_columns_file: ../data/feature_analysis/pycaret/default/selected_features.txt
+  input_columns:
+    - Dr
+    - Lr
+    - log10_Re_throat
+    - z_hat
+    - z_hat_times_Dr
+    - z_hat_times_Lr
+    - dist_to_throat_start
+    - dist_to_throat_end
+    - dist_to_nearest_step
+  # The study workflow replaces this with its PyCaret artifact before HPO.
+  # Retaining the curated columns above makes direct component runs reproducible.
+  input_columns_file: null
   output_columns: [signed_log1p_alpha_D]
   normalize: true
-  # AlphaDProfileDataset default-injects target_transform for the conv1d path.
+  include_acceleration_head: true
   local_velocity_normalization: true
   include_case_idx: true
-  throat_weight: 1.0
-  downstream_weight: 1.0
+  throat_weight: 5.0
+  downstream_weight: 3.0
   min_Dr: 0.333
   exclude_cases: []
   exclude_cases_file: null
@@ -65,23 +73,25 @@ eval:
   experiment: null
 
 hpo:
-  # Bump study_name (e.g. append _v6, _v7, …) whenever the input feature
-  # set, target encoding, or search space changes — Optuna otherwise mixes
-  # incompatible trials in the SQLite store.
-  study_name: alpha_d_conv1d_hpo_v5
+  study_name: alpha_d_conv1d_clean_v1
   direction: minimize
-  n_trials: 30
-  seed: 42
   show_progress_bar: true
   storage: sqlite:///${hpo.output_dir}/${hpo.study_name}.db
   load_if_exists: true
   retrain_best: true
   output_dir: ${output.case_dir}/hpo
 
+  screening:
+    n_trials: 40
+    max_epochs: 200
+    early_stopping:
+      patience: 20
+      min_delta: 0.0
+
   sampler:
     name: TPESampler
     params:
-      seed: ${hpo.seed}
+      seed: ${hpo.validation.seed}
 
   pruner:
     name: MedianPruner
@@ -90,48 +100,96 @@ hpo:
       n_warmup_steps: 10
 
   validation:
-    split_ratio: 0.2
-    seed: ${hpo.seed}
+    splitter_entrypoint: cases.alpha_d.hpo:balanced_parameter_folds
+    n_folds: 3
+    screening_fold: 0
+    seed: 42
+
+  objective:
+    weights:
+      delta_p_log_abs_error_mean: 1.0
+      delta_p_relative_error_p90: 0.25
+      profile_val_loss: 0.05
+
+  confirmation:
+    top_k: 5
+    max_epochs: 500
+    early_stopping:
+      patience: 30
+      min_delta: 0.0
+    aggregate_std_weight: 0.5
+    guard_metric: max_abs_lr_level_bias
+    guard_reference: best_control
+
+  enqueue_trials:
+    - name: july_7
+      params:
+        training.lr: 0.00031227062983797785
+        training.batch_size: 32
+        training.weight_decay: 0.00009726436677565929
+        model.params.hidden_channels: 96
+        model.params.num_blocks: 3
+        model.params.kernel_size: 3
+        model.params.dropout: 0.06327159821527437
+        data.throat_weight: 5.0
+        data.downstream_weight: 3.0
+    - name: alpha_d_conv1d_001
+      params:
+        training.lr: 0.00019931679794623093
+        training.batch_size: 16
+        training.weight_decay: 0.00041583445095567516
+        model.params.hidden_channels: 96
+        model.params.num_blocks: 3
+        model.params.kernel_size: 5
+        model.params.dropout: 0.18393244460497699
+        data.throat_weight: 3.0
+        data.downstream_weight: 3.0
+    - name: hybrid
+      params:
+        training.lr: 0.00031227062983797785
+        training.batch_size: 32
+        training.weight_decay: 0.00009726436677565929
+        model.params.hidden_channels: 96
+        model.params.num_blocks: 3
+        model.params.kernel_size: 5
+        model.params.dropout: 0.06327159821527437
+        data.throat_weight: 5.0
+        data.downstream_weight: 3.0
 
   search_space:
     training.lr:
       type: float
-      low: 1.0e-5
-      high: 1.0e-3
+      low: 1.0e-4
+      high: 4.0e-4
       log: true
 
     training.batch_size:
       type: categorical
-      choices: [16, 32, 64]
+      choices: [16, 32]
 
     training.weight_decay:
       type: float
-      low: 1.0e-6
-      high: 1.0e-3
+      low: 1.0e-5
+      high: 5.0e-4
       log: true
 
     model.params.hidden_channels:
       type: categorical
-      choices: [32, 64, 96, 128]
+      choices: [64, 96]
 
     model.params.num_blocks:
-      type: int
-      low: 2
-      high: 5
+      type: categorical
+      choices: [2, 3]
 
     model.params.kernel_size:
       type: categorical
-      choices: [3, 5, 7]
+      choices: [3, 5]
 
     model.params.dropout:
       type: float
-      low: 0.0
+      low: 0.02
       high: 0.2
 
     data.throat_weight:
       type: categorical
-      choices: [1.0, 3.0, 5.0, 10.0]
-
-    data.downstream_weight:
-      type: categorical
-      choices: [1.0, 2.0, 3.0, 5.0]
+      choices: [3.0, 5.0]

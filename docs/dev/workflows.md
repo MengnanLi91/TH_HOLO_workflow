@@ -85,10 +85,14 @@ config_name = "train_conv1d"
 artifact_contract = "alpha_d_profile_v1"
 checkpoint = "model.mdlus"
 run_meta = "run_meta.json"
+include_acceleration_head = true
 
 [training.alpha.hpo]
 enabled = true
-reference_panel = "indist_panel"
+
+[training.alpha.feature_selection]
+module = "cases.alpha_d.run_feature_selection_pycaret"
+config_name = "pycaret_conv1d"
 
 [training.alpha.export]
 module = "cases.alpha_d.export_friction_profile"
@@ -96,16 +100,17 @@ contract = "forchheimer_profile_v1"
 ```
 
 `runner_module` is invoked with `python -m`, `--config-name`, and Hydra
-overrides for the canonical held-out file, selected features, artifact root,
-checkpoint, metadata, and HPO. A replacement runner must honor that CLI and
+overrides for the canonical held-out file, acceleration-head setting, artifact
+root, checkpoint, metadata, and HPO. A replacement runner must honor that CLI and
 produce the configured artifacts.
 
 `alpha_d_profile_v1` requires:
 
 - a nonempty checkpoint;
-- `training_run_meta_schema: 2`;
+- `training_run_meta_schema: 3`;
 - a recorded model entrypoint and `profile` adapter;
-- nonempty input columns and effective dataset metadata;
+- the frozen PyCaret-selected input columns and effective dataset metadata
+  with the persisted acceleration-head flag;
 - valid normalization statistics when normalization is enabled; and
 - exactly one `signed_log1p_alpha_D` output.
 

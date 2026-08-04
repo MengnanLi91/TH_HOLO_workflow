@@ -62,6 +62,7 @@ def alpha_d_residual_transform(
     feature_names: list[str],
     case_meta_list: list[dict],
     rows_per_case: list[int],
+    include_acceleration_head: bool,
     local_velocity_normalization: bool = False,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """Optionally LV-normalise and subtract the closed-form alpha-D baseline.
@@ -117,7 +118,11 @@ def alpha_d_residual_transform(
             n_stations=int(n_rows),
         )
         end = row_offset + n_rows
-        baseline_bulk = alpha_d_baseline_profile(z_hat_all[row_offset:end], geom)
+        baseline_bulk = alpha_d_baseline_profile(
+            z_hat_all[row_offset:end],
+            geom,
+            include_acceleration_head=include_acceleration_head,
+        )
         d_local = d_over_D[row_offset:end]
         for j, tgt_name in enumerate(target_names):
             if is_alpha_d_target(tgt_name):
@@ -133,5 +138,6 @@ def alpha_d_residual_transform(
     extras: dict[str, Any] = {
         "baseline_encoded": baseline_encoded.astype(np.float32),
         "local_velocity_normalization": applied_lv_norm,
+        "include_acceleration_head": bool(include_acceleration_head),
     }
     return transformed_y, extras

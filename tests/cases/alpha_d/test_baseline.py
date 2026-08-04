@@ -55,7 +55,9 @@ def test_profile_integrates_to_closed_form(
     assert closed > 0.0
     rel_err = abs(integrated - closed) / closed
     # Trapezoidal of a step function at midpoints converges as O(1/N); 1 % is plenty for N=50.
-    assert rel_err < 1e-2, f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr} head={include_head}"
+    assert (
+        rel_err < 1e-2
+    ), f"rel_err={rel_err:.4f} for Re={Re} Dr={Dr} Lr={Lr} head={include_head}"
 
 
 def test_profile_zero_outside_throat() -> None:
@@ -70,11 +72,10 @@ def test_profile_zero_outside_throat() -> None:
     accel_idx = np.flatnonzero(upstream)[int(np.argmax(z[upstream]))]
     assert profile[accel_idx] > 0.0
     assert np.all(profile[downstream] == 0.0)
-    # With the head disabled the baseline is zero everywhere outside the throat
-    # (the legacy behaviour — regression guard).
-    legacy = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
-    assert np.all(legacy[upstream] == 0.0)
-    assert np.all(legacy[downstream] == 0.0)
+    # With the head disabled the baseline is zero everywhere outside the throat.
+    no_accel = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
+    assert np.all(no_accel[upstream] == 0.0)
+    assert np.all(no_accel[downstream] == 0.0)
 
 
 @pytest.mark.parametrize(
@@ -86,7 +87,9 @@ def test_profile_zero_outside_throat() -> None:
         (250000, 0.9, 0.179),
     ],
 )
-def test_acceleration_head_adds_analytic_delta_p(Re: float, Dr: float, Lr: float) -> None:
+def test_acceleration_head_adds_analytic_delta_p(
+    Re: float, Dr: float, Lr: float
+) -> None:
     """include vs exclude differs by exactly ΔP_accel = q_throat − q_bulk."""
     geom = BaselineGeometry(Re=Re, Dr=Dr, Lr=Lr)
     with_head = integrated_baseline_delta_p(geom)  # default True
@@ -94,13 +97,13 @@ def test_acceleration_head_adds_analytic_delta_p(Re: float, Dr: float, Lr: float
     q_throat = 0.5 * geom.rho * (geom.V_bulk / Dr**2) ** 2
     q_bulk = 0.5 * geom.rho * geom.V_bulk**2
     assert with_head - without == pytest.approx(q_throat - q_bulk, rel=1e-12)
-    # The head scales 1/Dr⁴ and dominates the (K_c + friction) legacy term at
+    # The head scales 1/Dr⁴ and dominates the (K_c + friction) alternative at
     # small Dr — that's the whole point of moving it out of the NN residual.
     if Dr < 0.2:
         assert (with_head - without) > without
 
 
-def test_include_false_reproduces_legacy_scalar() -> None:
+def test_include_false_reproduces_no_acceleration_scalar() -> None:
     """include_acceleration_head=False reproduces the (K_c + friction)·q_throat form."""
     geom = BaselineGeometry(Re=43938, Dr=0.617, Lr=0.137)
     Dr2 = geom.Dr**2
@@ -109,10 +112,10 @@ def test_include_false_reproduces_legacy_scalar() -> None:
     q_throat = 0.5 * geom.rho * (geom.V_bulk / Dr2) ** 2
     L_throat = geom.Lr * geom.outer_height_m
     D_throat = geom.D_big * geom.Dr
-    legacy = (K_c + f * L_throat / D_throat) * q_throat
-    assert integrated_baseline_delta_p(geom, include_acceleration_head=False) == pytest.approx(
-        legacy, rel=1e-12
-    )
+    no_accel = (K_c + f * L_throat / D_throat) * q_throat
+    assert integrated_baseline_delta_p(
+        geom, include_acceleration_head=False
+    ) == pytest.approx(no_accel, rel=1e-12)
 
 
 def test_acceleration_head_located_at_last_upstream_cell() -> None:
@@ -120,8 +123,8 @@ def test_acceleration_head_located_at_last_upstream_cell() -> None:
     geom = BaselineGeometry(Re=43938, Dr=0.144, Lr=0.031)
     z = _station_z_hat(geom.n_stations)
     profile = alpha_d_baseline_profile(z, geom)
-    legacy = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
-    diff = profile - legacy
+    no_accel = alpha_d_baseline_profile(z, geom, include_acceleration_head=False)
+    diff = profile - no_accel
     # exactly one station carries the head ...
     assert np.count_nonzero(diff) == 1
     accel_idx = int(np.flatnonzero(diff)[0])
@@ -155,7 +158,9 @@ def test_baseline_underpredicts_real_dp_consistently() -> None:
     # K_c contribution dominates at low Dr, matching the empirical pattern.
     geom_low = BaselineGeometry(Re=43938, Dr=0.333, Lr=0.137)
     geom_high = BaselineGeometry(Re=43938, Dr=0.9, Lr=0.137)
-    assert integrated_baseline_delta_p(geom_low) > 100 * integrated_baseline_delta_p(geom_high)
+    assert integrated_baseline_delta_p(geom_low) > 100 * integrated_baseline_delta_p(
+        geom_high
+    )
 
 
 def test_blasius_friction_decreases_with_Re() -> None:
@@ -239,7 +244,9 @@ def _write_alpha_d_zarr(
 
     rng = np.random.default_rng(int(Re + Dr * 1000 + Lr * 1e5))
     alpha_bulk = rng.uniform(-2.0, 50.0, size=n_stations).astype(np.float64)
-    log_alpha = encode_alpha_d_target(np.maximum(alpha_bulk, 1e-3), target_name="log_alpha_D")
+    log_alpha = encode_alpha_d_target(
+        np.maximum(alpha_bulk, 1e-3), target_name="log_alpha_D"
+    )
     signed = encode_alpha_d_target(alpha_bulk, target_name="signed_log1p_alpha_D")
     targets = np.column_stack([log_alpha, signed]).astype(np.float32)
 
@@ -294,6 +301,7 @@ def test_residual_target_round_trip(tmp_path) -> None:
         **common,
         local_velocity_normalization=True,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     assert residual.has_target_baseline is True

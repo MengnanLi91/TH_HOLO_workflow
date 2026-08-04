@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from workflows import Stage, WorkflowDefinition
 from workflows.cli import (
@@ -8,6 +11,7 @@ from workflows.cli import (
     _run_with_progress,
     _status,
     _tree_stage_style,
+    apply_config_overrides,
     build_parser,
     main,
 )
@@ -83,6 +87,36 @@ def test_plan_parser_defaults_to_tree_and_accepts_table_option():
     assert table.table is True
 
 
+def test_config_overrides_parse_toml_scalars_without_mutating_source():
+    config = {"training": {"alpha": {"include_acceleration_head": True, "epochs": 5}}}
+
+    resolved = apply_config_overrides(
+        config,
+        ["training.alpha.include_acceleration_head=false", "training.alpha.epochs=12"],
+    )
+
+    assert resolved["training"]["alpha"] == {
+        "include_acceleration_head": False,
+        "epochs": 12,
+    }
+    assert config["training"]["alpha"]["include_acceleration_head"] is True
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ("training.missing=1", "Unknown"),
+        ("training.alpha=1", "table or array"),
+        ("training.alpha.epochs=[1, 2]", "TOML scalar"),
+    ],
+)
+def test_config_overrides_reject_unknown_or_non_scalar_paths(override, message):
+    config = {"training": {"alpha": {"epochs": 5}}}
+
+    with pytest.raises((KeyError, ValueError), match=message):
+        apply_config_overrides(config, [override])
+
+
 def test_status_output_uses_color_coded_state_summary(tmp_path, capsys):
     run_dir = tmp_path / "display_example" / "run-001"
     run_dir.mkdir(parents=True)
@@ -156,11 +190,66 @@ def test_run_command_renders_stage_progress(monkeypatch, tmp_path, capsys):
     run_dir = tmp_path / "run"
     repo_root = Path(__file__).resolve().parents[2]
     monkeypatch.setattr("workflows.cli._repo_root", lambda _start: repo_root)
-    monkeypatch.setattr("workflows.cli._definition", lambda _config, _repo_root: definition)
-    monkeypatch.setattr("workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir)
+    monkeypatch.setattr(
+        "workflows.cli._definition", lambda _config, _repo_root: definition
+    )
+    monkeypatch.setattr(
+        "workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir
+    )
 
     assert main(["run", "--config", str(config_path), "--run-id", "run-001"]) == 0
     output = capsys.readouterr().out
 
     assert "Workflow complete" in output
     assert str(run_dir) in output
+
+
+def test_run_fingerprints_and_persists_resolved_overrides(monkeypatch, tmp_path):
+    from workflows.runner import _canonical_hash
+
+    definition = WorkflowDefinition(
+        workflow_id="display_example",
+        version=1,
+        stages=(Stage("prepare", lambda _context: None),),
+    )
+    config_path = tmp_path / "workflow.toml"
+    config_path.write_text(
+        """[workflow]
+id = "display_example"
+
+[training.alpha]
+include_acceleration_head = true
+""",
+        encoding="utf-8",
+    )
+    run_dir = tmp_path / "run"
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setattr("workflows.cli._repo_root", lambda _start: repo_root)
+    monkeypatch.setattr(
+        "workflows.cli._definition", lambda _config, _repo_root: definition
+    )
+    monkeypatch.setattr(
+        "workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir
+    )
+
+    assert (
+        main(
+            [
+                "run",
+                "--config",
+                str(config_path),
+                "--run-id",
+                "run-001",
+                "--set",
+                "training.alpha.include_acceleration_head=false",
+            ]
+        )
+        == 0
+    )
+
+    resolved = json.loads(
+        (run_dir / "resolved_config.json").read_text(encoding="utf-8")
+    )
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    assert resolved["training"]["alpha"]["include_acceleration_head"] is False
+    assert manifest["binding"]["config_sha256"] == _canonical_hash(resolved)

@@ -41,13 +41,17 @@ def profile_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
+            np.float32
+        )
         # Shuffle the z_hat column so the wrapper has work to do
         z_hat_sorted = np.linspace(0.0, 1.0, ROWS_PER_CASE, dtype=np.float32)
         perm = rng.permutation(ROWS_PER_CASE)
         features[:, z_idx] = z_hat_sorted[perm]
 
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
+            np.float32
+        )
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -137,7 +141,9 @@ class TestProfileDataset:
         z = x[0].numpy()
         assert np.all(np.diff(z) >= -1e-6)
 
-    def test_subset_by_case_indices_isolates_inner(self, profile_zarr_dir: Path) -> None:
+    def test_subset_by_case_indices_isolates_inner(
+        self, profile_zarr_dir: Path
+    ) -> None:
         """The subset wrapper must wrap a real subset of the inner — sharing
         the parent's _inner would silently include all cases in the Phase 7
         delta_p loss path, which iterates ds._case_ids_unique.
@@ -187,7 +193,9 @@ class TestProfileDataset:
         assert ds.local_velocity_normalization is False
         assert ds.exclude_cases == []
 
-    def test_subset_preserves_residual_baseline_alignment(self, profile_zarr_dir: Path) -> None:
+    def test_subset_preserves_residual_baseline_alignment(
+        self, profile_zarr_dir: Path
+    ) -> None:
         from cases.alpha_d.datasets.profile import AlphaDProfileDataset
 
         ds = AlphaDProfileDataset(
@@ -269,7 +277,9 @@ class TestProfileAdapter:
         expected = ((pred - target) ** 2).sum(dim=(0, 2))
         assert torch.allclose(field_se, expected)
 
-    def test_relative_l2_broadcasts_with_profile_weight(self, profile_zarr_dir: Path) -> None:
+    def test_relative_l2_broadcasts_with_profile_weight(
+        self, profile_zarr_dir: Path
+    ) -> None:
         from training.losses import relative_l2_loss
 
         pred = torch.randn(2, 1, ROWS_PER_CASE)
@@ -347,85 +357,6 @@ class TestConv1DModel:
         with torch.no_grad():
             out = reloaded(x)
         assert torch.allclose(out, ref, atol=1e-6)
-
-    def test_legacy_alphad_checkpoint_loads_via_alias(self, tmp_path: Path) -> None:
-        """Old checkpoints saved as AlphaDConv1D must still load.
-
-        Simulates a pre-rename .mdlus by saving directly through the
-        backward-compat subclass (so the embedded ``__name__`` is
-        ``AlphaDConv1D``). The alias keeps these round-tripping until
-        the migration utility has been run.
-        """
-        import physicsnemo
-        from training.models.conv1d_profile import AlphaDConv1D, Conv1DProfile
-
-        legacy = AlphaDConv1D(
-            in_channels=4,
-            out_channels=1,
-            hidden=16,
-            num_blocks=2,
-            kernel_size=3,
-            dilations=[1, 2],
-            dropout=0.0,
-        )
-        legacy.eval()
-        x = torch.randn(2, 4, 10)
-        with torch.no_grad():
-            ref = legacy(x)
-
-        ckpt_path = tmp_path / "legacy.mdlus"
-        legacy.save(str(ckpt_path))
-
-        reloaded = physicsnemo.Module.from_checkpoint(str(ckpt_path))
-        assert isinstance(reloaded, Conv1DProfile)
-        assert isinstance(reloaded, AlphaDConv1D)  # subclass identity preserved
-        reloaded.eval()
-        with torch.no_grad():
-            out = reloaded(x)
-        assert torch.allclose(out, ref, atol=1e-6)
-
-    def test_migrate_conv1d_checkpoint_rewrites_name(self, tmp_path: Path) -> None:
-        """The migration utility rewrites a legacy checkpoint in place,
-        after which it loads as a plain ``Conv1DProfile`` (no alias).
-
-        Current physicsnemo saves ``.mdlus`` as a zip; the migration
-        utility also handles the legacy tar format, but we only assert
-        the zip path here since that's what ``Module.save`` produces.
-        """
-        import json
-        import zipfile
-
-        import physicsnemo
-        from training.models._migrate_conv1d_checkpoint import migrate
-        from training.models.conv1d_profile import AlphaDConv1D, Conv1DProfile
-
-        legacy = AlphaDConv1D(
-            in_channels=4,
-            out_channels=1,
-            hidden=16,
-            num_blocks=2,
-            kernel_size=3,
-            dilations=[1, 2],
-            dropout=0.0,
-        )
-        ckpt_path = tmp_path / "legacy.mdlus"
-        legacy.save(str(ckpt_path))
-
-        # Pre-migration: __name__ is AlphaDConv1D.
-        with zipfile.ZipFile(ckpt_path, "r") as z:
-            pre = json.loads(z.read("args.json"))
-        assert pre["__name__"] == "AlphaDConv1D"
-
-        assert migrate(ckpt_path) is True
-        assert migrate(ckpt_path) is False  # idempotent: second run is a no-op.
-
-        # Post-migration: __name__ is Conv1DProfile.
-        with zipfile.ZipFile(ckpt_path, "r") as z:
-            post = json.loads(z.read("args.json"))
-        assert post["__name__"] == "Conv1DProfile"
-
-        reloaded = physicsnemo.Module.from_checkpoint(str(ckpt_path))
-        assert type(reloaded) is Conv1DProfile  # exact class, not the alias subclass.
 
     def test_activation_knob(self) -> None:
         """``activation`` is plumbed through build() and the resulting

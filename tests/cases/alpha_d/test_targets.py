@@ -134,6 +134,7 @@ def test_tabular_dataset_supports_signed_target_local_velocity_normalization(
         output_columns=["signed_log1p_alpha_D"],
         local_velocity_normalization=True,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     # The transform now owns LV-norm; it also subtracts the closed-form

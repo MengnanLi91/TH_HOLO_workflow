@@ -21,7 +21,9 @@ prepare_data -> plan_cases -> select_features -> train_model -> summarize
 
 `plan_cases` writes one deterministic train/held-out split. Feature selection
 never sees the held-out cases, while HPO uses the same file as its outer test
-split and divides only the training cases for inner validation.
+split and divides only the training cases with the configured explicit fold
+builder. Screening restores its best validation checkpoint; confirmation ranks
+the top sampled candidates across every fold before retraining the winner.
 
 ## Start a case
 

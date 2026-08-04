@@ -44,8 +44,12 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
+            np.float32
+        )
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
+            np.float32
+        )
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -237,7 +241,9 @@ class TestPointwiseAdapter:
         from training.adapters import PointwiseAdapter
 
         adapter = PointwiseAdapter()
-        ref = adapter.build_dataset({"zarr_dir": str(synthetic_zarr_dir), "normalize": False})
+        ref = adapter.build_dataset(
+            {"zarr_dir": str(synthetic_zarr_dir), "normalize": False}
+        )
         stats = {
             "x_mean": ref._x.mean(dim=0).tolist(),
             "x_std": ref._x.std(dim=0).tolist(),
@@ -271,6 +277,42 @@ class TestPointwiseAdapter:
 
         assert ds.input_columns == ["Dr", "log10_Re"]
         assert ds.in_features == 2
+
+
+def test_prepare_fold_dataset_refits_normalization_per_training_cases(
+    synthetic_zarr_dir: Path,
+) -> None:
+    from training.runner import prepare_fold_dataset, prepare_training
+
+    config = {
+        "model": {"name": "mlp", "params": {}},
+        "data": {"zarr_dir": str(synthetic_zarr_dir), "normalize": True},
+        "training": {"device": "cpu", "seed": 42},
+    }
+    prepared = prepare_training(config)
+
+    first = prepare_fold_dataset(prepared, [0])
+    second = prepare_fold_dataset(prepared, [1])
+
+    assert not torch.allclose(
+        first["dataset"].norm_stats["x_mean"],
+        second["dataset"].norm_stats["x_mean"],
+    )
+
+
+def test_prepare_fold_dataset_rejects_unsupported_normalization_adapter() -> None:
+    from training.runner import prepare_fold_dataset
+
+    class UnsupportedAdapter:
+        supports_fold_normalization = False
+
+    prepared = {
+        "data_cfg": {"normalize": True},
+        "adapter": UnsupportedAdapter(),
+        "adapter_name": "unsupported",
+    }
+    with pytest.raises(ValueError, match="does not support"):
+        prepare_fold_dataset(prepared, [0])
 
 
 class TestPointwisePlotSelection:

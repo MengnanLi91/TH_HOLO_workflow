@@ -8,8 +8,9 @@ to MOOSE. Two model variants remain available for component development:
 - **MLP (`train_mlp`)** — pointwise `FullyConnected` predicting one row
   at a time. HPO over ~10 hyperparameters is enabled by default.
 - **Conv1D profile (`train_conv1d`)** — 1D convolutional surrogate that
-  consumes the full 50-station profile per case. Its standalone YAML has no
-  HPO block; the coupled study enables HPO once for its reference panel.
+  consumes the full 50-station profile per case. Its YAML uses the required
+  screening-plus-confirmation HPO contract. The study workflow selects one
+  nine-feature PyCaret set, then freezes it for HPO and every panel.
 
 ## Layout
 
@@ -19,9 +20,9 @@ flowchart LR
     R --> DS["datasets/<br/>profile.py (AlphaDProfileDataset)"]
     R --> ETL["etl/<br/>source · transform · sink"]
     R --> Phys["physics/<br/>baseline · targets"]
-    R --> Exp["experiment.py<br/>throat loss · decode + baseline plot hooks"]
+    R --> Exp["experiment.py<br/>profile loss · HPO metrics · decode hooks"]
     R --> FD["feature_data.py<br/>ALLOWLIST · engineered features"]
-    R --> Met["metrics.py<br/>per-region MSE/RMSE · Δp eval"]
+    R --> Met["metrics.py<br/>per-region MSE/RMSE · Δp/HPO metrics"]
     R --> Tr["transforms.py<br/>signed-log1p residual target"]
     R --> Run["study_workflow.py<br/>run_etl.py · train.py"]
 ```
@@ -34,7 +35,7 @@ cases/alpha_d/
 ├── datasets/          # AlphaDProfileDataset + build_dataset entry point
 ├── etl/               # PhysicsNeMo Curator pipeline (source, transform, sink)
 ├── physics/           # baseline, targets — alpha_D encoding + analytical baseline
-├── experiment.py      # AlphaDExperiment — throat-weighted loss + decode/baseline plot hooks
+├── experiment.py      # AlphaDExperiment — profile loss, HPO metrics, decode hooks
 ├── feature_data.py    # ALLOWLIST, GROUPED_FEATURES, engineered_features_spec
 ├── metrics.py         # extended metrics (per-region MSE/RMSE, Δp evaluation)
 ├── transforms.py      # alpha_d_residual_transform (target = signed-log1p residual)
@@ -57,12 +58,13 @@ uv run multifid-workflow plan \
   --config src/cases/alpha_d/configs/coupling_study.toml
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001
+  --run-id alpha-d-conv1d-002
 ```
 
-The workflow constructs the configured held-out panels, tunes the selected
-method once, trains and exports each panel, runs MOOSE coupling, and writes
-the report under `data/workflows/alpha_d_coupling/<run-id>/`. See
+The workflow constructs the configured held-out panels, selects one
+outer-case-safe Conv1D feature set, tunes the selected method once, trains and
+exports each panel, runs MOOSE coupling, and writes the report under
+`data/workflows/alpha_d_coupling/<run-id>/`. See
 [Running the Alpha-D Case](../user/running_alpha_d.md) for raw-data ETL,
 resume, and publication.
 
@@ -85,7 +87,7 @@ feature/target matrix plus per-case metadata. See the
 [Alpha-D Surrogate Tutorial](../user/alpha_d_surrogate.md) for the Zarr
 layout and feature reference.
 
-### 2. PyCaret feature selection — required for MLP, skip for Conv1D
+### 2. PyCaret feature selection
 
 ```bash
 python cases/alpha_d/run_feature_selection_pycaret.py
@@ -99,9 +101,40 @@ Reads the Zarr stores, runs PyCaret regression with the
   `data.input_columns_file: …/selected_features.txt`, so this step
   must run first (or you must override `data.input_columns=[…]` and
   set `data.input_columns_file=null` from the CLI).
-- **Conv1D** (`train_conv1d.yaml`) hard-codes its `input_columns`
-  list in the YAML and does not read `input_columns_file`, so the
-  Conv1D path skips this step entirely.
+- The coupled **Conv1D** workflow runs its own `select_alpha_features` stage
+  after outer panel cases have been excluded. It writes
+  `features/alpha/selected_features.txt`, then passes that frozen file to HPO
+  and every panel. Do not run a separate selector before the full workflow.
+- `train_conv1d.yaml` retains its curated nine columns only as a fallback for
+  direct component runs. To use PyCaret in such a run, select with
+  `--config-name pycaret_conv1d` and pass the resulting file as
+  `data.input_columns_file=…/selected_features.txt`.
+
+#### Choosing Conv1D candidate features
+
+The case author sets the candidate pool in `configs/pycaret_conv1d.yaml`.
+`data.selected_from_allowlist: null` considers every feature in
+`cases.alpha_d.feature_data.ALLOWLIST`; replacing `null` with a list restricts
+PyCaret to that ordered subset. For example:
+
+```yaml
+data:
+  selected_from_allowlist:
+    - Dr
+    - Lr
+    - log10_Re_throat
+    - z_hat
+    - z_hat_times_Dr
+    - z_hat_times_Lr
+    - dist_to_throat_start
+    - dist_to_throat_end
+    - dist_to_nearest_step
+```
+
+To add a new candidate, make it available from the ETL or engineered-feature
+builder and add it to `ALLOWLIST` in `feature_data.py`; an unknown YAML name
+is rejected. The workflow supplies only the data path, outer-case exclusions,
+and output path.
 
 ### 3. Train
 
@@ -121,8 +154,9 @@ python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=
 ```
 :::
 
-:::{tab-item} Conv1D profile
-Does not need Step 2.
+:::{tab-item} Conv1D profile (with HPO)
+The coupled workflow performs Step 2 automatically. A direct run uses the
+curated fallback unless given a selector artifact.
 ```bash
 python train.py --config-path cases/alpha_d/configs --config-name train_conv1d
 ```
@@ -146,9 +180,9 @@ python cases/alpha_d/train.py --config-name train_conv1d   # Conv1D
 python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp
 ```
 
-`run_meta.json` written alongside the checkpoint reconstructs the exact
-dataset, split, and `target_transform`, so the eval reproduces the
-training conditions.
+Schema-3 `run_meta.json` reconstructs the exact dataset, split,
+`target_transform_kwargs`, and acceleration-head choice. Evaluation and export
+reject older metadata instead of inferring baseline behavior.
 
 ## Further reading
 

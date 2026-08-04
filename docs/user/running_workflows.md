@@ -46,7 +46,7 @@ uv run multifid-workflow plan \
 
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001
+  --run-id alpha-d-conv1d-002
 ```
 
 `plan` validates the TOML and stage DAG without training. To stop after one
@@ -55,7 +55,7 @@ stage and its dependencies, use `--target`:
 ```bash
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001 \
+  --run-id alpha-d-conv1d-002 \
   --target panel.indist_panel.train_alpha
 ```
 
@@ -63,7 +63,7 @@ Inspect progress at any time:
 
 ```bash
 uv run multifid-workflow status \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002
 ```
 
 Rerun the same `run` command to resume. A succeeded stage is reused only while
@@ -116,10 +116,10 @@ config_name = "train_conv1d"
 artifact_contract = "alpha_d_profile_v1"
 checkpoint = "model.mdlus"
 run_meta = "run_meta.json"
+include_acceleration_head = true
 
 [training.alpha.hpo]
 enabled = true
-reference_panel = "indist_panel"
 
 [training.alpha.export]
 module = "cases.alpha_d.export_friction_profile"
@@ -151,6 +151,7 @@ To use a custom CNN:
    artifact_contract = "alpha_d_profile_v1"
    checkpoint = "model.mdlus"
    run_meta = "run_meta.json"
+   include_acceleration_head = true
    ```
 
 4. Run `plan`, then choose a new run ID. Model parameters and the HPO search
@@ -198,10 +199,10 @@ Only `publish` may copy declared figures into `docs/_static`:
 
 ```bash
 uv run multifid-workflow publish \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002
 
 uv run multifid-workflow publish \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001 \
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002 \
   --check
 ```
 

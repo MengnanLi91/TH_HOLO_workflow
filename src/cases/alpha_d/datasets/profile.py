@@ -156,7 +156,9 @@ class AlphaDProfileDataset(Dataset):
 
     def subset_by_case_indices(self, case_indices) -> "AlphaDProfileDataset":
         case_indices = [int(i) for i in case_indices]
-        return AlphaDProfileDataset._from_inner(self._inner.subset_by_case_indices(case_indices))
+        return AlphaDProfileDataset._from_inner(
+            self._inner.subset_by_case_indices(case_indices)
+        )
 
     def add_baseline_to_encoded(self, encoded, row_mask=None, field_idx=None):
         """Delegate to the inner TabularPairDataset."""
@@ -174,7 +176,7 @@ class AlphaDProfileDataset(Dataset):
                 "x_mean": self.norm_stats["x_mean"].detach().cpu().tolist(),
                 "x_std": self.norm_stats["x_std"].detach().cpu().tolist(),
             }
-        return {
+        metadata = {
             "dataset_type": f"{type(self).__module__}:{type(self).__name__}",
             "input_columns": list(self.input_columns),
             "output_columns": list(self.output_columns),
@@ -194,6 +196,11 @@ class AlphaDProfileDataset(Dataset):
             "downstream_weight": self._inner.downstream_weight,
             "include_case_idx": bool(self._inner.include_case_idx),
         }
+        if "include_acceleration_head" in self._inner.target_transform_kwargs:
+            metadata["include_acceleration_head"] = self._inner.target_transform_kwargs[
+                "include_acceleration_head"
+            ]
+        return metadata
 
 
 def _build_case_slices(inner: TabularPairDataset) -> list[np.ndarray]:
@@ -221,6 +228,14 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
     norm_from_case_indices = data_cfg.get("norm_from_case_indices")
     if norm_from_case_indices is not None:
         norm_from_case_indices = [int(i) for i in norm_from_case_indices]
+
+    if "include_acceleration_head" not in data_cfg:
+        raise ValueError(
+            "Alpha-D profile data requires data.include_acceleration_head."
+        )
+    include_acceleration_head = data_cfg["include_acceleration_head"]
+    if not isinstance(include_acceleration_head, bool):
+        raise ValueError("data.include_acceleration_head must be a boolean.")
 
     if data_cfg.get("input_columns_file") is not None:
         cols_path = Path(str(data_cfg["input_columns_file"]))
@@ -255,6 +270,11 @@ def build_dataset(data_cfg: dict) -> AlphaDProfileDataset:
         downstream_weight=_opt_float("downstream_weight"),
         include_case_idx=bool(data_cfg.get("include_case_idx", False)),
         exclude_cases=exclude_cases,
-        local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
+        local_velocity_normalization=bool(
+            data_cfg.get("local_velocity_normalization", False)
+        ),
         min_Dr=_opt_float("min_Dr"),
+        target_transform_kwargs={
+            "include_acceleration_head": include_acceleration_head,
+        },
     )

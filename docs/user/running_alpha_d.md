@@ -101,7 +101,7 @@ uv run multifid-workflow plan \
 
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001 \
+  --run-id alpha-d-conv1d-002 \
   --target plan_panels
 ```
 
@@ -109,19 +109,19 @@ uv run multifid-workflow run \
 case files. Inspect them under:
 
 ```text
-data/workflows/alpha_d_coupling/alpha-d-conv1d-001/panels/
+data/workflows/alpha_d_coupling/alpha-d-conv1d-002/panels/
 ```
 
 ## 4. Run the study
 
-The complete study does geometry-only feature selection for every panel, tunes
-the default Conv1D profile method once, trains direct and alpha-D models,
-exports closures, runs MOOSE, and writes the evidence report:
+The 27-stage study excludes outer panel cases, selects one PyCaret feature set
+for Conv1D, tunes that frozen feature set once, trains direct and alpha-D
+models, exports closures, runs MOOSE, and writes the evidence report:
 
 ```bash
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001
+  --run-id alpha-d-conv1d-002
 ```
 
 For a narrower checkpoint before committing to every panel, run one target:
@@ -129,18 +129,21 @@ For a narrower checkpoint before committing to every panel, run one target:
 ```bash
 uv run multifid-workflow run \
   --config src/cases/alpha_d/configs/coupling_study.toml \
-  --run-id alpha-d-conv1d-001 \
+  --run-id alpha-d-conv1d-002 \
   --target panel.indist_panel.train_alpha
 ```
 
-This target includes feature selection and the reference-panel HPO stage. The
-default HPO has 30 trials; it is the most expensive ML stage.
+This target includes the HPO stage. `plan_panels` writes the union of every
+held-out and report panel to `panels/hpo_exclude_cases.txt`; those outer cases
+are removed before screening folds are built. Screening runs 40 total trials,
+then confirms the five strongest sampled candidates plus the three scientific
+controls over folds/seeds 42, 43, and 44.
 
 ## 5. Monitor and resume
 
 ```bash
 uv run multifid-workflow status \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002
 ```
 
 Rerun the exact same `run` command to resume. Successful stages are reused
@@ -161,17 +164,42 @@ report/pressure_drop_comparison_errors.svg
 moose_matrix.json
 ```
 
-They are all below
-`data/workflows/alpha_d_coupling/<run-id>/`. Only publish after reviewing the
-run:
+They are all below `data/workflows/alpha_d_coupling/<run-id>/`. Apply the
+publication gates against the previous run first:
+
+```bash
+uv run python -m cases.alpha_d.compare_training_runs \
+  --baseline-csv data/alpha-d-conv1d-001/report/paired_case_errors.csv \
+  --candidate-csv data/workflows/alpha_d_coupling/alpha-d-conv1d-002/report/paired_case_errors.csv \
+  --out-json data/workflows/alpha_d_coupling/alpha-d-conv1d-002/report/training_comparison.json \
+  --out-markdown data/workflows/alpha_d_coupling/alpha-d-conv1d-002/report/training_comparison.md
+```
+
+This passes only when in-domain MARE and p90 improve, Lr-low/high MARE and
+absolute signed bias improve, and no other panel MARE regresses by more than
+0.25 percentage points. Publish only after it reports `PASS`:
 
 ```bash
 uv run multifid-workflow publish \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002
 
 uv run multifid-workflow publish \
-  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-001 \
+  --run-dir data/workflows/alpha_d_coupling/alpha-d-conv1d-002 \
   --check
 ```
 
 `publish --check` verifies published-file drift without rerunning the study.
+
+The acceleration-head-off baseline is implemented but intentionally not part
+of the first run. See the [switch physics and consistency contract](alpha_d_surrogate.md#acceleration-head-baseline-switch).
+Launch the controlled ablation later with:
+
+```bash
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-002-no-accel \
+  --set training.alpha.include_acceleration_head=false
+```
+
+Repeatable `--set` arguments replace existing TOML scalar paths. The resolved
+configuration is persisted and fingerprinted.

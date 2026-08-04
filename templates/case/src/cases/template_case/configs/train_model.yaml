@@ -57,25 +57,44 @@ output:
 hpo:
   study_name: template_case_mlp_v1
   direction: minimize
-  n_trials: 20
-  seed: 42
   show_progress_bar: true
   storage: sqlite:///${hpo.output_dir}/${hpo.study_name}.db
   load_if_exists: true
   retrain_best: true
   output_dir: ${output.case_dir}/hpo
+  screening:
+    n_trials: 20
+    max_epochs: 100
+    early_stopping:
+      patience: 10
+      min_delta: 0.0
   sampler:
     name: TPESampler
     params:
-      seed: ${hpo.seed}
+      seed: ${hpo.validation.seed}
   pruner:
     name: MedianPruner
     params:
       n_startup_trials: 5
       n_warmup_steps: 5
   validation:
-    split_ratio: 0.2
-    seed: ${hpo.seed}
+    splitter_entrypoint: training.hpo.splits:random_case_folds
+    n_folds: 3
+    screening_fold: 0
+    seed: 42
+  objective:
+    weights:
+      profile_val_loss: 1.0
+  confirmation:
+    top_k: 3
+    max_epochs: 200
+    early_stopping:
+      patience: 20
+      min_delta: 0.0
+    aggregate_std_weight: 0.5
+    guard_metric: null
+    guard_reference: null
+  enqueue_trials: []
   search_space:
     training.lr:
       type: float

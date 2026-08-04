@@ -27,6 +27,7 @@ def test_target_transform_sets_baseline_encoded(alpha_d_zarr_dir: Path) -> None:
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
     assert ds.has_target_baseline is True
     assert ds._baseline_encoded is not None
@@ -55,6 +56,28 @@ def test_alpha_d_profile_dataset_default_injects_residual_transform(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
     assert ds.has_target_baseline is True
     assert ds._baseline_encoded is not None
+
+
+def test_alpha_d_profile_builder_requires_and_persists_acceleration_flag(
+    alpha_d_zarr_dir: Path,
+) -> None:
+    from cases.alpha_d.datasets.profile import build_dataset
+
+    with pytest.raises(ValueError, match="include_acceleration_head"):
+        build_dataset({"zarr_dir": str(alpha_d_zarr_dir)})
+
+    dataset = build_dataset(
+        {
+            "zarr_dir": str(alpha_d_zarr_dir),
+            "include_acceleration_head": False,
+        }
+    )
+    metadata = dataset.reproducibility_metadata()
+    assert metadata["include_acceleration_head"] is False
+    assert dataset._inner.target_transform_kwargs == {
+        "include_acceleration_head": False
+    }

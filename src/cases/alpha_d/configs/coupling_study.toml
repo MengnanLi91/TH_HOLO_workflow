@@ -1,6 +1,6 @@
 [workflow]
 id = "alpha_d_coupling"
-version = 2
+version = 4
 entrypoint = "cases.alpha_d.study_workflow:build_workflow"
 output_root = "data/workflows"
 
@@ -25,25 +25,6 @@ binds = ["{repo_root}:{repo_root}"]
 python_executor = "python"
 alpha_min_dr = 0.333
 exclude_below_dr = 0.1
-# Only geometry and prescribed operating parameters are eligible. CFD-derived
-# velocity and pressure fields are intentionally absent.
-geometry_feature_pool = [
-  "log10_Re",
-  "Dr",
-  "Lr",
-  "z_hat",
-  "d_local_over_D",
-  "A_local_over_A",
-  "dD_dz_local",
-  "log10_Re_throat",
-  "inv_Dr",
-  "Dr_times_Lr",
-  "z_hat_times_Dr",
-  "z_hat_times_Lr",
-  "dist_to_throat_start",
-  "dist_to_throat_end",
-  "dist_to_nearest_step",
-]
 
 [training.alpha]
 id = "conv1d_profile"
@@ -52,10 +33,14 @@ config_name = "train_conv1d"
 artifact_contract = "alpha_d_profile_v1"
 checkpoint = "model.mdlus"
 run_meta = "run_meta.json"
+include_acceleration_head = true
 
 [training.alpha.hpo]
 enabled = true
-reference_panel = "indist_panel"
+
+[training.alpha.feature_selection]
+module = "cases.alpha_d.run_feature_selection_pycaret"
+config_name = "pycaret_conv1d"
 
 [training.alpha.export]
 module = "cases.alpha_d.export_friction_profile"

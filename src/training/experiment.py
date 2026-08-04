@@ -28,7 +28,9 @@ class Experiment:
 
     def training_step(self, batch) -> float:
         if self.optimizer is None or self.loss_fn is None:
-            raise RuntimeError("Experiment.training_step requires optimizer and loss_fn.")
+            raise RuntimeError(
+                "Experiment.training_step requires optimizer and loss_fn."
+            )
 
         self.model.train()
         prepared = self.adapter.build_batch(batch, self.device)
@@ -77,6 +79,16 @@ class Experiment:
         """
         _ = val_loader
         return 0.0
+
+    def compute_hpo_metrics(self, validation_dataset) -> dict[str, float]:
+        """Return experiment-specific metrics for HPO composite objectives.
+
+        The generic HPO runner always supplies ``profile_val_loss``. Case
+        experiments override this method for every additional metric named by
+        ``hpo.objective.weights``.
+        """
+        _ = validation_dataset
+        return {}
 
     def on_epoch_end(self, epoch: int, avg_loss: float) -> None:
         _ = (epoch, avg_loss)

@@ -15,6 +15,7 @@ etl_pipeline
 dataset
 fno_train_eval
 workflows
+alpha_d_coupling_physics
 ```
 
 ```{toctree}
