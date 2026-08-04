@@ -107,8 +107,6 @@ def build_executors(config: dict, repo_root: Path):
             raise ValueError(f"Unsupported executor kind {kind!r} for {name!r}")
         image = raw.get("image")
         image_env = raw.get("image_env")
-        if image_env:
-            image = os.environ.get(str(image_env), image)
         binds = list(raw.get("binds") or [])
         bind_env = raw.get("bind_env")
         if bind_env and os.environ.get(str(bind_env)):

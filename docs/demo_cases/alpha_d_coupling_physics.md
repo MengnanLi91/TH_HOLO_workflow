@@ -125,6 +125,10 @@ data/workflows/alpha_d_coupling/<run-id>/
 └── report/
 ```
 
+`tuning/best_params.json` is the runtime source of truth for panel training.
+`best_overrides.txt` is the equivalent shell-safe compatibility representation
+retained for inspection and reproducibility.
+
 The one canonical `heldout_cases.txt` per panel is passed to direct-regressor
 testing, alpha-D feature selection, and alpha-D training. The summarizer checks
 all three persisted contracts before producing evidence.

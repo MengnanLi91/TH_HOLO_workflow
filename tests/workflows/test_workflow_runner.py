@@ -16,7 +16,7 @@ from workflows import (
     WorkflowRunner,
 )
 from workflows.core import RunContext
-from workflows.executors import ApptainerExecutor
+from workflows.executors import ApptainerExecutor, build_executors
 from workflows.runner import validate_workflow
 
 
@@ -95,7 +95,9 @@ def test_runner_resumes_valid_stages_and_reruns_changed_artifacts(tmp_path):
     assert events == [("prepare", "reused"), ("report", "reused")]
 
     (tmp_path / "run" / "prepared.txt").write_text("changed\n", encoding="utf-8")
-    runner.run(target="prepare")
+    targeted = runner.run(target="prepare")
+    assert targeted["status"] == "completed_with_partial_results"
+    assert targeted["stages"]["report"]["status"] == "partial"
     assert calls == {"prepare": 2, "report": 1}
 
     runner.run()
@@ -104,6 +106,7 @@ def test_runner_resumes_valid_stages_and_reruns_changed_artifacts(tmp_path):
 
 def test_runner_reruns_when_stage_validator_fails(tmp_path):
     calls = 0
+    validator_calls = 0
     valid = True
 
     def produce(context: RunContext):
@@ -112,10 +115,15 @@ def test_runner_reruns_when_stage_validator_fails(tmp_path):
         context.resolve("value.txt").write_text(str(calls), encoding="utf-8")
         return StageResult(artifacts=[Artifact("value.txt")])
 
+    def validate(_context: RunContext):
+        nonlocal validator_calls
+        validator_calls += 1
+        return valid
+
     definition = WorkflowDefinition(
         "validated",
         1,
-        (Stage("produce", produce, validator=lambda _context: valid),),
+        (Stage("produce", produce, validator=validate),),
     )
     runner = WorkflowRunner(
         definition,
@@ -125,13 +133,16 @@ def test_runner_reruns_when_stage_validator_fails(tmp_path):
     )
 
     runner.run()
+    assert validator_calls == 1
     runner.run()
     assert calls == 1
+    assert validator_calls == 2
 
     valid = False
     with pytest.raises(ValueError, match="failed semantic validation"):
         runner.run()
     assert calls == 2
+    assert validator_calls == 4
 
 
 def test_runner_validates_outputs_before_marking_first_run_successful(tmp_path):
@@ -194,6 +205,132 @@ def test_runner_records_failure_and_resumes_it(tmp_path):
     completed = runner.run()
     assert completed["status"] == "completed"
     assert attempts == 2
+
+
+def test_targeted_run_preserves_unselected_failure_status(tmp_path):
+    def fail(_context: RunContext):
+        raise RuntimeError("expected failure")
+
+    definition = WorkflowDefinition(
+        "failed-target",
+        1,
+        (
+            Stage("prepare", lambda _context: None),
+            Stage("report", fail, dependencies=("prepare",)),
+        ),
+    )
+    runner = WorkflowRunner(
+        definition,
+        config={"workflow": {"id": "failed-target"}},
+        repo_root=Path(__file__).resolve().parents[2],
+        run_dir=tmp_path / "run",
+    )
+
+    with pytest.raises(RuntimeError, match="expected failure"):
+        runner.run()
+
+    targeted = runner.run(target="prepare")
+    assert targeted["status"] == "failed"
+    assert targeted["stages"]["report"]["status"] == "failed"
+
+
+def test_initial_targeted_run_with_pending_stage_is_partial_run(tmp_path):
+    definition = WorkflowDefinition(
+        "initial-target",
+        1,
+        (
+            Stage("prepare", lambda _context: None),
+            Stage("report", lambda _context: None, dependencies=("prepare",)),
+        ),
+    )
+    runner = WorkflowRunner(
+        definition,
+        config={"workflow": {"id": "initial-target"}},
+        repo_root=Path(__file__).resolve().parents[2],
+        run_dir=tmp_path / "run",
+    )
+
+    manifest = runner.run(target="prepare")
+
+    assert manifest["status"] == "partial_run"
+    assert manifest["stages"]["prepare"]["status"] == "succeeded"
+    assert manifest["stages"]["report"]["status"] == "pending"
+
+
+def test_runner_flushes_input_and_artifact_fingerprints_after_failure(tmp_path):
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("input\n", encoding="utf-8")
+
+    def produce(context: RunContext):
+        context.resolve("artifact.txt").write_text("artifact\n", encoding="utf-8")
+        return StageResult(artifacts=[Artifact("artifact.txt")])
+
+    def fail(_context: RunContext):
+        raise RuntimeError("stop after artifact")
+
+    definition = WorkflowDefinition(
+        "cached-failure",
+        1,
+        (
+            Stage("produce", produce),
+            Stage("fail", fail, dependencies=("produce",)),
+        ),
+        input_paths=lambda _config, _repo_root: [input_path],
+    )
+    run_dir = tmp_path / "run"
+    runner = WorkflowRunner(
+        definition,
+        config={"workflow": {"id": "cached-failure"}},
+        repo_root=tmp_path,
+        run_dir=run_dir,
+    )
+
+    with pytest.raises(RuntimeError, match="stop after artifact"):
+        runner.run()
+
+    cache = json.loads((run_dir / "fingerprint_cache.json").read_text(encoding="utf-8"))
+    assert str(input_path.resolve()) in cache
+    assert str((run_dir / "artifact.txt").resolve()) in cache
+
+
+def test_runner_reuses_persisted_artifact_fingerprint_cache(monkeypatch, tmp_path):
+    calls = 0
+
+    def produce(context: RunContext):
+        nonlocal calls
+        calls += 1
+        context.resolve("artifact.txt").write_text("artifact\n", encoding="utf-8")
+        return StageResult(artifacts=[Artifact("artifact.txt")])
+
+    definition = WorkflowDefinition("cached-artifact", 1, (Stage("produce", produce),))
+    config = {"workflow": {"id": "cached-artifact"}}
+    run_dir = tmp_path / "run"
+    WorkflowRunner(
+        definition,
+        config=config,
+        repo_root=tmp_path,
+        run_dir=run_dir,
+    ).run()
+
+    from workflows import fingerprint
+
+    original_file_digest = fingerprint._file_digest
+    cache_hits: list[bool] = []
+
+    def record_cache_hit(path, cached):
+        cache_hits.append(bool(cached and str(path.resolve()) in cached))
+        return original_file_digest(path, cached)
+
+    monkeypatch.setattr(fingerprint, "_file_digest", record_cache_hit)
+    WorkflowRunner(
+        definition,
+        config=config,
+        repo_root=tmp_path,
+        run_dir=run_dir,
+    ).run()
+
+    assert calls == 1
+    assert cache_hits == [True]
 
 
 def test_interrupted_workflow_resumes_without_repeating_expensive_stage(tmp_path):
@@ -318,3 +455,29 @@ def test_apptainer_executor_constructs_argument_array(monkeypatch, tmp_path):
     assert "/images/python.sif" in captured["argv"]
     assert captured["argv"][-3:] == ["python", "-c", "print('ok')"]
     assert "shell" not in captured["kwargs"]
+
+
+def test_apptainer_image_environment_is_resolved_at_use_time(monkeypatch, tmp_path):
+    monkeypatch.setenv("WORKFLOW_TEST_IMAGE", "/images/from-environment.sif")
+    executor = build_executors(
+        {
+            "executors": {
+                "python": {
+                    "kind": "apptainer",
+                    "image": "/images/from-config.sif",
+                    "image_env": "WORKFLOW_TEST_IMAGE",
+                }
+            }
+        },
+        tmp_path,
+    )["python"]
+
+    monkeypatch.delenv("WORKFLOW_TEST_IMAGE")
+    assert isinstance(executor, ApptainerExecutor)
+    assert executor.resolved_image() == Path("/images/from-config.sif")
+
+    monkeypatch.setenv("WORKFLOW_TEST_IMAGE", "/images/set-after-construction.sif")
+    assert executor.resolved_image() == Path("/images/set-after-construction.sif")
+
+    monkeypatch.setenv("WORKFLOW_TEST_IMAGE", "/images/changed-after-construction.sif")
+    assert executor.resolved_image() == Path("/images/changed-after-construction.sif")

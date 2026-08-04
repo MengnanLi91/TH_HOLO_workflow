@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from workflows import Stage, WorkflowDefinition
+from workflows import Stage, WorkflowDefinition, WorkflowRunner
 from workflows.cli import (
+    _dependency_summary,
     _print_plan,
     _run_with_progress,
     _status,
-    _tree_stage_style,
     apply_config_overrides,
     build_parser,
     main,
@@ -68,15 +68,66 @@ def test_plan_tree_marks_shared_dependencies(capsys):
     assert "also needs #3" in output
 
 
-def test_tree_stage_styles_distinguish_workflow_families():
-    assert _tree_stage_style("prepare_data") == "bold bright_green"
-    assert _tree_stage_style("panel.example.select_features") == "bold bright_magenta"
-    assert _tree_stage_style("tune_alpha") == "bold bright_yellow"
-    assert _tree_stage_style("panel.example.train_direct") == "bold bright_cyan"
-    assert _tree_stage_style("panel.example.train_alpha") == "bold bright_green"
-    assert _tree_stage_style("panel.example.export_closure") == "bold bright_blue"
-    assert _tree_stage_style("solve_moose") == "bold bright_red"
-    assert _tree_stage_style("summarize") == "bold bright_white"
+def test_plan_progress_and_runner_share_target_selection(tmp_path, capsys):
+    calls: list[str] = []
+
+    def record(name):
+        def action(_context):
+            calls.append(name)
+
+        return action
+
+    definition = WorkflowDefinition(
+        "target-example",
+        1,
+        (
+            Stage("prepare", record("prepare")),
+            Stage("unrelated", record("unrelated")),
+            Stage("target", record("target"), dependencies=("prepare",)),
+        ),
+    )
+    runner = WorkflowRunner(
+        definition,
+        config={"workflow": {"id": "target-example"}},
+        repo_root=tmp_path,
+        run_dir=tmp_path / "run",
+    )
+
+    _print_plan(definition, target="target")
+    plan_output = capsys.readouterr().out
+    assert "2 selected" in plan_output
+    assert "#01 prepare" in plan_output
+    assert "#02 target" in plan_output
+    assert "unrelated" not in plan_output
+
+    manifest = _run_with_progress(runner, target="target")
+    progress_output = capsys.readouterr().out
+    assert calls == ["prepare", "target"]
+    assert "2/2" in progress_output
+    assert manifest["stages"]["unrelated"]["status"] == "pending"
+
+    expected = (
+        "Unknown target stage 'missing'; available: ['prepare', 'target', 'unrelated']"
+    )
+    errors = []
+    for invoke in (
+        lambda: _print_plan(definition, target="missing"),
+        lambda: _run_with_progress(runner, target="missing"),
+        lambda: runner.run(target="missing"),
+    ):
+        with pytest.raises(ValueError) as exc_info:
+            invoke()
+        errors.append(str(exc_info.value))
+    assert errors == [expected, expected, expected]
+
+
+def test_dependency_summary_does_not_infer_case_semantics_from_stage_names():
+    assert (
+        _dependency_summary(
+            ("panel.example.train", "panel.control.export", "panel.validation.check")
+        )
+        == "3 upstream"
+    )
 
 
 def test_plan_parser_defaults_to_tree_and_accepts_table_option():
@@ -148,7 +199,7 @@ def test_status_output_uses_color_coded_state_summary(tmp_path, capsys):
     assert "missing figure" in output
 
 
-def test_run_progress_tracks_reused_and_partial_stages(capsys):
+def test_run_progress_tracks_reused_and_partial_stages(monkeypatch, capsys):
     noop = lambda _context: None  # noqa: E731
     definition = WorkflowDefinition(
         workflow_id="display_example",
@@ -162,6 +213,7 @@ def test_run_progress_tracks_reused_and_partial_stages(capsys):
     class Runner:
         def __init__(self):
             self.definition = definition
+            self.ordered = list(definition.stages)
             self.events: list[tuple[str, str]] = []
 
         def run(self, *, target, on_stage):
@@ -172,11 +224,89 @@ def test_run_progress_tracks_reused_and_partial_stages(capsys):
             return {"status": "completed_with_partial_results"}
 
     runner = Runner()
+    monkeypatch.setattr(
+        "workflows.cli.validate_workflow",
+        lambda _definition: pytest.fail("progress display revalidated the workflow"),
+    )
     _run_with_progress(runner, target=None)
     output = capsys.readouterr().out
 
     assert runner.events == [("prepare", "reused"), ("summarize", "partial")]
     assert "Workflow complete with partial results" in output
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("partial_run", "Target complete; workflow remains partially run"),
+        ("failed", "Workflow remains failed"),
+    ],
+)
+def test_run_progress_reports_noncomplete_overall_state(status, expected, capsys):
+    definition = WorkflowDefinition(
+        workflow_id="display_example",
+        version=1,
+        stages=(Stage("prepare", lambda _context: None),),
+    )
+
+    class Runner:
+        ordered = list(definition.stages)
+
+        @staticmethod
+        def run(*, target, on_stage):
+            on_stage(definition.stages[0], "reused")
+            return {"status": status}
+
+    _run_with_progress(Runner(), target="prepare")
+
+    assert expected in capsys.readouterr().out
+
+
+def test_publish_uses_manifest_repo_root_for_external_run_dir(monkeypatch, tmp_path):
+    repo_root = Path(__file__).resolve().parents[2]
+    run_dir = tmp_path / "external" / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps({"repo_root": str(repo_root)}), encoding="utf-8"
+    )
+    (run_dir / "resolved_config.json").write_text("{}", encoding="utf-8")
+    published = {}
+
+    def publisher(context, check):
+        published["repo_root"] = context.repo_root
+        published["check"] = check
+
+    definition = WorkflowDefinition(
+        "publish-example",
+        1,
+        (Stage("prepare", lambda _context: None),),
+        publisher=publisher,
+    )
+    monkeypatch.setattr(
+        "workflows.cli._definition", lambda _config, _repo_root: definition
+    )
+
+    assert main(["publish", "--run-dir", str(run_dir), "--check"]) == 0
+    assert published == {"repo_root": repo_root, "check": True}
+
+
+@pytest.mark.parametrize(
+    ("manifest", "message"),
+    [
+        ({}, "requires a non-empty repo_root"),
+        ({"repo_root": None}, "requires a non-empty repo_root"),
+        ({"repo_root": "/path/that/does/not/exist"}, "repo_root does not exist"),
+    ],
+)
+def test_publish_rejects_invalid_manifest_repo_root(
+    manifest, message, tmp_path, capsys
+):
+    run_dir = tmp_path / "run-001"
+    run_dir.mkdir()
+    (run_dir / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert main(["publish", "--run-dir", str(run_dir)]) == 2
+    assert message in capsys.readouterr().err
 
 
 def test_run_command_renders_stage_progress(monkeypatch, tmp_path, capsys):

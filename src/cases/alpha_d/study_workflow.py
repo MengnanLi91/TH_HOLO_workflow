@@ -469,16 +469,49 @@ def _plan_panels(context: RunContext) -> StageResult:
     )
 
 
-def _best_overrides(params: dict[str, Any]) -> str:
-    parts = []
+def _quote_hydra_string(value: str) -> str:
+    """Quote one string according to Hydra's quoted-value escaping rules."""
+    quote = '"'
+    parts = [quote]
+    backslashes = 0
+    for character in value:
+        if character == "\\":
+            backslashes += 1
+            continue
+        if character == quote:
+            parts.append("\\" * (2 * backslashes + 1))
+        else:
+            parts.append("\\" * backslashes)
+        parts.append(character)
+        backslashes = 0
+    parts.append("\\" * (2 * backslashes))
+    parts.append(quote)
+    return "".join(parts)
+
+
+def _hydra_override_argv(params: dict[str, Any]) -> tuple[str, ...]:
+    """Return deterministic Hydra overrides without a shell round-trip."""
+    if not isinstance(params, dict):
+        raise TypeError("HPO best parameters must be a JSON object")
+    arguments = []
     for key, value in sorted(params.items()):
+        if value is not None and not isinstance(value, (bool, int, float, str)):
+            raise TypeError(
+                f"HPO parameter {key!r} must be a JSON scalar, "
+                f"got {type(value).__name__}"
+            )
         rendered = (
-            value
+            _quote_hydra_string(value)
             if isinstance(value, str)
-            else json.dumps(value, separators=(",", ":"))
+            else json.dumps(
+                value,
+                allow_nan=False,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
         )
-        parts.append(f"{key}={rendered}")
-    return " ".join(parts)
+        arguments.append(f"{key}={rendered}")
+    return tuple(arguments)
 
 
 def _alpha_feature_dir(context: RunContext) -> Path:
@@ -545,10 +578,6 @@ def _select_alpha_features_action(method: AlphaTrainingMethod):
                 label="select_alpha_features",
             )
         )
-        if not _alpha_features_valid(context):
-            raise ValueError(
-                "Alpha-D feature selection did not produce a valid artifact"
-            )
         selected = _selected_alpha_features(context)
         return StageResult(
             artifacts=[
@@ -597,7 +626,7 @@ def _tune_alpha_action(method: AlphaTrainingMethod):
             params = json.loads(params_path.read_text(encoding="utf-8"))
             _atomic_json(tuning / "best_params.json", params)
         (tuning / "best_overrides.txt").write_text(
-            _best_overrides(params) + "\n", encoding="utf-8"
+            shlex.join(_hydra_override_argv(params)) + "\n", encoding="utf-8"
         )
         return StageResult(
             artifacts=[Artifact("tuning", f"frozen {method.method_id} parameters")],
@@ -737,8 +766,10 @@ def _alpha_training_validator(panel: Panel, method: AlphaTrainingMethod):
 def _train_alpha_action(panel: Panel, method: AlphaTrainingMethod):
     def action(context: RunContext) -> StageResult:
         panel_dir = _panel_dir(context, panel)
-        overrides = (context.run_dir / "tuning" / "best_overrides.txt").read_text(
-            encoding="utf-8"
+        params = json.loads(
+            (context.run_dir / "tuning" / "best_params.json").read_text(
+                encoding="utf-8"
+            )
         )
         artifact_root = panel_dir / "artifacts"
         argv: list[str | Path] = [
@@ -756,10 +787,9 @@ def _train_alpha_action(panel: Panel, method: AlphaTrainingMethod):
             f"output.run_meta={_alpha_artifact_dir(context, panel) / method.run_meta}",
             "hpo=null",
         ]
-        argv.extend(shlex.split(overrides))
+        argv.extend(_hydra_override_argv(params))
         context.run(_python_command(context, *argv, label=f"train_alpha_{panel.tag}"))
         alpha = _alpha_artifact_dir(context, panel)
-        _require_alpha_training_contract(context, panel, method)
         return StageResult(
             artifacts=[
                 Artifact(
@@ -855,7 +885,6 @@ def _export_action(panel: Panel, method: AlphaTrainingMethod):
                     label=f"export_{panel.tag}_{case}",
                 )
             )
-        _require_export_contract(context, panel, method)
         return StageResult(
             artifacts=[
                 Artifact(coupled.relative_to(context.run_dir), "coupling profiles")

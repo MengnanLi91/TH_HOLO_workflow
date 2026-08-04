@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import copy
 import json
+import shlex
 import tomllib
 from pathlib import Path
 
 import pytest
 
+import cases.alpha_d.study_workflow as alpha_workflow
 from cases.alpha_d.study_workflow import (
     ALPHA_ARTIFACT_CONTRACT,
     ALPHA_EXPORT_CONTRACT,
     ALPHA_INPUT_COLUMNS,
     Panel,
     _alpha_features_valid,
+    _hydra_override_argv,
     _plan_panels,
     _publish,
     _require_alpha_training_contract,
@@ -117,6 +120,67 @@ def test_default_alpha_training_method_is_explicit():
     assert method.feature_selection.config_name == "pycaret_conv1d"
     assert method.export.module == "cases.alpha_d.export_friction_profile"
     assert method.export.contract == ALPHA_EXPORT_CONTRACT
+
+
+def test_hydra_override_argv_serializes_sorted_json_scalars():
+    from hydra.core.override_parser.overrides_parser import OverridesParser
+
+    params = {
+        "z.path": r"C:\data\profile",
+        "e.trailing": "directory\\",
+        "d.quote": 'say "hello" from O\'Reilly',
+        "b.enabled": True,
+        "c.label": "two words",
+        "a.rate": 0.125,
+        "f.optional": None,
+        "g.count": 3,
+    }
+
+    arguments = _hydra_override_argv(params)
+
+    assert [argument.partition("=")[0] for argument in arguments] == sorted(params)
+    parsed = OverridesParser.create().parse_overrides(list(arguments))
+    assert {
+        override.get_key_element(): override.value() for override in parsed
+    } == params
+    assert shlex.split(shlex.join(arguments)) == list(arguments)
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_tune_alpha_persists_canonical_params_and_shell_round_trip(tmp_path, enabled):
+    config = copy.deepcopy(_config())
+    config["training"]["alpha"]["hpo"]["enabled"] = enabled
+    context = RunContext(REPO_ROOT, tmp_path, config, "tune_alpha", {})
+    expected = (
+        {
+            "model.params.dropout": 0.125,
+            "model.params.enabled": True,
+            "model.params.label": 'two words with "quotes" and \\slashes',
+        }
+        if enabled
+        else {}
+    )
+    commands = []
+
+    def record(command, *, check=True):
+        del check
+        commands.append(command)
+        params_path = tmp_path / "tuning/hpo/best_params.json"
+        params_path.parent.mkdir(parents=True, exist_ok=True)
+        params_path.write_text(json.dumps(expected), encoding="utf-8")
+        return None
+
+    context.run = record
+    result = build_workflow(config, REPO_ROOT).stage_map()["tune_alpha"].action(context)
+
+    canonical_path = tmp_path / "tuning/best_params.json"
+    assert json.loads(canonical_path.read_text(encoding="utf-8")) == expected
+    shell_arguments = shlex.split(
+        (tmp_path / "tuning/best_overrides.txt").read_text(encoding="utf-8")
+    )
+    assert shell_arguments == list(_hydra_override_argv(expected))
+    assert len(commands) == int(enabled)
+    assert result.artifacts[0].path == "tuning"
 
 
 def test_alternate_method_changes_plan_without_workflow_edits():
@@ -225,6 +289,9 @@ def test_alternate_method_drives_tune_train_and_export_commands(tmp_path):
     context.run = record
     stages = definition.stage_map()
     stages["tune_alpha"].action(context)
+    (tmp_path / "tuning/best_overrides.txt").write_text(
+        "model.params.width=999\n", encoding="utf-8"
+    )
     stages["panel.indist_panel.train_alpha"].action(context)
     stages["panel.indist_panel.export_closure"].action(context)
 
@@ -235,6 +302,8 @@ def test_alternate_method_drives_tune_train_and_export_commands(tmp_path):
     assert "data.include_acceleration_head=true" in train.argv
     assert any(value.endswith("panels/hpo_exclude_cases.txt") for value in tune.argv)
     assert any("input_columns_file" in value for value in (*tune.argv, *train.argv))
+    assert "model.params.width=16" in train.argv
+    assert "model.params.width=999" not in train.argv
     assert any(value.endswith("checkpoints/cnn.mdlus") for value in train.argv)
     assert any(value.endswith("metadata/cnn.json") for value in train.argv)
     assert export.argv[2] == "user_methods.export_profile"
@@ -343,6 +412,106 @@ def test_alpha_feature_selection_excludes_outer_cases_and_freezes_artifact(tmp_p
     assert any("hpo_exclude_cases.txt" in item for item in commands[0].argv)
     assert result.details["input_columns"] == ALPHA_INPUT_COLUMNS
     assert _alpha_features_valid(context)
+
+
+def _action_test_context(tmp_path: Path) -> tuple[dict, RunContext, Path]:
+    config = _config()
+    panel_dir = tmp_path / "panels/indist_panel"
+    panel_dir.mkdir(parents=True)
+    (panel_dir / "heldout_cases.txt").write_text("case-a\n", encoding="utf-8")
+    (panel_dir / "report_cases.txt").write_text("case-a\n", encoding="utf-8")
+    exclusions = tmp_path / "panels/hpo_exclude_cases.txt"
+    exclusions.write_text("case-a\n", encoding="utf-8")
+    tuning = tmp_path / "tuning/best_params.json"
+    tuning.parent.mkdir(parents=True)
+    tuning.write_text("{}\n", encoding="utf-8")
+    return (
+        config,
+        RunContext(REPO_ROOT, tmp_path, config, "action", {}),
+        panel_dir,
+    )
+
+
+def test_stage_actions_run_full_validators_only_once_after_actions(
+    tmp_path, monkeypatch
+):
+    config, context, _panel_dir = _action_test_context(tmp_path)
+    calls = {"features": 0, "training": 0, "export": 0, "export_case": 0}
+    original_export_case = alpha_workflow._require_export_case
+
+    def features_valid(_context):
+        calls["features"] += 1
+        return True
+
+    def require_training(_context, _panel, _method):
+        calls["training"] += 1
+
+    def require_export(_context, _panel, _method):
+        calls["export"] += 1
+
+    def require_export_case(*args, **kwargs):
+        calls["export_case"] += 1
+        return original_export_case(*args, **kwargs)
+
+    monkeypatch.setattr(alpha_workflow, "_alpha_features_valid", features_valid)
+    monkeypatch.setattr(
+        alpha_workflow, "_require_alpha_training_contract", require_training
+    )
+    monkeypatch.setattr(alpha_workflow, "_require_export_contract", require_export)
+    monkeypatch.setattr(alpha_workflow, "_require_export_case", require_export_case)
+    stages = build_workflow(config, REPO_ROOT).stage_map()
+
+    def record(command, *, check=True):
+        del check
+        if command.label == "select_alpha_features":
+            selected = tmp_path / "features/alpha/selected_features.txt"
+            selected.parent.mkdir(parents=True)
+            selected.write_text("Dr\n", encoding="utf-8")
+        return None
+
+    context.run = record
+    stages["select_alpha_features"].action(context)
+    stages["panel.indist_panel.train_alpha"].action(context)
+    stages["panel.indist_panel.export_closure"].action(context)
+
+    assert calls == {"features": 0, "training": 0, "export": 0, "export_case": 1}
+    assert stages["select_alpha_features"].validator(context)
+    assert stages["panel.indist_panel.train_alpha"].validator(context)
+    assert stages["panel.indist_panel.export_closure"].validator(context)
+    assert calls == {"features": 1, "training": 1, "export": 1, "export_case": 1}
+
+
+def test_stage_validators_reject_invalid_action_outputs(tmp_path):
+    config, context, _panel_dir = _action_test_context(tmp_path)
+    stages = build_workflow(config, REPO_ROOT).stage_map()
+    commands = []
+
+    def record(command, *, check=True):
+        del check
+        commands.append(command.label)
+        if command.label == "select_alpha_features":
+            selected = tmp_path / "features/alpha/selected_features.txt"
+            selected.parent.mkdir(parents=True)
+            selected.write_text("Dr\n", encoding="utf-8")
+        elif command.label.startswith("export_"):
+            output = Path(command.argv[command.argv.index("--output-csv") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text("bad,columns\n0,1\n", encoding="utf-8")
+        return None
+
+    context.run = record
+    stages["select_alpha_features"].action(context)
+    stages["panel.indist_panel.train_alpha"].action(context)
+    stages["panel.indist_panel.export_closure"].action(context)
+
+    assert commands == [
+        "select_alpha_features",
+        "train_alpha_indist_panel",
+        "export_indist_panel_case-a",
+    ]
+    assert not stages["select_alpha_features"].validator(context)
+    assert not stages["panel.indist_panel.train_alpha"].validator(context)
+    assert not stages["panel.indist_panel.export_closure"].validator(context)
 
 
 def _contract_context(tmp_path: Path) -> tuple[RunContext, Panel]:

@@ -36,6 +36,7 @@ from training.plotting import (
     save_profile_prediction_plots,
     select_best_worst_pointwise_cases,
 )
+from training.runtime import build_dataloader, build_optimizer, build_scheduler
 
 try:
     from tqdm.auto import tqdm
@@ -61,9 +62,6 @@ def to_plain_dict(cfg: Any) -> dict[str, Any]:
     raise TypeError(f"Expected dict-like config, got {type(cfg)}")
 
 
-_to_plain_dict = to_plain_dict
-
-
 def set_seed(seed: int) -> None:
     """Seed all random number generators for reproducibility."""
     random.seed(seed)
@@ -73,9 +71,6 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-_set_seed = set_seed
-
-
 def resolve_device(device_arg: str) -> torch.device:
     """Parse a device string ('auto', 'cpu', 'cuda') into a torch.device."""
     if device_arg == "auto":
@@ -83,9 +78,6 @@ def resolve_device(device_arg: str) -> torch.device:
     if device_arg == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("Requested CUDA but no CUDA device is available.")
     return torch.device(device_arg)
-
-
-_resolve_device = resolve_device
 
 
 def _resolve_path(raw_path: str | Path) -> Path:
@@ -154,9 +146,6 @@ def build_experiment(
     return experiment
 
 
-_build_experiment = build_experiment
-
-
 def _git_code_version() -> str:
     try:
         result = subprocess.run(
@@ -217,9 +206,6 @@ def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     if normalized["strategy"] in {"random", "stratified"}:
         normalized.setdefault("seed", default_seed)
     return normalized
-
-
-_normalize_split_cfg = normalize_split_cfg
 
 
 def prepare_training(cfg_dict: dict) -> dict[str, Any]:
@@ -355,17 +341,11 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     loss_name = str(training_cfg.get("loss", "mse"))
     loss_fn = get_loss_fn(loss_name)
     lr = float(training_cfg.get("lr", 1.0e-3))
-    weight_decay = float(training_cfg.get("weight_decay", 0.0))
-    if weight_decay > 0:
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=lr, weight_decay=weight_decay
-        )
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = build_optimizer(model.parameters(), training_cfg)
 
     experiment_entrypoint = training_cfg.get("experiment")
     experiment_kwargs: dict[str, Any] = {}
-    experiment = _build_experiment(
+    experiment = build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
         optimizer=optimizer,
@@ -375,7 +355,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         **experiment_kwargs,
     )
 
-    split_cfg = _normalize_split_cfg(
+    split_cfg = normalize_split_cfg(
         dict(data_cfg.get("split") or {}), default_seed=seed
     )
     num_cases = (
@@ -430,53 +410,31 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     num_workers = int(training_cfg.get("num_workers", 0))
     if epochs < 1:
         raise ValueError("training.epochs must be >= 1.")
-    if batch_size < 1:
-        raise ValueError("training.batch_size must be >= 1.")
-    if num_workers < 0:
-        raise ValueError("training.num_workers must be >= 0.")
 
-    dataloader = DataLoader(
+    dataloader = build_dataloader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        persistent_workers=num_workers > 0,
+        device=device,
         collate_fn=adapter.collate_fn(),
+        config_prefix="training",
     )
 
     val_loader = None
     if use_early_stopping and val_dataset is not None:
-        val_loader = DataLoader(
+        val_loader = build_dataloader(
             val_dataset,
             batch_size=batch_size,
             shuffle=False,
             num_workers=num_workers,
-            pin_memory=device.type == "cuda",
-            persistent_workers=num_workers > 0,
+            device=device,
             collate_fn=adapter.collate_fn(),
+            config_prefix="training",
         )
 
     scheduler_name = str(training_cfg.get("lr_scheduler") or "")
-    scheduler = None
-    if scheduler_name == "cosine":
-        warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
-        if warmup_epochs > 0 and warmup_epochs < epochs:
-            warmup_sched = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
-            )
-            cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=epochs - warmup_epochs, eta_min=1e-7
-            )
-            scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optimizer,
-                schedulers=[warmup_sched, cosine_sched],
-                milestones=[warmup_epochs],
-            )
-        else:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=epochs, eta_min=1e-7
-            )
+    scheduler = build_scheduler(optimizer, training_cfg, epochs)
 
     model_name = str(model_cfg.get("name", "custom"))
     if adapter_name == "pointwise":
@@ -506,18 +464,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         epoch_iter = epoch_progress
 
     for epoch in epoch_iter:
-        running_loss = 0.0
-        num_batches = 0
-
-        for batch in dataloader:
-            loss_value = experiment.training_step(batch)
-            running_loss += loss_value
-            num_batches += 1
-
-        if num_batches == 0:
-            raise RuntimeError("No training batches were produced.")
-
-        avg_loss = running_loss / num_batches
+        avg_loss = train_one_epoch(experiment, dataloader)
         last_avg_loss = avg_loss
         experiment.on_epoch_end(int(epoch), avg_loss)
         experiment.on_epoch_end_extra_step()
@@ -732,7 +679,7 @@ def _indices_for_test_split(
         test_idx = [sim_to_idx[name] for name in test_sims]
         return test_idx, train_sims, test_sims
 
-    reconstructed_split = _normalize_split_cfg(dict(split_meta), default_seed=42)
+    reconstructed_split = normalize_split_cfg(dict(split_meta), default_seed=42)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=len(sim_names),
         split_cfg=reconstructed_split,
@@ -754,7 +701,7 @@ def validate_training_run_meta(run_meta: dict[str, Any], path: Path | str) -> No
 
 def evaluate(cfg: dict | Any) -> dict[str, Any]:
     """Evaluate checkpoint using run_meta.json to reconstruct dataset and split."""
-    cfg_dict = _to_plain_dict(cfg)
+    cfg_dict = to_plain_dict(cfg)
 
     eval_cfg = dict(cfg_dict.get("eval") or {})
     output_cfg = dict(cfg_dict.get("output") or {})
@@ -825,22 +772,18 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     else:
         eval_dataset = Subset(dataset, test_idx)
 
-    device = _resolve_device(str(eval_cfg.get("device", "auto")))
+    device = resolve_device(str(eval_cfg.get("device", "auto")))
     batch_size = int(eval_cfg.get("batch_size", 4))
     num_workers = int(eval_cfg.get("num_workers", 0))
-    if batch_size < 1:
-        raise ValueError("eval.batch_size must be >= 1.")
-    if num_workers < 0:
-        raise ValueError("eval.num_workers must be >= 0.")
 
-    dataloader = DataLoader(
+    dataloader = build_dataloader(
         eval_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        persistent_workers=num_workers > 0,
+        device=device,
         collate_fn=adapter.collate_fn(),
+        config_prefix="eval",
     )
 
     # PhysicsNeMo exports Module at the supported top-level API.
@@ -855,7 +798,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get(
         "training", {}
     ).get("experiment")
-    experiment = _build_experiment(
+    experiment = build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
         optimizer=None,

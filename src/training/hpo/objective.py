@@ -8,8 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 import optuna
-import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import Subset
 
 from training.hpo.search_space import apply_overrides, sample_from_search_space
 from training.losses import get_loss_fn
@@ -20,6 +19,7 @@ from training.runner import (
     set_seed,
     train_one_epoch,
 )
+from training.runtime import build_dataloader, build_optimizer, build_scheduler
 
 
 def composite_score(metrics: dict[str, float], weights: dict[str, float]) -> float:
@@ -52,34 +52,6 @@ def _subsets(dataset, train_indices: list[int], val_indices: list[int]):
             dataset.subset_by_case_indices(val_indices),
         )
     return Subset(dataset, train_indices), Subset(dataset, val_indices)
-
-
-def _build_scheduler(optimizer, training_cfg: dict, epochs: int):
-    if str(training_cfg.get("lr_scheduler") or "") != "cosine":
-        return None
-    warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
-    if 0 < warmup_epochs < epochs:
-        warmup = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1.0e-3,
-            end_factor=1.0,
-            total_iters=warmup_epochs,
-        )
-        cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=epochs - warmup_epochs,
-            eta_min=1.0e-7,
-        )
-        return torch.optim.lr_scheduler.SequentialLR(
-            optimizer,
-            schedulers=[warmup, cosine],
-            milestones=[warmup_epochs],
-        )
-    return torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=epochs,
-        eta_min=1.0e-7,
-    )
 
 
 def train_and_score(
@@ -126,13 +98,7 @@ def train_and_score(
         dict(model_cfg.get("params") or {}), candidate_prepared["dataset_info"]
     ).to(device)
 
-    lr = float(training_cfg.get("lr", 1.0e-3))
-    weight_decay = float(training_cfg.get("weight_decay", 0.0))
-    optimizer_cls = torch.optim.AdamW if weight_decay > 0.0 else torch.optim.Adam
-    optimizer_kwargs = {"lr": lr}
-    if weight_decay > 0.0:
-        optimizer_kwargs["weight_decay"] = weight_decay
-    optimizer = optimizer_cls(model.parameters(), **optimizer_kwargs)
+    optimizer = build_optimizer(model.parameters(), training_cfg)
     loss_fn = get_loss_fn(str(training_cfg.get("loss", "mse")))
     experiment = build_experiment(
         experiment_entrypoint=training_cfg.get("experiment"),
@@ -147,18 +113,16 @@ def train_and_score(
     epochs = int(phase_cfg["max_epochs"])
     batch_size = int(training_cfg.get("batch_size", 4))
     num_workers = int(training_cfg.get("num_workers", 0))
-    if batch_size < 1 or num_workers < 0:
-        raise ValueError("HPO batch_size must be >= 1 and num_workers must be >= 0.")
     loader_kwargs = {
         "batch_size": batch_size,
         "num_workers": num_workers,
-        "pin_memory": device.type == "cuda",
-        "persistent_workers": num_workers > 0,
+        "device": device,
         "collate_fn": adapter.collate_fn(),
+        "config_prefix": "HPO",
     }
-    train_loader = DataLoader(train_dataset, shuffle=True, **loader_kwargs)
-    val_loader = DataLoader(val_dataset, shuffle=False, **loader_kwargs)
-    scheduler = _build_scheduler(optimizer, training_cfg, epochs)
+    train_loader = build_dataloader(train_dataset, shuffle=True, **loader_kwargs)
+    val_loader = build_dataloader(val_dataset, shuffle=False, **loader_kwargs)
+    scheduler = build_scheduler(optimizer, training_cfg, epochs)
 
     early_cfg = dict(phase_cfg["early_stopping"])
     patience = int(early_cfg["patience"])

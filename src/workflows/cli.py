@@ -27,7 +27,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-from workflows.runner import WorkflowRunner, validate_workflow
+from workflows.runner import WorkflowRunner, _target_stages, validate_workflow
 
 
 def _repo_root(start: Path) -> Path:
@@ -136,26 +136,6 @@ def _run_dir(config: dict[str, Any], repo_root: Path, run_id: str) -> Path:
     return output_root / str(workflow_cfg["id"]) / run_id
 
 
-def _selected_stages(definition, target: str | None):
-    ordered = validate_workflow(definition)
-    if target is None:
-        return ordered
-
-    names = {target}
-    stage_map = definition.stage_map()
-    if target not in stage_map:
-        raise ValueError(f"Unknown target stage {target!r}")
-
-    def add_dependencies(name: str) -> None:
-        for dependency in stage_map[name].dependencies:
-            if dependency not in names:
-                names.add(dependency)
-                add_dependencies(dependency)
-
-    add_dependencies(target)
-    return [stage for stage in ordered if stage.name in names]
-
-
 def _dependency_summary(dependencies: tuple[str, ...]) -> str:
     """Return a compact dependency label suitable for a terminal table."""
     if not dependencies:
@@ -166,8 +146,6 @@ def _dependency_summary(dependencies: tuple[str, ...]) -> str:
     leaf_names = {name.rsplit(".", 1)[-1] for name in dependencies}
     if len(leaf_names) == 1:
         return f"{len(dependencies)} {leaf_names.pop()}"
-    if all(name.startswith("panel.") for name in dependencies):
-        return f"{len(dependencies)} panel"
     return f"{len(dependencies)} upstream"
 
 
@@ -259,27 +237,6 @@ def _stage_table(*, status: bool) -> Table:
     return table
 
 
-def _tree_stage_style(name: str) -> str:
-    """Return a bright semantic color for a workflow tree stage."""
-    if name in {"prepare_data", "plan_panels"}:
-        return "bold bright_green"
-    if name.endswith(".select_features"):
-        return "bold bright_magenta"
-    if name == "tune_alpha":
-        return "bold bright_yellow"
-    if name.endswith(".train_direct"):
-        return "bold bright_cyan"
-    if name.endswith(".train_alpha"):
-        return "bold bright_green"
-    if name.endswith(".export_closure"):
-        return "bold bright_blue"
-    if name == "solve_moose":
-        return "bold bright_red"
-    if name == "summarize":
-        return "bold bright_white"
-    return "bold bright_cyan"
-
-
 def _workflow_tree(definition, ordered) -> Tree:
     """Return a dependency tree with explicit references for shared DAG edges."""
     numbers = {stage.name: index for index, stage in enumerate(ordered, 1)}
@@ -305,7 +262,7 @@ def _workflow_tree(definition, ordered) -> Tree:
 
     def add_stage(parent: Tree, stage) -> None:
         label = Text(f"#{numbers[stage.name]:02d} ", style="bold bright_yellow")
-        label.append(stage.name, style=_tree_stage_style(stage.name))
+        label.append(stage.name, style="bold bright_cyan")
         additional = extra_dependencies.get(stage.name, [])
         if additional:
             label.append("  also needs ", style="bold bright_magenta")
@@ -323,7 +280,7 @@ def _workflow_tree(definition, ordered) -> Tree:
 
 
 def _print_plan(definition, target: str | None, *, tree: bool = True) -> None:
-    ordered = _selected_stages(definition, target)
+    ordered = _target_stages(validate_workflow(definition), target)
     console = Console()
     target_label = "All stages" if target is None else f"{target} and dependencies"
     console.print(
@@ -401,7 +358,7 @@ def _status(run_dir: Path) -> int:
 
 def _run_with_progress(runner: WorkflowRunner, *, target: str | None) -> dict[str, Any]:
     """Run selected stages with a Rich progress bar driven by runner events."""
-    selected = _selected_stages(runner.definition, target)
+    selected = _target_stages(runner.ordered, target)
     complete_label = "Target complete" if target is not None else "Workflow complete"
     with Progress(
         SpinnerColumn(),
@@ -433,6 +390,12 @@ def _run_with_progress(runner: WorkflowRunner, *, target: str | None) -> dict[st
         manifest = runner.run(target=target, on_stage=on_stage)
         if manifest["status"] == "completed_with_partial_results":
             final_label = f"[yellow]! {complete_label} with partial results[/]"
+        elif manifest["status"] == "partial_run":
+            final_label = (
+                f"[yellow]! {complete_label}; workflow remains partially run[/]"
+            )
+        elif manifest["status"] == "failed":
+            final_label = "[bold red]✗ Workflow remains failed[/]"
         else:
             final_label = f"[green]✓ {complete_label}[/]"
         progress.update(task, completed=len(selected), description=final_label)
@@ -493,10 +456,26 @@ def main(argv: list[str] | None = None) -> int:
             return _status(args.run_dir.resolve())
         if args.command == "publish":
             run_dir = args.run_dir.resolve()
+            manifest = json.loads(
+                (run_dir / "run_manifest.json").read_text(encoding="utf-8")
+            )
+            raw_repo_root = manifest.get("repo_root")
+            if not isinstance(raw_repo_root, str) or not raw_repo_root.strip():
+                raise ValueError("Run manifest requires a non-empty repo_root")
+            recorded_repo_root = Path(raw_repo_root).expanduser()
+            if not recorded_repo_root.exists():
+                raise FileNotFoundError(
+                    f"Run manifest repo_root does not exist: {recorded_repo_root}"
+                )
+            recorded_repo_root = recorded_repo_root.resolve()
+            repo_root = _repo_root(recorded_repo_root)
+            if repo_root != recorded_repo_root:
+                raise ValueError(
+                    f"Run manifest repo_root is not a repository root: {recorded_repo_root}"
+                )
             config = json.loads(
                 (run_dir / "resolved_config.json").read_text(encoding="utf-8")
             )
-            repo_root = _repo_root(run_dir)
             definition = _definition(config, repo_root)
             WorkflowRunner(
                 definition, config=config, repo_root=repo_root, run_dir=run_dir
