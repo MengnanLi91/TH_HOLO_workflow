@@ -37,15 +37,11 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         root = zarr.open(store=str(store_path), mode="w")
         root.create_array(
             "features",
-            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-                np.float32
-            ),
+            data=rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32),
         )
         root.create_array(
             "targets",
-            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-                np.float32
-            ),
+            data=rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32),
         )
         meta = root.require_group("metadata")
         meta.attrs["case_id"] = case_name
@@ -115,9 +111,7 @@ class TestSearchSpace:
 
         base = {"model": {"name": "mlp"}, "training": {"lr": 0.001}}
         with pytest.raises(ValueError, match="not allowed"):
-            validate_search_space(
-                {"model.name": {"type": "categorical", "choices": ["fno"]}}, base
-            )
+            validate_search_space({"model.name": {"type": "categorical", "choices": ["fno"]}}, base)
 
     def test_validate_rejects_nonexistent_path(self) -> None:
         from training.hpo.search_space import validate_search_space
@@ -180,9 +174,7 @@ class TestMetricsOutPath:
         from training.runner import validate_training_run_meta
 
         with pytest.raises(ValueError, match="requires schema 3"):
-            validate_training_run_meta(
-                {"training_run_meta_schema": 2}, "old/run_meta.json"
-            )
+            validate_training_run_meta({"training_run_meta_schema": 2}, "old/run_meta.json")
 
 
 # ---------------------------------------------------------------------------
@@ -226,9 +218,7 @@ class TestObjective:
 
         prepared = prepare_training(base_cfg)
         dataset = prepared["dataset"]
-        split_cfg = normalize_split_cfg(
-            dict(base_cfg["data"]["split"]), default_seed=42
-        )
+        split_cfg = normalize_split_cfg(dict(base_cfg["data"]["split"]), default_seed=42)
         train_idx, test_idx, _, _ = split_indices(
             num_cases=len(dataset.sim_names),
             split_cfg=split_cfg,
@@ -428,12 +418,8 @@ def _fake_objective_runtime(monkeypatch, validation_losses):
     )
     monkeypatch.setattr(objective_module, "build_experiment", build_experiment)
     monkeypatch.setattr(objective_module, "train_one_epoch", train_epoch)
-    monkeypatch.setattr(
-        objective_module, "compute_val_loss", lambda _exp, _loader: next(losses)
-    )
-    dataset = torch.utils.data.TensorDataset(
-        torch.arange(6, dtype=torch.float32).unsqueeze(1)
-    )
+    monkeypatch.setattr(objective_module, "compute_val_loss", lambda _exp, _loader: next(losses))
+    dataset = torch.utils.data.TensorDataset(torch.arange(6, dtype=torch.float32).unsqueeze(1))
     return objective_module, {
         "dataset": dataset,
         "dataset_info": {"in_features": 1},
@@ -445,9 +431,7 @@ def _fake_objective_runtime(monkeypatch, validation_losses):
 
 
 def test_train_and_score_restores_best_validation_weights(monkeypatch) -> None:
-    objective_module, prepared = _fake_objective_runtime(
-        monkeypatch, [3.0, 1.0, 2.0, 1.0]
-    )
+    objective_module, prepared = _fake_objective_runtime(monkeypatch, [3.0, 1.0, 2.0, 1.0])
 
     result = objective_module.train_and_score(
         base_cfg={

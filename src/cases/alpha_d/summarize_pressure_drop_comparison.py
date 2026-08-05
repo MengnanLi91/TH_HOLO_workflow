@@ -55,11 +55,7 @@ def _resolve_path(raw: str | None, *, base: Path) -> Path:
 
 
 def _read_case_list(path: Path) -> list[str]:
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def discover_manifests(study_root: Path) -> list[Manifest]:
@@ -68,15 +64,11 @@ def discover_manifests(study_root: Path) -> list[Manifest]:
     for path in paths:
         raw = _load_json(path)
         if raw.get("panel_manifest_schema") != 4:
-            raise ValueError(
-                f"Unsupported panel_manifest_schema in {path}; expected schema 4"
-            )
+            raise ValueError(f"Unsupported panel_manifest_schema in {path}; expected schema 4")
         base = path.parent
         heldout = [str(case) for case in raw.get("heldout_cases") or []]
         if not heldout and raw.get("heldout_cases_txt"):
-            heldout = _read_case_list(
-                _resolve_path(raw["heldout_cases_txt"], base=base)
-            )
+            heldout = _read_case_list(_resolve_path(raw["heldout_cases_txt"], base=base))
         report = [str(case) for case in raw.get("report_cases") or []]
         if not report and raw.get("report_cases_txt"):
             report = _read_case_list(_resolve_path(raw["report_cases_txt"], base=base))
@@ -92,12 +84,8 @@ def discover_manifests(study_root: Path) -> list[Manifest]:
                 k=int(raw["k"]) if raw.get("k") is not None else None,
                 heldout_cases=heldout,
                 report_cases=report,
-                regressor_run_meta=_resolve_path(
-                    raw.get("regressor_run_meta"), base=base
-                ),
-                regressor_eval_metrics=_resolve_path(
-                    raw.get("regressor_eval_metrics"), base=base
-                ),
+                regressor_run_meta=_resolve_path(raw.get("regressor_run_meta"), base=base),
+                regressor_eval_metrics=_resolve_path(raw.get("regressor_eval_metrics"), base=base),
                 alpha_run_meta=_resolve_path(raw.get("alpha_run_meta"), base=base),
                 coupled_dir=_resolve_path(raw.get("coupled_dir"), base=base),
                 moose_verifier_dir=(
@@ -108,9 +96,7 @@ def discover_manifests(study_root: Path) -> list[Manifest]:
             )
         )
     if not manifests:
-        raise FileNotFoundError(
-            f"No technical-study manifests found under {study_root}"
-        )
+        raise FileNotFoundError(f"No technical-study manifests found under {study_root}")
     return manifests
 
 
@@ -141,17 +127,14 @@ def verify_manifest_consistency(manifest: Manifest) -> dict[str, Any]:
     result["checks"].append("report cases are subset of heldout")
 
     reg_meta = _load_json(manifest.regressor_run_meta)
-    force_test = [
-        str(case) for case in reg_meta.get("split", {}).get("force_test") or []
-    ]
+    force_test = [str(case) for case in reg_meta.get("split", {}).get("force_test") or []]
     _assert_same_set(
         label=f"{manifest.tag}: direct force_test", actual=force_test, expected=heldout
     )
     result["checks"].append("direct force_test matches heldout")
 
     fs_cases = [
-        str(case)
-        for case in reg_meta.get("feature_selection", {}).get("case_ids_used") or []
+        str(case) for case in reg_meta.get("feature_selection", {}).get("case_ids_used") or []
     ]
     overlap = sorted(set(fs_cases) & set(heldout))
     if overlap:
@@ -161,9 +144,7 @@ def verify_manifest_consistency(manifest: Manifest) -> dict[str, Any]:
     result["checks"].append("direct feature selection excludes heldout")
 
     alpha_meta = _load_json(manifest.alpha_run_meta)
-    alpha_excluded = [
-        str(case) for case in alpha_meta.get("data", {}).get("exclude_cases") or []
-    ]
+    alpha_excluded = [str(case) for case in alpha_meta.get("data", {}).get("exclude_cases") or []]
     _assert_same_set(
         label=f"{manifest.tag}: alpha-D training exclude_cases",
         actual=alpha_excluded,
@@ -171,9 +152,7 @@ def verify_manifest_consistency(manifest: Manifest) -> dict[str, Any]:
     )
     result["checks"].append("alpha-D training excludes heldout")
 
-    alpha_train = [
-        str(case) for case in alpha_meta.get("split", {}).get("train_sims") or []
-    ]
+    alpha_train = [str(case) for case in alpha_meta.get("split", {}).get("train_sims") or []]
     alpha_overlap = sorted(set(alpha_train) & set(heldout))
     if alpha_overlap:
         raise ValueError(
@@ -221,9 +200,7 @@ def collect_records(
         }
         if "delta_p_truth" in sidecar:
             record["truth_sidecar"] = float(sidecar["delta_p_truth"])
-            if not math.isclose(
-                record["truth_sidecar"], truth, rel_tol=0.01, abs_tol=1e-9
-            ):
+            if not math.isclose(record["truth_sidecar"], truth, rel_tol=0.01, abs_tol=1e-9):
                 record["truth_warning"] = "regressor_truth_differs_from_sidecar"
         for model in REGRESSOR_MODELS:
             pred = float(row[f"{model}_pred"])
@@ -284,9 +261,7 @@ def bootstrap_ci(
     ]
 
 
-def _predictor_stats(
-    records: list[dict[str, Any]], predictor: str
-) -> dict[str, float | None]:
+def _predictor_stats(records: list[dict[str, Any]], predictor: str) -> dict[str, float | None]:
     errs = [float(row[f"{predictor}_relerr"]) for row in records]
     abs_errs = [abs(err) for err in errs]
     return {
@@ -315,9 +290,7 @@ def summarize_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "side": rows[0].get("side"),
             "axis_value": axis_value,
             "n": len(rows),
-            "predictors": {
-                name: _predictor_stats(rows, name) for name in ALL_PREDICTORS
-            },
+            "predictors": {name: _predictor_stats(rows, name) for name in ALL_PREDICTORS},
             "paired": {},
         }
         coupled_abs = [abs(float(row["coupled_relerr"])) for row in rows]
@@ -376,11 +349,7 @@ def _moose_artifact_error(
     if status_schema == 2:
         selected = status.get("selected_attempt")
         attempt = next(
-            (
-                item
-                for item in status.get("attempts") or []
-                if item.get("name") == selected
-            ),
+            (item for item in status.get("attempts") or [] if item.get("name") == selected),
             None,
         )
         output_csv = attempt.get("output_csv") if attempt else None
@@ -401,9 +370,7 @@ def collect_moose_records(
         if not manifest.moose_verifier_dir or not manifest.moose_verifier_dir.exists():
             continue
         metrics = _load_json(manifest.regressor_eval_metrics)
-        direct_rows = {
-            str(row["case"]): row for row in metrics.get("per_case_predictions", [])
-        }
+        direct_rows = {str(row["case"]): row for row in metrics.get("per_case_predictions", [])}
         case_dirs = {
             path.parent
             for pattern in ("run_status.json", "verify_delta_p.json")
@@ -515,11 +482,7 @@ def build_conclusion(
         )
     dr_low = [row for row in summaries if row["tag"] == "Dr_low_pure"]
     if not dr_low:
-        dr_low = [
-            row
-            for row in summaries
-            if row.get("axis") == "Dr" and row.get("side") == "low"
-        ]
+        dr_low = [row for row in summaries if row.get("axis") == "Dr" and row.get("side") == "low"]
     if dr_low:
         lower_error_fractions = [
             row["paired"]["random_forest"]["coupled_win_rate"]
@@ -550,9 +513,7 @@ def build_conclusion(
     controls = [
         row
         for row in summaries
-        if row["kind"] == "ood"
-        and row["tag"] != "Dr_low_pure"
-        and row.get("axis") in {"Re", "Lr"}
+        if row["kind"] == "ood" and row["tag"] != "Dr_low_pure" and row.get("axis") in {"Re", "Lr"}
     ]
     if controls:
         lines.append(
@@ -563,12 +524,8 @@ def build_conclusion(
         (row["report_count"] for row in consistency if row["tag"] == "Dr_low_pure"),
         None,
     )
-    primary_moose = len(
-        {row["case"] for row in moose_rows if row["tag"] == "Dr_low_pure"}
-    )
-    primary_failures = len(
-        {row["case"] for row in moose_failures if row["tag"] == "Dr_low_pure"}
-    )
+    primary_moose = len({row["case"] for row in moose_rows if row["tag"] == "Dr_low_pure"})
+    primary_failures = len({row["case"] for row in moose_failures if row["tag"] == "Dr_low_pure"})
     if primary_report:
         if primary_moose >= primary_report:
             lines.append(
@@ -698,15 +655,9 @@ def write_markdown(
     primary = [row for row in summaries if row["tag"] == "Dr_low_pure"]
     secondary_dr = [row for row in summaries if row["tag"] == "Dr_high_guarded"]
     controls = [
-        row
-        for row in summaries
-        if row["kind"] == "ood" and row.get("axis") in {"Re", "Lr"}
+        row for row in summaries if row["kind"] == "ood" and row.get("axis") in {"Re", "Lr"}
     ]
-    other = [
-        row
-        for row in summaries
-        if row not in indist + primary + secondary_dr + controls
-    ]
+    other = [row for row in summaries if row not in indist + primary + secondary_dr + controls]
     lines.extend(["", "## In-Distribution Panel", ""])
     _summary_table(lines, indist)
     lines.extend(["", "## Dr OOD", ""])

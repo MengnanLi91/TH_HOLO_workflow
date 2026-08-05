@@ -26,19 +26,14 @@ def composite_score(metrics: dict[str, float], weights: dict[str, float]) -> flo
     """Return a finite weighted objective, rejecting missing or invalid inputs."""
     missing = sorted(set(weights) - set(metrics))
     if missing:
-        raise ValueError(
-            f"Experiment did not provide required HPO metric(s): {missing}"
-        )
+        raise ValueError(f"Experiment did not provide required HPO metric(s): {missing}")
     invalid = sorted(
         name
         for name in weights
-        if not math.isfinite(float(metrics[name]))
-        or not math.isfinite(float(weights[name]))
+        if not math.isfinite(float(metrics[name])) or not math.isfinite(float(weights[name]))
     )
     if invalid:
-        raise ValueError(
-            f"HPO objective metric(s) or weight(s) are non-finite: {invalid}"
-        )
+        raise ValueError(f"HPO objective metric(s) or weight(s) are non-finite: {invalid}")
     score = sum(float(weights[name]) * float(metrics[name]) for name in weights)
     if not math.isfinite(score):
         raise ValueError("Composite HPO score is non-finite.")
@@ -94,9 +89,9 @@ def train_and_score(
     build_fn, adapter_name = get_build_fn_and_adapter(model_cfg)
     if adapter_name != prepared["adapter_name"]:
         raise ValueError("An HPO candidate cannot change the configured model adapter.")
-    model = build_fn(
-        dict(model_cfg.get("params") or {}), candidate_prepared["dataset_info"]
-    ).to(device)
+    model = build_fn(dict(model_cfg.get("params") or {}), candidate_prepared["dataset_info"]).to(
+        device
+    )
 
     optimizer = build_optimizer(model.parameters(), training_cfg)
     loss_fn = get_loss_fn(str(training_cfg.get("loss", "mse")))
@@ -168,9 +163,7 @@ def train_and_score(
     if not isinstance(case_metrics, dict):
         raise TypeError("Experiment.compute_hpo_metrics() must return a dict.")
     if "profile_val_loss" in case_metrics:
-        raise ValueError(
-            "Experiments must not override the generic profile_val_loss metric."
-        )
+        raise ValueError("Experiments must not override the generic profile_val_loss metric.")
     metrics = {name: float(value) for name, value in case_metrics.items()}
     metrics["profile_val_loss"] = restored_profile_loss
     score = composite_score(metrics, objective_weights)

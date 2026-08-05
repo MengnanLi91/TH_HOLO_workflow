@@ -124,9 +124,7 @@ def compute_delta_p_metrics(
             rel_err = abs(delta_p_pred - delta_p_gt) / abs(delta_p_gt)
             signed_error = delta_p_pred - delta_p_gt
             signed_rel_err = (delta_p_pred - delta_p_gt) / abs(delta_p_gt)
-            log_err = abs(
-                math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8))
-            )
+            log_err = abs(math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8)))
 
             per_case.append(
                 {
@@ -151,13 +149,7 @@ def compute_delta_p_metrics(
     signed_errors = [c["signed_relative_error"] for c in per_case]
     lr_level_biases = {
         str(level): float(
-            np.mean(
-                [
-                    case["signed_relative_error"]
-                    for case in per_case
-                    if case["Lr"] == level
-                ]
-            )
+            np.mean([case["signed_relative_error"] for case in per_case if case["Lr"] == level])
         )
         for level in sorted({case["Lr"] for case in per_case})
     }
@@ -174,9 +166,7 @@ def compute_delta_p_metrics(
         "log_abs_error_median": float(np.median(log_errors)),
         "signed_bias": float(np.mean(signed_errors)),
         "lr_level_signed_bias": lr_level_biases,
-        "max_abs_lr_level_bias": float(
-            max(abs(value) for value in lr_level_biases.values())
-        ),
+        "max_abs_lr_level_bias": float(max(abs(value) for value in lr_level_biases.values())),
         "worst_cases": per_case[:10],
         "best_cases": list(reversed(per_case[-10:])),
         "per_case": per_case,
@@ -198,11 +188,7 @@ def compute_pointwise_extended_metrics(
     local_vel_norm = bool(getattr(dataset, "local_velocity_normalization", False))
 
     def _has_physical_inverse(name: str) -> bool:
-        return (
-            is_alpha_d_target(name)
-            or name.startswith("log_")
-            or name.startswith("log10_")
-        )
+        return is_alpha_d_target(name) or name.startswith("log_") or name.startswith("log10_")
 
     per_field_extended = []
     for i, name in enumerate(output_fields):
@@ -274,12 +260,8 @@ def compute_pointwise_extended_metrics(
                         if (raw_d_over_D is not None and is_alpha_d_target(field_name))
                         else None
                     )
-                    p_full = dataset.add_baseline_to_encoded(
-                        p, row_mask=mask, field_idx=i
-                    )
-                    t_full = dataset.add_baseline_to_encoded(
-                        t, row_mask=mask, field_idx=i
-                    )
+                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
+                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,
@@ -317,12 +299,8 @@ def compute_pointwise_extended_metrics(
                         if (raw_d_over_D is not None and is_alpha_d_target(field_name))
                         else None
                     )
-                    p_full = dataset.add_baseline_to_encoded(
-                        p, row_mask=mask, field_idx=i
-                    )
-                    t_full = dataset.add_baseline_to_encoded(
-                        t, row_mask=mask, field_idx=i
-                    )
+                    p_full = dataset.add_baseline_to_encoded(p, row_mask=mask, field_idx=i)
+                    t_full = dataset.add_baseline_to_encoded(t, row_mask=mask, field_idx=i)
                     p_phys = field_values_to_physical(
                         p_full,
                         field_name=field_name,

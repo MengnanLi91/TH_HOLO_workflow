@@ -44,12 +44,8 @@ def synthetic_zarr_dir(tmp_path: Path) -> Path:
         store_path = out_dir / f"{case_name}.zarr"
         root = zarr.open(store=str(store_path), mode="w")
 
-        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(
-            np.float32
-        )
-        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(
-            np.float32
-        )
+        features = rng.standard_normal((ROWS_PER_CASE, len(FEATURE_NAMES))).astype(np.float32)
+        targets = rng.standard_normal((ROWS_PER_CASE, len(TARGET_NAMES))).astype(np.float32)
 
         root.create_array("features", data=features, overwrite=True)
         root.create_array("targets", data=targets, overwrite=True)
@@ -241,9 +237,7 @@ class TestPointwiseAdapter:
         from training.adapters import PointwiseAdapter
 
         adapter = PointwiseAdapter()
-        ref = adapter.build_dataset(
-            {"zarr_dir": str(synthetic_zarr_dir), "normalize": False}
-        )
+        ref = adapter.build_dataset({"zarr_dir": str(synthetic_zarr_dir), "normalize": False})
         stats = {
             "x_mean": ref._x.mean(dim=0).tolist(),
             "x_std": ref._x.std(dim=0).tolist(),

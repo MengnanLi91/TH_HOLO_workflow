@@ -58,9 +58,7 @@ def compare_reports(baseline_csv: Path, candidate_csv: Path) -> dict[str, Any]:
     if set(baseline) != set(candidate):
         missing = sorted(set(baseline) - set(candidate))
         extra = sorted(set(candidate) - set(baseline))
-        raise ValueError(
-            f"Paired reports do not align: missing={missing[:5]} extra={extra[:5]}"
-        )
+        raise ValueError(f"Paired reports do not align: missing={missing[:5]} extra={extra[:5]}")
     for key in baseline:
         if not math.isclose(
             float(baseline[key]["truth"]),
@@ -92,9 +90,7 @@ def compare_reports(baseline_csv: Path, candidate_csv: Path) -> dict[str, Any]:
 
     gates: list[dict[str, Any]] = []
 
-    def add_gate(
-        name: str, passed: bool, baseline_value: float, candidate_value: float
-    ) -> None:
+    def add_gate(name: str, passed: bool, baseline_value: float, candidate_value: float) -> None:
         gates.append(
             {
                 "name": name,
@@ -119,9 +115,7 @@ def compare_reports(baseline_csv: Path, candidate_csv: Path) -> dict[str, Any]:
             continue
         before = float(panels[tag]["baseline"]["mare"])
         after = float(panels[tag]["candidate"]["mare"])
-        add_gate(
-            f"{tag}.mare.regression_lte_0.25pp", after <= before + 0.0025, before, after
-        )
+        add_gate(f"{tag}.mare.regression_lte_0.25pp", after <= before + 0.0025, before, after)
 
     return {
         "alpha_d_training_comparison_schema": 1,

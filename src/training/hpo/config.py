@@ -32,9 +32,7 @@ def _validate_early_stopping(parent: dict, path: str) -> None:
     if not isinstance(cfg, dict):
         raise ValueError(f"{path}.early_stopping must be a mapping.")
     if set(cfg) != {"patience", "min_delta"}:
-        raise ValueError(
-            f"{path}.early_stopping requires exactly patience and min_delta."
-        )
+        raise ValueError(f"{path}.early_stopping requires exactly patience and min_delta.")
     if int(cfg["patience"]) < 1:
         raise ValueError(f"{path}.early_stopping.patience must be >= 1.")
     if float(cfg["min_delta"]) < 0.0:
@@ -44,9 +42,7 @@ def _validate_early_stopping(parent: dict, path: str) -> None:
 def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
     """Reject obsolete or incomplete HPO configurations before execution."""
     if "n_trials" in hpo_cfg:
-        raise ValueError(
-            "Obsolete hpo.n_trials is not supported; use hpo.screening.n_trials."
-        )
+        raise ValueError("Obsolete hpo.n_trials is not supported; use hpo.screening.n_trials.")
     missing = sorted(REQUIRED_HPO_KEYS - set(hpo_cfg))
     if missing:
         raise ValueError(f"hpo is missing required key(s): {missing}")
@@ -55,9 +51,7 @@ def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
 
     screening = _require_mapping(hpo_cfg, "screening")
     if set(screening) != {"n_trials", "max_epochs", "early_stopping"}:
-        raise ValueError(
-            "hpo.screening requires exactly n_trials, max_epochs, and early_stopping."
-        )
+        raise ValueError("hpo.screening requires exactly n_trials, max_epochs, and early_stopping.")
     if int(screening["n_trials"]) < 1 or int(screening["max_epochs"]) < 1:
         raise ValueError("hpo.screening n_trials and max_epochs must be >= 1.")
     _validate_early_stopping(screening, "hpo.screening")
@@ -69,9 +63,7 @@ def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
         )
     required_validation = {"splitter_entrypoint", "n_folds", "screening_fold", "seed"}
     if set(validation) != required_validation:
-        raise ValueError(
-            f"hpo.validation requires exactly {sorted(required_validation)}."
-        )
+        raise ValueError(f"hpo.validation requires exactly {sorted(required_validation)}.")
     n_folds = int(validation["n_folds"])
     screening_fold = int(validation["screening_fold"])
     if n_folds < 2:
@@ -79,9 +71,7 @@ def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
     if screening_fold < 0 or screening_fold >= n_folds:
         raise ValueError("hpo.validation.screening_fold must index an available fold.")
     if ":" not in str(validation["splitter_entrypoint"]):
-        raise ValueError(
-            "hpo.validation.splitter_entrypoint must be '<module>:<callable>'."
-        )
+        raise ValueError("hpo.validation.splitter_entrypoint must be '<module>:<callable>'.")
 
     objective = _require_mapping(hpo_cfg, "objective")
     if set(objective) != {"weights"} or not isinstance(objective["weights"], dict):
@@ -102,9 +92,7 @@ def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
         "guard_reference",
     }
     if set(confirmation) != required_confirmation:
-        raise ValueError(
-            f"hpo.confirmation requires exactly {sorted(required_confirmation)}."
-        )
+        raise ValueError(f"hpo.confirmation requires exactly {sorted(required_confirmation)}.")
     if int(confirmation["top_k"]) < 1 or int(confirmation["max_epochs"]) < 1:
         raise ValueError("hpo.confirmation top_k and max_epochs must be >= 1.")
     if float(confirmation["aggregate_std_weight"]) < 0.0:
@@ -122,23 +110,15 @@ def validate_hpo_config(hpo_cfg: dict[str, Any]) -> None:
             )
         name = str(control["name"])
         if not name or name in control_names or not isinstance(control["params"], dict):
-            raise ValueError(
-                "HPO control names must be unique and params must be mappings."
-            )
+            raise ValueError("HPO control names must be unique and params must be mappings.")
         control_names.add(name)
 
     guard_metric = confirmation["guard_metric"]
     guard_reference = confirmation["guard_reference"]
     if (guard_metric is None) != (guard_reference is None):
-        raise ValueError(
-            "confirmation guard_metric and guard_reference must both be set or null."
-        )
+        raise ValueError("confirmation guard_metric and guard_reference must both be set or null.")
     if guard_reference is not None:
         if guard_reference != "best_control":
-            raise ValueError(
-                "hpo.confirmation.guard_reference must be 'best_control' or null."
-            )
+            raise ValueError("hpo.confirmation.guard_reference must be 'best_control' or null.")
         if not enqueued:
-            raise ValueError(
-                "A best_control guard requires at least one enqueued control."
-            )
+            raise ValueError("A best_control guard requires at least one enqueued control.")

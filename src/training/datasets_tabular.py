@@ -125,9 +125,7 @@ class TabularPairDataset(Dataset):
         case_meta_list: list[dict] = []
         has_weights = False
         eng_names: list[str] = (
-            list(engineered_feature_names)
-            if engineered_feature_names is not None
-            else []
+            list(engineered_feature_names) if engineered_feature_names is not None else []
         )
         if eng_names and engineered_feature_builder is None:
             raise ValueError(
@@ -176,13 +174,9 @@ class TabularPairDataset(Dataset):
             # source columns that may not be in input_columns).
             if eng_names:
                 engineered = engineered_feature_builder(features, raw_feature_names)
-                engineered_cols = [
-                    engineered[name].reshape(-1, 1) for name in eng_names
-                ]
+                engineered_cols = [engineered[name].reshape(-1, 1) for name in eng_names]
                 all_x.append(
-                    np.concatenate([features] + engineered_cols, axis=1).astype(
-                        np.float32
-                    )
+                    np.concatenate([features] + engineered_cols, axis=1).astype(np.float32)
                 )
             else:
                 all_x.append(features.astype(np.float32))
@@ -203,9 +197,7 @@ class TabularPairDataset(Dataset):
 
         # Store raw geometry columns (before normalization) for delta_p loss
         z_hat_col = (
-            self._all_feature_names.index("z_hat")
-            if "z_hat" in self._all_feature_names
-            else None
+            self._all_feature_names.index("z_hat") if "z_hat" in self._all_feature_names else None
         )
         d_over_D_col = (
             self._all_feature_names.index("d_local_over_D")
@@ -213,14 +205,10 @@ class TabularPairDataset(Dataset):
             else None
         )
         self._raw_z_hat = (
-            torch.from_numpy(full_x[:, z_hat_col].copy())
-            if z_hat_col is not None
-            else None
+            torch.from_numpy(full_x[:, z_hat_col].copy()) if z_hat_col is not None else None
         )
         self._raw_d_local_over_D = (
-            torch.from_numpy(full_x[:, d_over_D_col].copy())
-            if d_over_D_col is not None
-            else None
+            torch.from_numpy(full_x[:, d_over_D_col].copy()) if d_over_D_col is not None else None
         )
 
         # ----------------------------------------------------------
@@ -247,9 +235,7 @@ class TabularPairDataset(Dataset):
             extras = extras or {}
             baseline = extras.get("baseline_encoded")
             if baseline is not None:
-                self._baseline_encoded = torch.from_numpy(
-                    np.asarray(baseline, dtype=np.float32)
-                )
+                self._baseline_encoded = torch.from_numpy(np.asarray(baseline, dtype=np.float32))
                 self.has_target_baseline = True
             self.local_velocity_normalization = bool(
                 extras.get("local_velocity_normalization", False)
@@ -290,11 +276,7 @@ class TabularPairDataset(Dataset):
 
         self.throat_weight = throat_weight
         self.downstream_weight = downstream_weight
-        if (
-            throat_weight is not None
-            and throat_weight > 0
-            and throat_col_full is not None
-        ):
+        if throat_weight is not None and throat_weight > 0 and throat_col_full is not None:
             new_w = torch.ones(len(self._x), dtype=torch.float32)
             new_w[full_x[:, throat_col_full] > 0.5] = float(throat_weight)
             self._w = new_w.unsqueeze(-1)
@@ -500,18 +482,13 @@ class TabularPairDataset(Dataset):
         new._case_meta = [self._case_meta[i] for i in case_indices]
         new._raw_z_hat = self._raw_z_hat[mask] if self._raw_z_hat is not None else None
         new._raw_d_local_over_D = (
-            self._raw_d_local_over_D[mask]
-            if self._raw_d_local_over_D is not None
-            else None
+            self._raw_d_local_over_D[mask] if self._raw_d_local_over_D is not None else None
         )
 
         # Rebuild rows_per_case and row_case_idx for the subset
         new._rows_per_case = [self._rows_per_case[i] for i in case_indices]
         new._row_case_idx = np.concatenate(
-            [
-                np.full(n, new_i, dtype=np.int32)
-                for new_i, n in enumerate(new._rows_per_case)
-            ]
+            [np.full(n, new_i, dtype=np.int32) for new_i, n in enumerate(new._rows_per_case)]
         )
         new._case_idx_tensor = torch.from_numpy(new._row_case_idx).long()
         new.has_target_baseline = self.has_target_baseline

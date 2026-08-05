@@ -49,16 +49,12 @@ def load_config(path: Path) -> dict[str, Any]:
         return tomllib.load(stream)
 
 
-def apply_config_overrides(
-    config: dict[str, Any], overrides: list[str] | None
-) -> dict[str, Any]:
+def apply_config_overrides(config: dict[str, Any], overrides: list[str] | None) -> dict[str, Any]:
     """Apply repeatable TOML-scalar overrides to existing config leaves."""
     resolved = copy.deepcopy(config)
     for expression in overrides or []:
         if "=" not in expression:
-            raise ValueError(
-                f"Invalid --set {expression!r}; expected existing.path=value"
-            )
+            raise ValueError(f"Invalid --set {expression!r}; expected existing.path=value")
         dot_path, raw_value = expression.split("=", 1)
         keys = dot_path.split(".")
         if not dot_path or any(not key for key in keys):
@@ -66,9 +62,7 @@ def apply_config_overrides(
         try:
             value = tomllib.loads(f"value = {raw_value}\n")["value"]
         except tomllib.TOMLDecodeError as exc:
-            raise ValueError(
-                f"Invalid TOML scalar for --set {dot_path}: {raw_value}"
-            ) from exc
+            raise ValueError(f"Invalid TOML scalar for --set {dot_path}: {raw_value}") from exc
         if not isinstance(value, (str, int, float, bool)):
             raise ValueError(f"--set {dot_path} must use a TOML scalar value")
 
@@ -182,9 +176,7 @@ def _status_text(status: str) -> Text:
 
 def _stage_counts(records: dict[str, Any]) -> Text:
     """Return a compact color-coded count of stages by state."""
-    counts = Counter(
-        str(record.get("status", "unknown")) for record in records.values()
-    )
+    counts = Counter(str(record.get("status", "unknown")) for record in records.values())
     parts: list[Text] = []
     for status in sorted(counts):
         if parts:
@@ -231,9 +223,7 @@ def _stage_table(*, status: bool) -> Table:
             no_wrap=True,
             overflow="ellipsis",
         )
-    table.add_column(
-        "Description", min_width=18, ratio=1, no_wrap=True, overflow="ellipsis"
-    )
+    table.add_column("Description", min_width=18, ratio=1, no_wrap=True, overflow="ellipsis")
     return table
 
 
@@ -313,9 +303,7 @@ def _print_plan(definition, target: str | None, *, tree: bool = True) -> None:
             str(index),
             Text(stage.name),
             Text(_dependency_summary(stage.dependencies)),
-            Text(
-                stage.description or "-", style="dim" if not stage.description else ""
-            ),
+            Text(stage.description or "-", style="dim" if not stage.description else ""),
         )
     console.print(table)
 
@@ -391,9 +379,7 @@ def _run_with_progress(runner: WorkflowRunner, *, target: str | None) -> dict[st
         if manifest["status"] == "completed_with_partial_results":
             final_label = f"[yellow]! {complete_label} with partial results[/]"
         elif manifest["status"] == "partial_run":
-            final_label = (
-                f"[yellow]! {complete_label}; workflow remains partially run[/]"
-            )
+            final_label = f"[yellow]! {complete_label}; workflow remains partially run[/]"
         elif manifest["status"] == "failed":
             final_label = "[bold red]✗ Workflow remains failed[/]"
         else:
@@ -441,9 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status = subparsers.add_parser("status", help="Display a saved run manifest")
     status.add_argument("--run-dir", type=Path, required=True)
-    publish = subparsers.add_parser(
-        "publish", help="Publish or check declared docs artifacts"
-    )
+    publish = subparsers.add_parser("publish", help="Publish or check declared docs artifacts")
     publish.add_argument("--run-dir", type=Path, required=True)
     publish.add_argument("--check", action="store_true")
     return parser
@@ -456,9 +440,7 @@ def main(argv: list[str] | None = None) -> int:
             return _status(args.run_dir.resolve())
         if args.command == "publish":
             run_dir = args.run_dir.resolve()
-            manifest = json.loads(
-                (run_dir / "run_manifest.json").read_text(encoding="utf-8")
-            )
+            manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
             raw_repo_root = manifest.get("repo_root")
             if not isinstance(raw_repo_root, str) or not raw_repo_root.strip():
                 raise ValueError("Run manifest requires a non-empty repo_root")
@@ -473,13 +455,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     f"Run manifest repo_root is not a repository root: {recorded_repo_root}"
                 )
-            config = json.loads(
-                (run_dir / "resolved_config.json").read_text(encoding="utf-8")
-            )
+            config = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
             definition = _definition(config, repo_root)
-            WorkflowRunner(
-                definition, config=config, repo_root=repo_root, run_dir=run_dir
-            ).publish(check=args.check)
+            WorkflowRunner(definition, config=config, repo_root=repo_root, run_dir=run_dir).publish(
+                check=args.check
+            )
             return 0
         config_path = args.config.resolve()
         config = load_config(config_path)
@@ -494,9 +474,7 @@ def main(argv: list[str] | None = None) -> int:
             _print_plan(definition, args.target, tree=not args.table)
             return 0
         run_dir = _run_dir(config, repo_root, args.run_id)
-        runner = WorkflowRunner(
-            definition, config=config, repo_root=repo_root, run_dir=run_dir
-        )
+        runner = WorkflowRunner(definition, config=config, repo_root=repo_root, run_dir=run_dir)
         if args.command == "run":
             _run_with_progress(runner, target=args.target)
         else:

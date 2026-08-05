@@ -37,18 +37,14 @@ def _repo_path(repo_root: Path, value: str | Path) -> Path:
 def _artifact_name(method: dict[str, Any], key: str) -> Path:
     path = Path(_required_string(method, key, "training.method"))
     if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
-        raise ValueError(
-            f"training.method.{key} must stay beneath the model artifact directory"
-        )
+        raise ValueError(f"training.method.{key} must stay beneath the model artifact directory")
     return path
 
 
 def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
 
 
@@ -58,11 +54,7 @@ def _write_case_file(path: Path, cases: list[str]) -> None:
 
 
 def _read_case_file(path: Path) -> list[str]:
-    return [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _zarr_dir(context: RunContext) -> Path:
@@ -196,11 +188,7 @@ def _method(context: RunContext) -> dict[str, Any]:
 
 
 def _model_dir(context: RunContext) -> Path:
-    return (
-        context.run_dir
-        / "models"
-        / _required_string(_method(context), "id", "training.method")
-    )
+    return context.run_dir / "models" / _required_string(_method(context), "id", "training.method")
 
 
 def _train_model(context: RunContext) -> StageResult:
@@ -240,11 +228,7 @@ def _model_valid(context: RunContext) -> bool:
     method = _method(context)
     checkpoint = _model_dir(context) / _artifact_name(method, "checkpoint")
     run_meta = _model_dir(context) / _artifact_name(method, "run_meta")
-    if (
-        not checkpoint.is_file()
-        or checkpoint.stat().st_size == 0
-        or not run_meta.is_file()
-    ):
+    if not checkpoint.is_file() or checkpoint.stat().st_size == 0 or not run_meta.is_file():
         return False
     try:
         metadata = json.loads(run_meta.read_text(encoding="utf-8"))
@@ -267,23 +251,15 @@ def _summarize(context: RunContext) -> StageResult:
             "schema_version": 1,
             "method": {
                 "id": _required_string(method, "id", "training.method"),
-                "runner_module": _required_string(
-                    method, "runner_module", "training.method"
-                ),
-                "config_name": _required_string(
-                    method, "config_name", "training.method"
-                ),
+                "runner_module": _required_string(method, "runner_module", "training.method"),
+                "config_name": _required_string(method, "config_name", "training.method"),
             },
-            "train_cases": _read_case_file(
-                context.run_dir / "splits" / "train_cases.txt"
-            ),
-            "heldout_cases": _read_case_file(
-                context.run_dir / "splits" / "heldout_cases.txt"
-            ),
+            "train_cases": _read_case_file(context.run_dir / "splits" / "train_cases.txt"),
+            "heldout_cases": _read_case_file(context.run_dir / "splits" / "heldout_cases.txt"),
             "checkpoint": str(
-                (
-                    _model_dir(context) / _artifact_name(method, "checkpoint")
-                ).relative_to(context.run_dir)
+                (_model_dir(context) / _artifact_name(method, "checkpoint")).relative_to(
+                    context.run_dir
+                )
             ),
             "run_meta": str(
                 (_model_dir(context) / _artifact_name(method, "run_meta")).relative_to(

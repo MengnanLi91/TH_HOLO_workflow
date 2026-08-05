@@ -300,25 +300,20 @@ class WorkflowRunner:
                 if (
                     record.get("status") in ("succeeded", "partial")
                     and self._artifacts_valid(record.get("artifacts") or [])
-                    and record.get("dependency_fingerprints", {})
-                    == dependency_fingerprints
+                    and record.get("dependency_fingerprints", {}) == dependency_fingerprints
                     and (stage.validator is None or stage.validator(context))
                 ):
                     if on_stage is not None:
                         on_stage(stage, "reused")
                     continue
-                record.update(
-                    {"status": "running", "started_utc": _now(), "error": None}
-                )
+                record.update({"status": "running", "started_utc": _now(), "error": None})
                 _atomic_json(self.manifest_path, manifest)
                 if on_stage is not None:
                     on_stage(stage, "running")
                 try:
                     result = stage.action(context) or StageResult()
                     if stage.validator is not None and not stage.validator(context):
-                        raise ValueError(
-                            f"Stage {stage.name!r} outputs failed semantic validation"
-                        )
+                        raise ValueError(f"Stage {stage.name!r} outputs failed semantic validation")
                     artifact_records = [
                         self._artifact_record(artifact) for artifact in result.artifacts
                     ]
@@ -332,9 +327,7 @@ class WorkflowRunner:
                         }
                     )
                 except Exception as exc:
-                    record.update(
-                        {"status": "failed", "completed_utc": _now(), "error": str(exc)}
-                    )
+                    record.update({"status": "failed", "completed_utc": _now(), "error": str(exc)})
                     manifest["status"] = "failed"
                     manifest["updated_utc"] = _now()
                     _atomic_json(self.manifest_path, manifest)
@@ -350,9 +343,7 @@ class WorkflowRunner:
                 manifest["status"] = "failed"
             elif all(status in ("succeeded", "partial") for status in statuses):
                 manifest["status"] = (
-                    "completed_with_partial_results"
-                    if "partial" in statuses
-                    else "completed"
+                    "completed_with_partial_results" if "partial" in statuses else "completed"
                 )
             else:
                 manifest["status"] = "partial_run"

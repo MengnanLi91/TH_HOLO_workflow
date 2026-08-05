@@ -78,6 +78,4 @@ def test_alpha_d_profile_builder_requires_and_persists_acceleration_flag(
     )
     metadata = dataset.reproducibility_metadata()
     assert metadata["include_acceleration_head"] is False
-    assert dataset._inner.target_transform_kwargs == {
-        "include_acceleration_head": False
-    }
+    assert dataset._inner.target_transform_kwargs == {"include_acceleration_head": False}

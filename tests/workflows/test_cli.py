@@ -106,9 +106,7 @@ def test_plan_progress_and_runner_share_target_selection(tmp_path, capsys):
     assert "2/2" in progress_output
     assert manifest["stages"]["unrelated"]["status"] == "pending"
 
-    expected = (
-        "Unknown target stage 'missing'; available: ['prepare', 'target', 'unrelated']"
-    )
+    expected = "Unknown target stage 'missing'; available: ['prepare', 'target', 'unrelated']"
     errors = []
     for invoke in (
         lambda: _print_plan(definition, target="missing"),
@@ -282,9 +280,7 @@ def test_publish_uses_manifest_repo_root_for_external_run_dir(monkeypatch, tmp_p
         (Stage("prepare", lambda _context: None),),
         publisher=publisher,
     )
-    monkeypatch.setattr(
-        "workflows.cli._definition", lambda _config, _repo_root: definition
-    )
+    monkeypatch.setattr("workflows.cli._definition", lambda _config, _repo_root: definition)
 
     assert main(["publish", "--run-dir", str(run_dir), "--check"]) == 0
     assert published == {"repo_root": repo_root, "check": True}
@@ -298,9 +294,7 @@ def test_publish_uses_manifest_repo_root_for_external_run_dir(monkeypatch, tmp_p
         ({"repo_root": "/path/that/does/not/exist"}, "repo_root does not exist"),
     ],
 )
-def test_publish_rejects_invalid_manifest_repo_root(
-    manifest, message, tmp_path, capsys
-):
+def test_publish_rejects_invalid_manifest_repo_root(manifest, message, tmp_path, capsys):
     run_dir = tmp_path / "run-001"
     run_dir.mkdir()
     (run_dir / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -320,12 +314,8 @@ def test_run_command_renders_stage_progress(monkeypatch, tmp_path, capsys):
     run_dir = tmp_path / "run"
     repo_root = Path(__file__).resolve().parents[2]
     monkeypatch.setattr("workflows.cli._repo_root", lambda _start: repo_root)
-    monkeypatch.setattr(
-        "workflows.cli._definition", lambda _config, _repo_root: definition
-    )
-    monkeypatch.setattr(
-        "workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir
-    )
+    monkeypatch.setattr("workflows.cli._definition", lambda _config, _repo_root: definition)
+    monkeypatch.setattr("workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir)
 
     assert main(["run", "--config", str(config_path), "--run-id", "run-001"]) == 0
     output = capsys.readouterr().out
@@ -355,12 +345,8 @@ include_acceleration_head = true
     run_dir = tmp_path / "run"
     repo_root = Path(__file__).resolve().parents[2]
     monkeypatch.setattr("workflows.cli._repo_root", lambda _start: repo_root)
-    monkeypatch.setattr(
-        "workflows.cli._definition", lambda _config, _repo_root: definition
-    )
-    monkeypatch.setattr(
-        "workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir
-    )
+    monkeypatch.setattr("workflows.cli._definition", lambda _config, _repo_root: definition)
+    monkeypatch.setattr("workflows.cli._run_dir", lambda _config, _repo_root, _run_id: run_dir)
 
     assert (
         main(
@@ -377,9 +363,7 @@ include_acceleration_head = true
         == 0
     )
 
-    resolved = json.loads(
-        (run_dir / "resolved_config.json").read_text(encoding="utf-8")
-    )
+    resolved = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
     manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert resolved["training"]["alpha"]["include_acceleration_head"] is False
     assert manifest["binding"]["config_sha256"] == _canonical_hash(resolved)

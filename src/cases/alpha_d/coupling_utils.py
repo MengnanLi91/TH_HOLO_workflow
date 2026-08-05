@@ -25,11 +25,7 @@ def alpha_d_to_forchheimer(
     hydraulic_diameter = np.asarray(D_h, dtype=np.float64)
     if np.any(porosity_arr <= 0) or np.any(hydraulic_diameter <= 0):
         raise ValueError("porosity and D_h must be positive everywhere.")
-    return (
-        np.asarray(alpha_d_bulk, dtype=np.float64)
-        * porosity_arr**2
-        / hydraulic_diameter
-    )
+    return np.asarray(alpha_d_bulk, dtype=np.float64) * porosity_arr**2 / hydraulic_diameter
 
 
 def restrict_to_throat(
@@ -135,14 +131,10 @@ def stepfence_porosity_boundaries(
             continue
         z_values[right:right] = [boundary - step_eps, boundary + step_eps]
         cf_values[right:right] = [cf_values[left], cf_values[right]]
-    return np.asarray(z_values, dtype=np.float64), np.asarray(
-        cf_values, dtype=np.float64
-    )
+    return np.asarray(z_values, dtype=np.float64), np.asarray(cf_values, dtype=np.float64)
 
 
-def write_outputs(
-    *, csv_path: Path, z: np.ndarray, cf: np.ndarray, sidecar: dict
-) -> None:
+def write_outputs(*, csv_path: Path, z: np.ndarray, cf: np.ndarray, sidecar: dict) -> None:
     """Write the Forchheimer CSV and its adjacent JSON sidecar."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("w", encoding="utf-8") as stream:

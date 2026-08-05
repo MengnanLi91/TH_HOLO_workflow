@@ -32,9 +32,7 @@ _ACTIVATIONS: dict[str, type[nn.Module]] = {
 def _resolve_activation(name: str) -> type[nn.Module]:
     key = str(name).lower()
     if key not in _ACTIVATIONS:
-        raise ValueError(
-            f"Unknown activation '{name}'. Expected one of {sorted(_ACTIVATIONS)}."
-        )
+        raise ValueError(f"Unknown activation '{name}'. Expected one of {sorted(_ACTIVATIONS)}.")
     return _ACTIVATIONS[key]
 
 

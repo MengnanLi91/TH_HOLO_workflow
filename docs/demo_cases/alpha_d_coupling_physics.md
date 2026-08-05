@@ -92,7 +92,8 @@ Typical stage costs are:
 | stage family | expected cost | resumable unit |
 |---|---|---|
 | `prepare_data`, `plan_panels` | seconds when reusing Zarr; ETL can take hours | whole stage |
-| `tune_alpha` | the most expensive ML stage; one selected-method search | one reference-panel search |
+| `select_alpha_features` | minutes; one outer-case-safe PyCaret selection | whole stage |
+| `tune_alpha` | the most expensive ML stage; one selected-method search | one shared screening search |
 | `panel.<tag>.train_direct` | minutes per panel | panel |
 | `panel.<tag>.train_alpha` | tens of minutes to hours per panel | panel |
 | `panel.<tag>.export_closure` | minutes per panel | panel |
@@ -114,10 +115,11 @@ data/workflows/alpha_d_coupling/<run-id>/
 ├── resolved_config.json
 ├── run_manifest.json
 ├── logs/
+├── features/alpha/{selected_features.txt,manifest.json,result.json}
 ├── panels/<tag>/
 │   ├── heldout_cases.txt
 │   ├── report_cases.txt
-│   ├── artifacts/{direct,alpha,alpha_feature_selection}/
+│   ├── artifacts/{direct,alpha}/
 │   ├── coupled/<case>/
 │   └── moose/<case>/{commands,logs,status,verification}/
 ├── tuning/{best_params.json,best_overrides.txt}

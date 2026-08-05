@@ -86,9 +86,7 @@ class AlphaDExperiment(Experiment):
             output_fields,
         )
 
-        local_vel_norm = bool(
-            getattr(eval_dataset, "local_velocity_normalization", False)
-        )
+        local_vel_norm = bool(getattr(eval_dataset, "local_velocity_normalization", False))
         dp_metrics = compute_delta_p_metrics(
             self.model,
             eval_dataset,
@@ -119,9 +117,7 @@ class AlphaDExperiment(Experiment):
             ),
         )
         if not metrics:
-            raise ValueError(
-                "Alpha-D HPO could not compute pressure-drop validation metrics."
-            )
+            raise ValueError("Alpha-D HPO could not compute pressure-drop validation metrics.")
         return {
             "delta_p_log_abs_error_mean": float(metrics["log_abs_error_mean"]),
             "delta_p_relative_error_p90": float(metrics["relative_error_p90"]),

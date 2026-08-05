@@ -177,9 +177,7 @@ def aggregate_confirmation(
     """Aggregate fold results and select the guarded confirmed winner."""
     aggregates: list[dict[str, Any]] = []
     for candidate in candidates:
-        candidate_rows = [
-            row for row in rows if row["candidate_id"] == candidate["candidate_id"]
-        ]
+        candidate_rows = [row for row in rows if row["candidate_id"] == candidate["candidate_id"]]
         scores = [float(row["composite_score"]) for row in candidate_rows]
         mean_score = statistics.fmean(scores)
         std_score = statistics.pstdev(scores) if len(scores) > 1 else 0.0
@@ -200,15 +198,11 @@ def aggregate_confirmation(
     if guard_reference == "best_control":
         controls = [row for row in aggregates if row["source"] == "control"]
         if not controls:
-            raise ValueError(
-                "Confirmation guard requested best_control but no control was run."
-            )
+            raise ValueError("Confirmation guard requested best_control but no control was run.")
         best_control = min(controls, key=lambda row: row["rank_score"])
         threshold = float(best_control["worst_guard_metric"])
         for aggregate in aggregates:
-            aggregate["guard_passed"] = (
-                float(aggregate["worst_guard_metric"]) <= threshold
-            )
+            aggregate["guard_passed"] = float(aggregate["worst_guard_metric"]) <= threshold
 
     eligible = [row for row in aggregates if row["guard_passed"]]
     if not eligible:
@@ -280,14 +274,8 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
             show_progress_bar=bool(hpo_cfg.get("show_progress_bar", True)),
         )
 
-    completed = [
-        trial
-        for trial in study.trials
-        if trial.state == optuna.trial.TrialState.COMPLETE
-    ]
-    pruned = [
-        trial for trial in study.trials if trial.state == optuna.trial.TrialState.PRUNED
-    ]
+    completed = [trial for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE]
+    pruned = [trial for trial in study.trials if trial.state == optuna.trial.TrialState.PRUNED]
     if not completed and not controls:
         raise RuntimeError("No HPO screening trial completed successfully.")
 
@@ -313,17 +301,12 @@ def run_hpo(cfg_dict: dict) -> dict[str, Any]:
     _write_rows(output_dir / "screening.csv", screening_rows)
 
     confirmation_cfg = dict(hpo_cfg["confirmation"])
-    candidates = _confirmation_candidates(
-        completed, controls, int(confirmation_cfg["top_k"])
-    )
+    candidates = _confirmation_candidates(completed, controls, int(confirmation_cfg["top_k"]))
     if not candidates:
-        raise RuntimeError(
-            "No sampled candidates or controls are available for confirmation."
-        )
+        raise RuntimeError("No sampled candidates or controls are available for confirmation.")
 
     fold_prepared = {
-        fold_index: prepare_fold_dataset(prepared, fold[0])
-        for fold_index, fold in enumerate(folds)
+        fold_index: prepare_fold_dataset(prepared, fold[0]) for fold_index, fold in enumerate(folds)
     }
     confirmation_rows: list[dict[str, Any]] = []
     base_seed = int(validation_cfg["seed"])

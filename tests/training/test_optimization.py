@@ -13,14 +13,10 @@ from training.runtime import build_dataloader, build_optimizer, build_scheduler
     ("weight_decay", "optimizer_type"),
     [(0.0, torch.optim.Adam), (1.0e-4, torch.optim.AdamW)],
 )
-def test_build_optimizer_selects_adam_variant(
-    weight_decay: float, optimizer_type: type
-) -> None:
+def test_build_optimizer_selects_adam_variant(weight_decay: float, optimizer_type: type) -> None:
     model = torch.nn.Linear(2, 1)
 
-    optimizer = build_optimizer(
-        model.parameters(), {"lr": 2.0e-3, "weight_decay": weight_decay}
-    )
+    optimizer = build_optimizer(model.parameters(), {"lr": 2.0e-3, "weight_decay": weight_decay})
 
     assert isinstance(optimizer, optimizer_type)
     assert optimizer.param_groups[0]["lr"] == pytest.approx(2.0e-3)

@@ -39,6 +39,5 @@ def test_alpha_d_folds_balance_each_parameter_margin() -> None:
                 level = names[index].split("__")[token]
                 per_level.setdefault(level, Counter())[fold_index] += 1
         assert all(
-            max(counts.values()) - min(counts.values()) <= 1
-            for counts in per_level.values()
+            max(counts.values()) - min(counts.values()) <= 1 for counts in per_level.values()
         )
