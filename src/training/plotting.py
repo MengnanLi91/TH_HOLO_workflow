@@ -218,7 +218,14 @@ def save_pointwise_profile_plots(
                     baseline_phys = baseline_unordered[order.numpy()]
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
-            ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
+            ax.plot(
+                z_axis,
+                target_phys,
+                label="Ground Truth",
+                linewidth=2.5,
+                marker="o",
+                ms=3,
+            )
             ax.plot(z_axis, pred_phys, label="Predicted", linewidth=2.0, linestyle="--")
             if baseline_phys is not None:
                 ax.plot(
@@ -350,7 +357,14 @@ def save_profile_prediction_plots(
                     baseline_phys = baseline_unordered[order.numpy()]
 
             fig, ax = plt.subplots(figsize=(8.5, 4.8), constrained_layout=True)
-            ax.plot(z_axis, target_phys, label="Ground Truth", linewidth=2.5, marker="o", ms=3)
+            ax.plot(
+                z_axis,
+                target_phys,
+                label="Ground Truth",
+                linewidth=2.5,
+                marker="o",
+                ms=3,
+            )
             ax.plot(z_axis, pred_phys, label="Predicted", linewidth=2.0, linestyle="--")
             if baseline_phys is not None:
                 ax.plot(
@@ -521,7 +535,7 @@ def save_parity_plot(
                     s=10,
                     alpha=0.5,
                     color=color,
-                    label=name.replace("is_", "").capitalize() if name != "other" else "Other",
+                    label=(name.replace("is_", "").capitalize() if name != "other" else "Other"),
                 )
         else:
             ax.scatter(target_all, pred_all, s=10, alpha=0.5, color="#1f77b4")
@@ -530,7 +544,14 @@ def save_parity_plot(
         hi = float(np.nanmax([target_all.max(), pred_all.max()]))
         if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
             lo, hi = lo - 1.0, hi + 1.0
-        ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
+        ax.plot(
+            [lo, hi],
+            [lo, hi],
+            color="black",
+            linestyle="--",
+            linewidth=1.0,
+            label="y = x",
+        )
         ax.plot(
             [lo, hi],
             [1.1 * lo, 1.1 * hi],
@@ -609,7 +630,14 @@ def save_delta_p_parity_plot(
     if have_dr:
         cmap = plt.get_cmap("viridis")
         scatter = ax.scatter(
-            gt, pred, s=30, c=drs, cmap=cmap, alpha=0.85, edgecolors="white", linewidths=0.4
+            gt,
+            pred,
+            s=30,
+            c=drs,
+            cmap=cmap,
+            alpha=0.85,
+            edgecolors="white",
+            linewidths=0.4,
         )
         cbar = fig.colorbar(scatter, ax=ax)
         cbar.set_label("Dr (D_throat / D_big)")
@@ -622,7 +650,12 @@ def save_delta_p_parity_plot(
         lo, hi = max(lo, 1e-3), max(hi, 1e-3) * 10.0
     ax.plot([lo, hi], [lo, hi], color="black", linestyle="--", linewidth=1.0, label="y = x")
     ax.plot(
-        [lo, hi], [1.1 * lo, 1.1 * hi], color="black", linestyle=":", linewidth=0.8, label="±10%"
+        [lo, hi],
+        [1.1 * lo, 1.1 * hi],
+        color="black",
+        linestyle=":",
+        linewidth=0.8,
+        label="±10%",
     )
     ax.plot(
         [lo, hi],

@@ -2,15 +2,15 @@
 
 The MULTIFID-TH site is built with Sphinx + MyST + Furo. The build is
 driven by `docs/Makefile`; the `[docs]` extras-require in
-`pyproject.toml` pins the Sphinx stack.
+`pyproject.toml` declares the Sphinx stack.
 
 ## Quick start
 
 From the repository root:
 
 ```bash
-pip install -e ".[docs]"
-make -C docs html
+uv sync --extra docs
+uv run --no-sync make -C docs html
 ```
 
 Open `docs/_build/html/index.html` in a browser.
@@ -33,14 +33,14 @@ For iterative writing, run `sphinx-autobuild` via the `livehtml`
 target. It watches the source tree and rebuilds on every save:
 
 ```bash
-make -C docs livehtml
+uv run --no-sync make -C docs livehtml
 # Browse to http://localhost:8000
 ```
 
 Override the port with `PORT=...`:
 
 ```bash
-make -C docs livehtml PORT=9001
+uv run --no-sync make -C docs livehtml PORT=9001
 ```
 
 ## Catch broken cross-references
@@ -49,7 +49,7 @@ The `strict` target builds with `-W -n` (warnings fatal, nitpicky
 cross-reference checking). Run it before pushing doc changes:
 
 ```bash
-make -C docs strict
+uv run --no-sync make -C docs strict
 ```
 
 `-W` is the same flag the CI build uses; if `strict` is green, the
@@ -66,18 +66,18 @@ positives. Use `strict` for an occasional sweep, not for every build.
 
 | Target | What it does |
 |---|---|
-| `make -C docs html` | Default build to `_build/html` |
-| `make -C docs strict` | `html` plus `-W -n` (warnings fatal, nitpicky) |
-| `make -C docs livehtml` | Auto-rebuild and serve at `http://localhost:8000` |
-| `make -C docs serve` | Serve an already-built `_build/html` at `http://localhost:8000` |
-| `make -C docs linkcheck` | Validate external links |
-| `make -C docs clean` | Remove `_build/` |
+| `uv run --no-sync make -C docs html` | Default build to `_build/html` |
+| `uv run --no-sync make -C docs strict` | `html` plus `-W -n` (warnings fatal, nitpicky) |
+| `uv run --no-sync make -C docs livehtml` | Auto-rebuild and serve at `http://localhost:8000` |
+| `uv run --no-sync make -C docs serve` | Serve an already-built `_build/html` at `http://localhost:8000` |
+| `uv run --no-sync make -C docs linkcheck` | Validate external links |
+| `uv run --no-sync make -C docs clean` | Remove `_build/` |
 
 `SPHINXOPTS` is forwarded to `sphinx-build`, so you can pass extra
 flags ad hoc:
 
 ```bash
-make -C docs html SPHINXOPTS="-W --keep-going"
+uv run --no-sync make -C docs html SPHINXOPTS="-W --keep-going"
 ```
 
 ## Where the source lives
@@ -89,9 +89,9 @@ make -C docs html SPHINXOPTS="-W --keep-going"
 | `docs/user/` | User-facing tutorials and how-tos |
 | `docs/dev/` | Developer-oriented docs (this page lives here) |
 | `docs/cases/` | One page per surrogate case |
+| `docs/demo_cases/` | Reproducible end-to-end demonstrations for specific cases |
 | `docs/api/` | Auto-generated API reference (`.. automodule::` blocks) |
-| `docs/archive/` | Historical planning / refactor records |
-| `docs/superpowers/` | Internal planning; **excluded from the rendered site** via `exclude_patterns` in `conf.py` |
+| `docs/superpowers/` | Historical/internal planning; **excluded from the rendered site** via `exclude_patterns` in `conf.py` |
 
 `docs/_build/` is git-ignored. Don't commit anything under it.
 
@@ -117,10 +117,9 @@ work because `docs/conf.py` lists those heavy runtime deps under
 dep not yet mocked, the CI build will fail with an `ImportError`; add
 the dep to the `autodoc_mock_imports` list in `conf.py`.
 
-The workflow's `actions/configure-pages` step has `enablement: true`,
-which turns Pages on (with Actions as the source) the first time the
-deploy job runs — no manual repo-settings click required. The setting
-becomes a no-op on subsequent runs. No `gh-pages` branch is involved.
+The `actions/configure-pages` step prepares an already-enabled Pages site for
+deployment. Enable Pages once in the repository settings with GitHub Actions
+as its source before the first deployment. No `gh-pages` branch is involved.
 
 If you ever want to confirm or override the Pages source by hand, it's
 at: Repo Settings → **Pages** → Build and deployment → Source.

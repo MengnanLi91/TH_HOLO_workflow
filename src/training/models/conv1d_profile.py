@@ -15,10 +15,6 @@ When ``physicsnemo`` is unavailable in the environment the module
 imports cleanly but the model is not registered — mirroring how
 ``GraphAdapter`` only activates if PyG is importable. This keeps
 ``_load_builtins`` from hard-failing in envs without physicsnemo.
-
-Backward-compat: ``AlphaDConv1D`` was the original class name. The
-alias subclass below keeps old ``.mdlus`` checkpoints loadable, since
-PhysicsNeMo embeds ``__name__`` in the saved archive.
 """
 
 import torch
@@ -116,9 +112,6 @@ if _PhysicsNeMoModule is not None:
             for block in self.blocks:
                 h = h + block(h)
             return self.head(h)
-
-    class AlphaDConv1D(Conv1DProfile):
-        """Backward-compat alias for old ``.mdlus`` checkpoints."""
 
     def build(model_cfg: dict, dataset_info: dict):
         resolved = {

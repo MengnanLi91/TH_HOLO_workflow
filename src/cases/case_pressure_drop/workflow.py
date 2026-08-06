@@ -15,6 +15,7 @@ from cases.case_pressure_drop.modeling import (
     load_saved_model,
 )
 from cases.case_pressure_drop.plotting import save_prediction_plots
+from training.case_lists import load_case_selection
 
 
 def to_plain_dict(cfg: Any) -> dict[str, Any]:
@@ -530,6 +531,11 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
         )
     )
     split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), split_seed)
+    split_cfg["force_test"] = load_case_selection(
+        split_cfg.get("force_test"),
+        split_cfg.get("force_test_file"),
+        label="force_test",
+    )
     train_idx, test_idx, train_sims, test_sims = split_case_indices(
         dataset.sim_names,
         split_cfg,
@@ -608,6 +614,7 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
     )
 
     run_meta = {
+        "training_run_meta_schema": 3,
         "task": "case_pressure_drop_regression",
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "output_dir": str(case_dir),
@@ -629,6 +636,11 @@ def train_case_pressure_drop(cfg: dict | Any) -> dict[str, Any]:
             "seed": int(split_cfg.get("seed", split_seed)),
             "n_bins": int(split_cfg.get("n_bins", 3)),
             "force_test": [str(name) for name in (split_cfg.get("force_test") or [])],
+            "force_test_file": (
+                str(_resolve_path(str(split_cfg["force_test_file"])))
+                if split_cfg.get("force_test_file")
+                else None
+            ),
             "train_sims": train_sims,
             "test_sims": test_sims,
         },

@@ -26,6 +26,7 @@ def _make_alpha_d_dataset(alpha_d_zarr_dir: Path) -> TabularPairDataset:
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
 

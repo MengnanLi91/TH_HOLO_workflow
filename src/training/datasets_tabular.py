@@ -68,6 +68,9 @@ class TabularPairDataset(Dataset):
         ``(transformed_y, extras)``. When extras contains ``baseline_encoded``,
         it is stashed as ``self._baseline_encoded`` and ``self.has_target_baseline``
         is set to True so consumers can re-add the baseline at decode time.
+    target_transform_kwargs : dict or None
+        Explicit keyword arguments forwarded to ``target_transform``. These
+        values are persisted in reproducibility metadata.
     """
 
     def __init__(
@@ -85,12 +88,20 @@ class TabularPairDataset(Dataset):
         local_velocity_normalization: bool = False,
         min_Dr: float | None = None,
         target_transform: Callable[..., tuple] | None = None,
+        target_transform_kwargs: dict | None = None,
         engineered_feature_names: list[str] | None = None,
         engineered_feature_builder: Callable[..., dict] | None = None,
     ):
         import json
 
         import zarr
+
+        self._target_transform_entrypoint = (
+            f"{target_transform.__module__}:{target_transform.__name__}"
+            if target_transform is not None
+            else None
+        )
+        self.target_transform_kwargs = dict(target_transform_kwargs or {})
 
         self.zarr_dir = Path(zarr_dir)
         sim_paths = sorted(self.zarr_dir.glob("*.zarr"))
@@ -219,6 +230,7 @@ class TabularPairDataset(Dataset):
                 case_meta_list=case_meta_list,
                 rows_per_case=rows_per_case,
                 local_velocity_normalization=local_velocity_normalization,
+                **self.target_transform_kwargs,
             )
             extras = extras or {}
             baseline = extras.get("baseline_encoded")
@@ -392,11 +404,44 @@ class TabularPairDataset(Dataset):
     def __getitem__(self, idx: int):
         if self.include_case_idx:
             if self._w is not None:
-                return self._x[idx], self._y[idx], self._w[idx], self._case_idx_tensor[idx]
+                return (
+                    self._x[idx],
+                    self._y[idx],
+                    self._w[idx],
+                    self._case_idx_tensor[idx],
+                )
             return self._x[idx], self._y[idx], self._case_idx_tensor[idx]
         if self._w is not None:
             return self._x[idx], self._y[idx], self._w[idx]
         return self._x[idx], self._y[idx]
+
+    def reproducibility_metadata(self) -> dict:
+        """Describe the effective dataset behavior used for this run."""
+        norm_stats = None
+        if self.norm_stats:
+            norm_stats = {
+                "x_mean": self.norm_stats["x_mean"].detach().cpu().tolist(),
+                "x_std": self.norm_stats["x_std"].detach().cpu().tolist(),
+            }
+        metadata = {
+            "dataset_type": f"{type(self).__module__}:{type(self).__name__}",
+            "input_columns": list(self.input_columns),
+            "output_columns": list(self.output_columns),
+            "normalize": bool(self.normalize),
+            "norm_stats": norm_stats,
+            "target_transform": self._target_transform_entrypoint,
+            "target_transform_kwargs": dict(self.target_transform_kwargs),
+            "has_target_baseline": bool(self.has_target_baseline),
+            "local_velocity_normalization": bool(self.local_velocity_normalization),
+            "throat_weight": self.throat_weight,
+            "downstream_weight": self.downstream_weight,
+            "include_case_idx": bool(self.include_case_idx),
+        }
+        if "include_acceleration_head" in self.target_transform_kwargs:
+            metadata["include_acceleration_head"] = self.target_transform_kwargs[
+                "include_acceleration_head"
+            ]
+        return metadata
 
     # ------------------------------------------------------------------
     # Case-level subsetting
@@ -430,6 +475,8 @@ class TabularPairDataset(Dataset):
         new.include_case_idx = self.include_case_idx
         new.local_velocity_normalization = self.local_velocity_normalization
         new.exclude_cases = list(self.exclude_cases)
+        new._target_transform_entrypoint = self._target_transform_entrypoint
+        new.target_transform_kwargs = dict(self.target_transform_kwargs)
 
         # Propagate per-case metadata and raw geometry arrays
         new._case_meta = [self._case_meta[i] for i in case_indices]

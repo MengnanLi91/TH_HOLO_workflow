@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         # Submodules are intentionally NOT cloned: we only need to move the
         # gitlink pointer, not MOOSE's (very large) history.
 
@@ -39,7 +39,7 @@ jobs:
           git update-index --cacheinfo 160000,${{ steps.resolve.outputs.sha }},moose
 
       - name: Create or update pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           # Default GITHUB_TOKEN: the PR opens but will NOT trigger other
           # workflows (pytest/pre-commit). Re-run those manually if needed.

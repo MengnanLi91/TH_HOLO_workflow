@@ -1,8 +1,10 @@
-# Alpha-D Surrogate: Axial-Profile MLP Tutorial
+# Alpha-D Surrogate Components
 
-This guide walks through extracting Darcy resistance coefficient profiles from
-the flow contraction-expansion parametric study and training an MLP surrogate
-model.
+This guide documents the retained direct ETL, feature-selection, MLP, and
+evaluation commands for developing individual alpha-D components. For a
+complete, reproducible study—including held-out panels, the default Conv1D
+profile method, MOOSE coupling, and evidence reporting—start with
+[Running the Alpha-D Case](running_alpha_d.md).
 
 ## Problem overview
 
@@ -39,6 +41,31 @@ Verify that you have completed cases:
 ls data/flow_contraction_expansion/parametric_study/Re_5000__Dr_0p144__Lr_0p01/simulation_out.e
 ```
 
+## Recommended complete-study workflow
+
+The commands below remain useful when developing one ETL, feature-selection,
+or training component. For the reproducible panel study and MOOSE coupling,
+use the tracked workflow instead:
+
+```bash
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-002
+```
+
+The workflow uses one canonical held-out file per panel, tunes the selected
+method once, freezes its settings for comparisons, records all provenance, and
+resumes validated artifacts. Select another profile model through
+`[training.alpha]` in the TOML and its Hydra YAML; see
+[Run a Reproducible Study Workflow](running_workflows.md).
+The union of all held-out and report cases is written to
+`panels/hpo_exclude_cases.txt`, so no outer evaluation case enters an HPO fold.
+
+For a command-by-command path from raw campaign through ETL, coupled study,
+resume, and publication, use the [alpha-D running guide](running_alpha_d.md).
+
 ## Step 1: Extract alpha_D profiles (ETL)
 
 The alpha_D ETL pipeline reads each case's `simulation_out.e`, extracts the
@@ -46,6 +73,22 @@ contraction region, computes the Darcy resistance coefficient at axial
 stations, and writes per-case `.zarr` stores.
 
 ### Run the extraction
+
+For the resumable Apptainer workflow, run:
+
+```bash
+uv run multifid-workflow etl \
+    --config src/cases/alpha_d/configs/etl_workflow.toml \
+    --run-id alpha-d-etl-001 \
+    --input-dir /absolute/path/to/parametric_study
+```
+
+The processed stores are written under the ETL run directory, with an input
+fingerprint, logs, and an explicit coverage summary. Point a copied coupling
+study TOML at that `data/processed` directory to use it for training.
+
+For component-level development in an already prepared heavy environment, the
+existing direct command remains available:
 
 ```bash
 cd src && python cases/alpha_d/run_etl.py \
@@ -223,17 +266,58 @@ That output path is exactly where `train_mlp.yaml`'s
 `data.input_columns_file` points, so the MLP training step picks it up
 with no extra flags.
 
-### When you can skip this step
+### Conv1D workflow selection
 
-- **Conv1D** (`train_conv1d`) hard-codes its input columns in
-  `train_conv1d.yaml`, so the Conv1D path does not need PyCaret output.
-- For the MLP, you can also bypass PyCaret by passing an explicit list
-  on the CLI:
-  ```bash
-  python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
-    data.input_columns_file=null \
-    'data.input_columns=[log10_Re,Dr,Lr,z_hat,d_local_over_D,V_local_over_V_bulk]'
-  ```
+- The coupled **Conv1D** workflow runs `select_alpha_features` after it has
+  excluded every outer panel case. The stage writes one nine-feature file to
+  `features/alpha/selected_features.txt` and passes that exact file to HPO
+  and every panel model. This keeps HPO and all reports on one feature set
+  while preventing report/OOD cases from influencing selection.
+- `train_conv1d.yaml` retains the curated columns only as a direct-run
+  fallback. To use PyCaret in a direct Conv1D run, use
+  `--config-name pycaret_conv1d`, then pass its artifact with
+  `data.input_columns_file=…/selected_features.txt`.
+
+#### Choosing the Conv1D candidate features
+
+The case author provides the *candidate* features in
+`configs/pycaret_conv1d.yaml`, not on the `multifid-workflow run` command.
+`data.selected_from_allowlist: null` means that PyCaret considers every
+feature in `cases.alpha_d.feature_data.ALLOWLIST` (the base ETL features plus
+the documented engineered features). PyCaret then writes the smaller final
+list to `selected_features.txt`.
+
+To restrict the candidate pool, replace `null` with an ordered subset of that
+allowlist:
+
+```yaml
+data:
+  selected_from_allowlist:
+    - Dr
+    - Lr
+    - log10_Re_throat
+    - z_hat
+    - z_hat_times_Dr
+    - z_hat_times_Lr
+    - dist_to_throat_start
+    - dist_to_throat_end
+    - dist_to_nearest_step
+```
+
+This setting can only restrict the approved pool. To introduce a new feature,
+first make it available from the ETL or the engineered-feature builder, then
+add it to `ALLOWLIST` in `feature_data.py`; unknown YAML names fail
+validation. The workflow itself supplies only the Zarr path, outer-case
+exclusions, and output directory to the selector.
+
+For the MLP, you can also bypass PyCaret by passing an explicit list on the
+CLI:
+
+```bash
+python train.py --config-path cases/alpha_d/configs --config-name train_mlp \
+  data.input_columns_file=null \
+  'data.input_columns=[log10_Re,Dr,Lr,z_hat,d_local_over_D,V_local_over_V_bulk]'
+```
 
 ### Common knobs
 
@@ -247,9 +331,18 @@ python cases/alpha_d/run_feature_selection_pycaret.py \
   output.dir=../data/feature_analysis/pycaret/run_1
 ```
 
+For a direct Conv1D run, produce its nine-feature artifact with:
+
+```bash
+python cases/alpha_d/run_feature_selection_pycaret.py \
+  --config-name pycaret_conv1d \
+  output.dir=../data/feature_analysis/pycaret/conv1d
+```
+
 If you change `output.dir`, also override
 `data.input_columns_file=…/selected_features.txt` in Step 3 so training
-reads from the same place.
+reads from the same place. The coupled Conv1D workflow supplies this path
+itself.
 
 ## Step 3: Train the MLP
 
@@ -412,7 +505,12 @@ Then inspect:
 python -c "import json; m=json.load(open('../data/cases/train_mlp/metrics.json')); print(json.dumps(m, indent=2))"
 ```
 
-## Quick-reference command summary
+## Component-level MLP command summary
+
+These commands run isolated components in a prepared heavy environment. They
+do not construct the panel study, enforce its per-panel feature-selection
+boundary, run MOOSE coupling, or create the coupled-study report. Use the
+workflow in [Running the Alpha-D Case](running_alpha_d.md) for those results.
 
 ```bash
 # 1. Extract alpha_D profiles from CFD
@@ -431,8 +529,11 @@ docker compose run --rm etl bash -lc 'cd src && python train.py --config-path ca
 docker compose run --rm etl bash -lc 'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
 ```
 
-If you only want the Conv1D model, skip step 2 and substitute
-`--config-name train_conv1d` in step 3.
+For a direct Conv1D experiment, you may use the curated fallback by
+substituting `--config-name train_conv1d` in step 3. To make that direct run
+use PyCaret instead, run Step 2 with `--config-name pycaret_conv1d` and pass
+the artifact with `data.input_columns_file=…/selected_features.txt`. The
+coupled workflow performs this selection automatically after panel planning.
 
 ### Apptainer (HPC) equivalent
 
@@ -476,10 +577,43 @@ Once a model is trained, its per-station `α_D(z)` predictions can drive
 a porous-medium Forchheimer closure inside a PINSFV simulation. The
 end-to-end pipeline (exporter → MOOSE input → verifier) lives under
 `src/cases/alpha_d/` and is described in
-[Coupling Physics Reference](../dev/alpha_d_coupling_physics.md), which
+[Alpha-D Coupling Demo](../demo_cases/alpha_d_coupling_physics.md), which
 covers the volume-averaged momentum equation, the α_D → C_F mapping
 `F = α_D · ε² / D_h`, and a quantitative comparison of the coupled
 MOOSE pressure drop against the resolved-CFD ground truth.
+
+## Acceleration-head baseline switch
+
+`data.include_acceleration_head` controls one term in the analytical
+alpha-D baseline. It is **not** an extra neural-network output or a training
+loss term.
+
+At a sudden contraction, the throat velocity is approximately
+`V_throat = V_bulk / Dr²`. When the switch is `true`, the baseline includes
+the corresponding static-pressure fall:
+
+\[
+\Delta p_{\mathrm{accel}} = q_{\mathrm{throat}} - q_{\mathrm{bulk}}
+= q_{\mathrm{bulk}}\left(\frac{1}{Dr^4} - 1\right),
+\qquad q = \tfrac12\rho V^2.
+\]
+
+The baseline deposits that pressure contribution at the last station upstream
+of the throat, where the resolved CFD profile shows the contraction spike.
+Training subtracts this baseline from the encoded alpha-D target and learns
+the residual; evaluation and export add the identical baseline back before
+integrating pressure drop or generating the Forchheimer closure.
+
+Set the switch to `false` only for a controlled no-acceleration ablation. It
+removes this one baseline contribution while retaining the same Conv1D
+architecture, features, HPO protocol, and `relative_l2` training loss. A run
+metadata file records the effective value, and export rejects metadata that
+does not contain it, so a model cannot be exported with an inferred or
+mismatched setting.
+
+The shipped alpha-D configurations set it to `true`. To run the documented
+ablation, use the [no-acceleration workflow command](running_alpha_d.md)
+with a separate run ID.
 
 ## Architecture notes
 
@@ -498,7 +632,7 @@ The alpha_D pipeline integrates with the existing generic training framework:
   and {py:mod}`cases.alpha_d.etl.sink`, following the PhysicsNeMo Curator
   pattern.
 - **Experiment hooks**: {py:class}`cases.alpha_d.experiment.AlphaDExperiment`
-  adds throat-weighted loss and the plotting hooks
+  adds pressure-drop HPO metrics and the plotting hooks
   ({py:meth}`~cases.alpha_d.experiment.AlphaDExperiment.decode_for_plotting`,
   {py:meth}`~cases.alpha_d.experiment.AlphaDExperiment.baseline_for_plotting`)
   the runner uses for per-case profile and parity plots.
@@ -507,12 +641,12 @@ The alpha_D pipeline integrates with the existing generic training framework:
 
 ## Note: HPO is built into training
 
-The `train_mlp.yaml` config includes an `hpo` section with a search
-space. Both entry points — the top-level `train.py` and the case
+Both `train_mlp.yaml` and `train_conv1d.yaml` use the mandatory two-phase HPO
+contract. Both entry points — the top-level `train.py` and the case
 wrapper `cases/alpha_d/train.py` — call the same
 `training.runner.train_or_hpo` dispatcher, which runs Optuna HPO first
-and then retrains with the best hyperparameters whenever the config
-contains a non-empty `hpo.search_space`.
+then confirms finalists across every case fold and retrains the confirmed
+winner whenever the config contains a non-empty `hpo.search_space`.
 
 To skip HPO and train directly with the parameters in the config, set
 `hpo=null` on the CLI:
@@ -531,9 +665,10 @@ Before training, use the
 preview how much data you have in each ``Dr`` / ``Re`` / ``Lr`` bin --
 especially after applying ``min_Dr`` or ``exclude_cases`` filters.
 
-After running multiple HPO versions, review training progress and
-compare evaluation metrics across versions using whichever notebook
-or script you've adopted for cross-run comparison.
+The alpha-D objective combines restored-checkpoint profile loss with
+pressure-drop log error and p90 relative error. It records signed error, Lr,
+overall signed bias, and maximum absolute Lr-level bias; the last metric is the
+confirmation guard against the best scientific control.
 
 ## Status
 
@@ -548,14 +683,7 @@ Landed since the original tutorial draft:
   `eval_metrics.json` reports trapezoidal-integrated ΔP_pred vs.
   ground-truth `delta_p_case` for every test case.
 
-Explicitly **not** done (tried, regressed, removed):
-
-- A pressure-drop-consistency training loss (`delta_p_weight` in the
-  experiment). Two attempts (`delta_p_weight = 0.25` direct;
-  `delta_p_weight = 0.05` via HPO selection) degraded the test Δp by
-  30–130% versus the pure relative_l2 baseline, even when val loss
-  looked comparable. The log-space Δp loss has ~unit magnitude, so any
-  non-trivial weight starves the per-station signal that the model
-  actually fits well. The term and its hooks were removed from
-  `AlphaDExperiment`.
-- MOOSE offline coupling: export predictions for closed-loop verification
+The training objective remains `relative_l2`; pressure-drop statistics are HPO
+selection metrics, not an additional gradient loss. Both alpha-D configs
+require `data.include_acceleration_head`, and schema-3 run metadata persists
+that choice through residual construction, evaluation, and export.

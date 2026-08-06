@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -34,6 +35,24 @@ def test_cli_parses_required_args(tmp_path):
     assert args.checkpoint == tmp_path / "model.mdlus"
     assert args.run_meta == tmp_path / "run_meta.json"
     assert args.output_csv == tmp_path / "out.csv"
+
+
+def test_export_requires_schema_three_and_persisted_acceleration_flag():
+    from cases.alpha_d.export_friction_profile import require_export_run_meta
+
+    with pytest.raises(ValueError, match="schema 3"):
+        require_export_run_meta({"training_run_meta_schema": 2})
+    with pytest.raises(ValueError, match="include_acceleration_head"):
+        require_export_run_meta({"training_run_meta_schema": 3, "data": {"effective": {}}})
+    assert (
+        require_export_run_meta(
+            {
+                "training_run_meta_schema": 3,
+                "data": {"effective": {"include_acceleration_head": False}},
+            }
+        )
+        is False
+    )
 
 
 # Resolve the repo root from this file's location:
@@ -143,11 +162,33 @@ def test_build_model_input_uses_run_meta_columns_and_norm_stats():
 
 TARGET_CKPT = _REPO / "data/cases/train_conv1d/model.mdlus"
 TARGET_RUN_META = TARGET_CKPT.parent / "run_meta.json"
+HEAVY_RUNTIME_AVAILABLE = (
+    importlib.util.find_spec("torch") is not None
+    and importlib.util.find_spec("physicsnemo") is not None
+)
+
+
+def _current_training_artifact_available() -> bool:
+    if not TARGET_CKPT.exists() or not TARGET_RUN_META.exists():
+        return False
+    try:
+        metadata = json.loads(TARGET_RUN_META.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    effective = metadata.get("data", {}).get("effective", {})
+    return metadata.get("training_run_meta_schema") == 3 and isinstance(
+        effective.get("include_acceleration_head"), bool
+    )
+
+
+CURRENT_TRAINING_ARTIFACT_AVAILABLE = _current_training_artifact_available()
 
 
 @pytest.mark.skipif(
-    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
-    reason="Checkpoint or target zarr not present.",
+    not CURRENT_TRAINING_ARTIFACT_AVAILABLE
+    or not TARGET_ZARR.exists()
+    or not HEAVY_RUNTIME_AVAILABLE,
+    reason="Current schema-3 checkpoint, target zarr, or heavy ML runtime not present.",
 )
 def test_forward_returns_signed_log1p_alpha_d_profile():
     from cases.alpha_d.export_friction_profile import (
@@ -265,7 +306,8 @@ def test_decode_to_bulk_alpha_d_without_local_normalization():
 
 def test_alpha_d_to_forchheimer_throat_synthetic():
     """Throat (porous): porosity = Dr², D_h = Dr·D_outer.
-    α_D=1, Dr=0.5, D_outer=1 → F = α_D · porosity² / D_h = α_D · Dr⁴ / (Dr·D_outer) = α_D · Dr³ / D_outer = 0.125."""
+    α_D=1, Dr=0.5, D_outer=1 → F = α_D · porosity² / D_h = α_D · Dr⁴ / (Dr·D_outer) = α_D · Dr³ / D_outer = 0.125.
+    """
     from cases.alpha_d.export_friction_profile import alpha_d_to_forchheimer
 
     cf = alpha_d_to_forchheimer(np.array([1.0]), porosity=0.5**2, D_h=0.5 * 1.0)
@@ -427,8 +469,10 @@ def test_write_csv_and_sidecar(tmp_path):
 
 
 @pytest.mark.skipif(
-    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
-    reason="Checkpoint or target zarr not present.",
+    not CURRENT_TRAINING_ARTIFACT_AVAILABLE
+    or not TARGET_ZARR.exists()
+    or not HEAVY_RUNTIME_AVAILABLE,
+    reason="Current schema-3 checkpoint, target zarr, or heavy ML runtime not present.",
 )
 def test_end_to_end_run(tmp_path):
     from cases.alpha_d.export_friction_profile import main
@@ -464,8 +508,10 @@ def test_end_to_end_run(tmp_path):
 
 
 @pytest.mark.skipif(
-    not TARGET_CKPT.exists() or not TARGET_ZARR.exists(),
-    reason="Checkpoint or target zarr not present.",
+    not CURRENT_TRAINING_ARTIFACT_AVAILABLE
+    or not TARGET_ZARR.exists()
+    or not HEAVY_RUNTIME_AVAILABLE,
+    reason="Current schema-3 checkpoint, target zarr, or heavy ML runtime not present.",
 )
 def test_end_to_end_sidecar_records_end_length(tmp_path):
     from cases.alpha_d.export_friction_profile import main

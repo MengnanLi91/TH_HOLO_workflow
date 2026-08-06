@@ -41,7 +41,11 @@ def _git_sha(repo_root: Path) -> str | None:
             timeout=5,
         )
         return out.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return None
 
 

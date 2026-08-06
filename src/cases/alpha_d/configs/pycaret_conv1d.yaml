@@ -1,0 +1,31 @@
+# Feature selection used by the Conv1D study workflow.
+#
+# The workflow supplies data.zarr_dir, excludes every outer panel case, and
+# writes the artifact under its run directory. It then freezes this one list
+# for screening, confirmation, and every panel model.
+
+data:
+  zarr_dir: ???
+  target: log_alpha_D
+  local_velocity_normalization: true
+  min_Dr: 0.333
+  exclude_cases: []
+  exclude_cases_file: null
+  selected_from_allowlist: null
+
+output:
+  dir: ???
+
+pycaret:
+  seed: 42
+  test_ratio: 0.2
+  ranker: gbr
+  setup:
+    normalize: true
+    transformation: false
+    remove_multicollinearity: true
+    multicollinearity_threshold: 0.95
+    low_variance_threshold: 0.0
+    feature_selection: true
+    feature_selection_method: classic
+    n_features_to_select: 9

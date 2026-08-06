@@ -1,6 +1,7 @@
 """Alpha-D-specific extended evaluation metrics.
 
-The generic runner calls :meth:`Experiment.compute_extended_metrics`, which
+The generic runner calls
+:meth:`training.experiment.Experiment.compute_extended_metrics`, which
 ``AlphaDExperiment`` (in ``cases/alpha_d/experiment.py``) overrides to invoke
 the helpers in this module. Base experiments inherit a no-op and skip this
 module entirely, so the runner stays alpha-D-agnostic.
@@ -121,6 +122,8 @@ def compute_delta_p_metrics(
             delta_p_pred = float(torch.trapezoid(dp_dz, z_physical).cpu())
 
             rel_err = abs(delta_p_pred - delta_p_gt) / abs(delta_p_gt)
+            signed_error = delta_p_pred - delta_p_gt
+            signed_rel_err = (delta_p_pred - delta_p_gt) / abs(delta_p_gt)
             log_err = abs(math.log(max(delta_p_pred, 1e-8)) - math.log(max(delta_p_gt, 1e-8)))
 
             per_case.append(
@@ -129,8 +132,11 @@ def compute_delta_p_metrics(
                     "delta_p_gt": delta_p_gt,
                     "delta_p_pred": delta_p_pred,
                     "relative_error": rel_err,
+                    "signed_error": signed_error,
+                    "signed_relative_error": signed_rel_err,
                     "log_abs_error": log_err,
                     "Dr": float(cm.get("Dr", 0.0)),
+                    "Lr": float(cm.get("Lr", 0.0)),
                     "Re": float(cm.get("Re", 0.0)),
                 }
             )
@@ -140,6 +146,13 @@ def compute_delta_p_metrics(
 
     rel_errors = [c["relative_error"] for c in per_case]
     log_errors = [c["log_abs_error"] for c in per_case]
+    signed_errors = [c["signed_relative_error"] for c in per_case]
+    lr_level_biases = {
+        str(level): float(
+            np.mean([case["signed_relative_error"] for case in per_case if case["Lr"] == level])
+        )
+        for level in sorted({case["Lr"] for case in per_case})
+    }
 
     per_case.sort(key=lambda x: x["relative_error"], reverse=True)
 
@@ -151,6 +164,9 @@ def compute_delta_p_metrics(
         "relative_error_max": float(max(rel_errors)),
         "log_abs_error_mean": float(np.mean(log_errors)),
         "log_abs_error_median": float(np.median(log_errors)),
+        "signed_bias": float(np.mean(signed_errors)),
+        "lr_level_signed_bias": lr_level_biases,
+        "max_abs_lr_level_bias": float(max(abs(value) for value in lr_level_biases.values())),
         "worst_cases": per_case[:10],
         "best_cases": list(reversed(per_case[-10:])),
         "per_case": per_case,

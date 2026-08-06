@@ -1,0 +1,28 @@
+[workflow]
+id = "template_case"
+version = 1
+entrypoint = "cases.template_case.study_workflow:build_workflow"
+output_root = "data/workflows"
+
+[inputs]
+# Paths in the study TOML are resolved from the repository root.
+zarr_dir = "data/template_case/processed"
+
+[executors.python]
+kind = "local"
+
+[study]
+python_executor = "python"
+seed = 42
+test_fraction = 0.2
+
+[feature_selection]
+module = "cases.template_case.run_feature_selection_pycaret"
+config_name = "pycaret"
+
+[training.method]
+id = "mlp"
+runner_module = "cases.template_case.train"
+config_name = "train_model"
+checkpoint = "model.mdlus"
+run_meta = "run_meta.json"

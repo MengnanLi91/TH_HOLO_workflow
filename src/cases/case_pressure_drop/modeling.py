@@ -1,5 +1,7 @@
 """Model training helpers for the case-level pressure-drop workflow."""
 
+from __future__ import annotations
+
 import math
 from pathlib import Path
 from typing import Any

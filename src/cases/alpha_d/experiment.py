@@ -103,6 +103,28 @@ class AlphaDExperiment(Experiment):
 
         _print(metrics)
 
+    def compute_hpo_metrics(self, validation_dataset) -> dict[str, float]:
+        """Return pressure-drop metrics used by the alpha-D HPO objective."""
+        from cases.alpha_d.metrics import compute_delta_p_metrics
+
+        metrics = compute_delta_p_metrics(
+            self.model,
+            validation_dataset,
+            self.device,
+            alpha_d_target_name=self.alpha_d_target_name,
+            local_velocity_normalization=bool(
+                getattr(validation_dataset, "local_velocity_normalization", False)
+            ),
+        )
+        if not metrics:
+            raise ValueError("Alpha-D HPO could not compute pressure-drop validation metrics.")
+        return {
+            "delta_p_log_abs_error_mean": float(metrics["log_abs_error_mean"]),
+            "delta_p_relative_error_p90": float(metrics["relative_error_p90"]),
+            "delta_p_signed_bias": float(metrics["signed_bias"]),
+            "max_abs_lr_level_bias": float(metrics["max_abs_lr_level_bias"]),
+        }
+
     # ------------------------------------------------------------------
     # Training-lifecycle hooks
     # ------------------------------------------------------------------

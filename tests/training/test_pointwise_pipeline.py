@@ -273,6 +273,42 @@ class TestPointwiseAdapter:
         assert ds.in_features == 2
 
 
+def test_prepare_fold_dataset_refits_normalization_per_training_cases(
+    synthetic_zarr_dir: Path,
+) -> None:
+    from training.runner import prepare_fold_dataset, prepare_training
+
+    config = {
+        "model": {"name": "mlp", "params": {}},
+        "data": {"zarr_dir": str(synthetic_zarr_dir), "normalize": True},
+        "training": {"device": "cpu", "seed": 42},
+    }
+    prepared = prepare_training(config)
+
+    first = prepare_fold_dataset(prepared, [0])
+    second = prepare_fold_dataset(prepared, [1])
+
+    assert not torch.allclose(
+        first["dataset"].norm_stats["x_mean"],
+        second["dataset"].norm_stats["x_mean"],
+    )
+
+
+def test_prepare_fold_dataset_rejects_unsupported_normalization_adapter() -> None:
+    from training.runner import prepare_fold_dataset
+
+    class UnsupportedAdapter:
+        supports_fold_normalization = False
+
+    prepared = {
+        "data_cfg": {"normalize": True},
+        "adapter": UnsupportedAdapter(),
+        "adapter_name": "unsupported",
+    }
+    with pytest.raises(ValueError, match="does not support"):
+        prepare_fold_dataset(prepared, [0])
+
+
 class TestPointwisePlotSelection:
     def test_select_best_worst_pointwise_cases(self) -> None:
         from training.plotting import select_best_worst_pointwise_cases

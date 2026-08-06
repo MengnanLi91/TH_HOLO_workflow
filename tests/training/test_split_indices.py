@@ -99,7 +99,12 @@ def test_stratified_split_covers_dr_extremes() -> None:
     sim_names = _alpha_d_grid_sim_names()
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=len(sim_names),
-        split_cfg={"strategy": "stratified", "train_ratio": 0.8, "seed": 42, "n_bins": 3},
+        split_cfg={
+            "strategy": "stratified",
+            "train_ratio": 0.8,
+            "seed": 42,
+            "n_bins": 3,
+        },
         sim_names=sim_names,
     )
 

@@ -39,6 +39,7 @@ def test_decode_for_plotting_returns_physical_array_and_label(
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroModel(torch.nn.Module):
@@ -81,6 +82,7 @@ def test_baseline_for_plotting_returns_decoded_analytical_baseline(
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroModel(torch.nn.Module):
@@ -141,6 +143,7 @@ def test_save_pointwise_profile_plots_overlays_baseline_curve(
         engineered_feature_names=eng_names,
         engineered_feature_builder=eng_builder,
         target_transform=alpha_d_residual_transform,
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroModel(torch.nn.Module):
@@ -202,6 +205,7 @@ def test_save_profile_prediction_plots_overlays_baseline_curve(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroConv1d(torch.nn.Module):
@@ -264,6 +268,7 @@ def test_save_profile_prediction_plots_without_baseline_fn_omits_baseline_curve(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroConv1d(torch.nn.Module):
@@ -317,6 +322,7 @@ def test_save_parity_plot_profile_dataset_decoded_physical_space(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     class _ZeroConv1d(torch.nn.Module):
@@ -386,6 +392,7 @@ def test_save_parity_plot_without_decode_fn_uses_encoded_values(
     ds = AlphaDProfileDataset(
         zarr_dir=alpha_d_zarr_dir,
         output_columns=["log_alpha_D"],
+        target_transform_kwargs={"include_acceleration_head": True},
     )
 
     n_cases = len(ds)

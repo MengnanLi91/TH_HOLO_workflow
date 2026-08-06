@@ -36,6 +36,7 @@ from training.plotting import (
     save_profile_prediction_plots,
     select_best_worst_pointwise_cases,
 )
+from training.runtime import build_dataloader, build_optimizer, build_scheduler
 
 try:
     from tqdm.auto import tqdm
@@ -61,9 +62,6 @@ def to_plain_dict(cfg: Any) -> dict[str, Any]:
     raise TypeError(f"Expected dict-like config, got {type(cfg)}")
 
 
-_to_plain_dict = to_plain_dict
-
-
 def set_seed(seed: int) -> None:
     """Seed all random number generators for reproducibility."""
     random.seed(seed)
@@ -73,9 +71,6 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-_set_seed = set_seed
-
-
 def resolve_device(device_arg: str) -> torch.device:
     """Parse a device string ('auto', 'cpu', 'cuda') into a torch.device."""
     if device_arg == "auto":
@@ -83,9 +78,6 @@ def resolve_device(device_arg: str) -> torch.device:
     if device_arg == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("Requested CUDA but no CUDA device is available.")
     return torch.device(device_arg)
-
-
-_resolve_device = resolve_device
 
 
 def _resolve_path(raw_path: str | Path) -> Path:
@@ -150,9 +142,6 @@ def build_experiment(
     return experiment
 
 
-_build_experiment = build_experiment
-
-
 def _git_code_version() -> str:
     try:
         result = subprocess.run(
@@ -194,6 +183,16 @@ def _serialize_norm_stats(
     }
 
 
+def _dataset_reproducibility_metadata(dataset) -> dict[str, Any]:
+    provider = getattr(dataset, "reproducibility_metadata", None)
+    if not callable(provider):
+        return {}
+    metadata = provider()
+    if not isinstance(metadata, dict):
+        raise TypeError("dataset.reproducibility_metadata() must return a dict")
+    return metadata
+
+
 def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     """Fill in default values for a split config dict."""
     normalized = dict(split_cfg)
@@ -203,9 +202,6 @@ def normalize_split_cfg(split_cfg: dict, default_seed: int) -> dict[str, Any]:
     if normalized["strategy"] in {"random", "stratified"}:
         normalized.setdefault("seed", default_seed)
     return normalized
-
-
-_normalize_split_cfg = normalize_split_cfg
 
 
 def prepare_training(cfg_dict: dict) -> dict[str, Any]:
@@ -230,6 +226,12 @@ def prepare_training(cfg_dict: dict) -> dict[str, Any]:
     build_fn, adapter_name = get_build_fn_and_adapter(model_cfg)
     adapter = get_adapter(adapter_name)
 
+    if bool(data_cfg.get("normalize", False)) and not adapter.supports_fold_normalization:
+        raise ValueError(
+            f"Adapter '{adapter_name}' does not support case-fold normalization. "
+            "Disable data.normalize or use an adapter with explicit fold support."
+        )
+
     dataset = adapter.build_dataset(data_cfg)
     dataset_info = adapter.dataset_info(dataset)
 
@@ -246,6 +248,33 @@ def prepare_training(cfg_dict: dict) -> dict[str, Any]:
         "device": device,
         "seed": seed,
     }
+
+
+def prepare_fold_dataset(
+    prepared: dict[str, Any],
+    training_case_indices: list[int],
+) -> dict[str, Any]:
+    """Rebuild a normalized dataset from one fold's training cases.
+
+    Non-normalized datasets are reused. Normalized datasets must be rebuilt so
+    validation and outer-test cases cannot affect normalization statistics.
+    """
+    if not bool(prepared["data_cfg"].get("normalize", False)):
+        return prepared
+
+    adapter = prepared["adapter"]
+    if not adapter.supports_fold_normalization:
+        raise ValueError(
+            f"Adapter '{prepared['adapter_name']}' does not support case-fold normalization."
+        )
+    data_cfg = dict(prepared["data_cfg"])
+    data_cfg["norm_from_case_indices"] = [int(index) for index in training_case_indices]
+    dataset = adapter.build_dataset(data_cfg)
+    rebuilt = dict(prepared)
+    rebuilt["dataset"] = dataset
+    rebuilt["dataset_info"] = adapter.dataset_info(dataset)
+    rebuilt["data_cfg"] = data_cfg
+    return rebuilt
 
 
 def train_one_epoch(experiment: Experiment, dataloader: DataLoader) -> float:
@@ -305,15 +334,11 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     loss_name = str(training_cfg.get("loss", "mse"))
     loss_fn = get_loss_fn(loss_name)
     lr = float(training_cfg.get("lr", 1.0e-3))
-    weight_decay = float(training_cfg.get("weight_decay", 0.0))
-    if weight_decay > 0:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = build_optimizer(model.parameters(), training_cfg)
 
     experiment_entrypoint = training_cfg.get("experiment")
     experiment_kwargs: dict[str, Any] = {}
-    experiment = _build_experiment(
+    experiment = build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
         optimizer=optimizer,
@@ -323,7 +348,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         **experiment_kwargs,
     )
 
-    split_cfg = _normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
+    split_cfg = normalize_split_cfg(dict(data_cfg.get("split") or {}), default_seed=seed)
     num_cases = len(dataset.sim_names) if hasattr(dataset, "sim_names") else len(dataset)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=num_cases,
@@ -348,11 +373,10 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     if not train_case_idx:
         raise ValueError("Training split is empty after validation split. Reduce val_ratio.")
 
-    # Pointwise normalization must be fit on training cases only.
-    if adapter_name == "pointwise" and bool(data_cfg.get("normalize", False)):
-        normalized_data_cfg = dict(data_cfg)
-        normalized_data_cfg["norm_from_case_indices"] = train_case_idx
-        dataset = adapter.build_dataset(normalized_data_cfg)
+    # Normalization must be fit on training cases only.
+    prep = prepare_fold_dataset(prep, train_case_idx)
+    dataset = prep["dataset"]
+    dataset_info = prep["dataset_info"]
 
     if hasattr(dataset, "subset_by_case_indices"):
         train_dataset = dataset.subset_by_case_indices(train_case_idx)
@@ -371,51 +395,31 @@ def train(cfg: dict | Any) -> dict[str, Any]:
     num_workers = int(training_cfg.get("num_workers", 0))
     if epochs < 1:
         raise ValueError("training.epochs must be >= 1.")
-    if batch_size < 1:
-        raise ValueError("training.batch_size must be >= 1.")
-    if num_workers < 0:
-        raise ValueError("training.num_workers must be >= 0.")
 
-    dataloader = DataLoader(
+    dataloader = build_dataloader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        persistent_workers=num_workers > 0,
+        device=device,
         collate_fn=adapter.collate_fn(),
+        config_prefix="training",
     )
 
     val_loader = None
     if use_early_stopping and val_dataset is not None:
-        val_loader = DataLoader(
+        val_loader = build_dataloader(
             val_dataset,
             batch_size=batch_size,
             shuffle=False,
             num_workers=num_workers,
-            pin_memory=device.type == "cuda",
-            persistent_workers=num_workers > 0,
+            device=device,
             collate_fn=adapter.collate_fn(),
+            config_prefix="training",
         )
 
     scheduler_name = str(training_cfg.get("lr_scheduler") or "")
-    scheduler = None
-    if scheduler_name == "cosine":
-        warmup_epochs = int(training_cfg.get("lr_warmup_epochs", 0))
-        if warmup_epochs > 0 and warmup_epochs < epochs:
-            warmup_sched = torch.optim.lr_scheduler.LinearLR(
-                optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup_epochs
-            )
-            cosine_sched = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=epochs - warmup_epochs, eta_min=1e-7
-            )
-            scheduler = torch.optim.lr_scheduler.SequentialLR(
-                optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_epochs]
-            )
-        else:
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=epochs, eta_min=1e-7
-            )
+    scheduler = build_scheduler(optimizer, training_cfg, epochs)
 
     model_name = str(model_cfg.get("name", "custom"))
     if adapter_name == "pointwise":
@@ -443,18 +447,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         epoch_iter = epoch_progress
 
     for epoch in epoch_iter:
-        running_loss = 0.0
-        num_batches = 0
-
-        for batch in dataloader:
-            loss_value = experiment.training_step(batch)
-            running_loss += loss_value
-            num_batches += 1
-
-        if num_batches == 0:
-            raise RuntimeError("No training batches were produced.")
-
-        avg_loss = running_loss / num_batches
+        avg_loss = train_one_epoch(experiment, dataloader)
         last_avg_loss = avg_loss
         experiment.on_epoch_end(int(epoch), avg_loss)
         experiment.on_epoch_end_extra_step()
@@ -472,7 +465,9 @@ def train(cfg: dict | Any) -> dict[str, Any]:
                 patience_counter += 1
             if epoch_progress is not None:
                 epoch_progress.set_postfix(
-                    loss=f"{avg_loss:.3e}", val=f"{val_loss:.3e}", patience=patience_counter
+                    loss=f"{avg_loss:.3e}",
+                    val=f"{val_loss:.3e}",
+                    patience=patience_counter,
                 )
             else:
                 print(
@@ -514,6 +509,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         split_meta["test_file"] = str(_resolve_path(str(split_cfg["test_file"])))
 
     if hasattr(dataset, "input_columns"):
+        effective_data = _dataset_reproducibility_metadata(dataset)
         data_meta = {
             "zarr_dir": str(_resolve_path(str(data_cfg["zarr_dir"]))),
             "input_columns": list(dataset.input_columns),
@@ -525,10 +521,19 @@ def train(cfg: dict | Any) -> dict[str, Any]:
             "local_velocity_normalization": bool(
                 getattr(dataset, "local_velocity_normalization", False)
             ),
-            "target_transform": data_cfg.get("target_transform"),
+            "target_transform": effective_data.get(
+                "target_transform", data_cfg.get("target_transform")
+            ),
+            "target_transform_kwargs": effective_data.get(
+                "target_transform_kwargs", data_cfg.get("target_transform_kwargs", {})
+            ),
             "dataset_entrypoint": data_cfg.get("dataset_entrypoint"),
+            "include_acceleration_head": effective_data.get("include_acceleration_head"),
             "exclude_cases": getattr(dataset, "exclude_cases", []) or [],
-            "min_Dr": float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None,
+            "min_Dr": (
+                float(data_cfg.get("min_Dr")) if data_cfg.get("min_Dr") is not None else None
+            ),
+            "effective": effective_data,
         }
     else:
         data_meta = {
@@ -540,6 +545,7 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         }
 
     run_meta = {
+        "training_run_meta_schema": 3,
         "code_version": _git_code_version(),
         "model_name": model_name,
         "entrypoint": model_entrypoint_string(model_cfg, build_fn),
@@ -562,7 +568,13 @@ def train(cfg: dict | Any) -> dict[str, Any]:
         "checkpoint": str(checkpoint_path),
     }
 
-    run_meta_path = checkpoint_path.with_name("run_meta.json")
+    run_meta_value = output_cfg.get("run_meta")
+    run_meta_path = (
+        _resolve_path(str(run_meta_value))
+        if run_meta_value
+        else checkpoint_path.with_name("run_meta.json")
+    )
+    run_meta_path.parent.mkdir(parents=True, exist_ok=True)
     run_meta_path.write_text(json.dumps(run_meta, indent=2), encoding="utf-8")
 
     print(f"Saved model checkpoint to {checkpoint_path}")
@@ -595,7 +607,10 @@ def _log_hpo_summary(results: dict[str, Any]) -> None:
     print(f"\nHPO complete: {n_complete} finished, {n_pruned} pruned, {n_trials} total")
 
     if n_complete > 0:
-        print(f"Best trial #{results['best_trial_number']}: val_loss={results['best_value']:.6e}")
+        print(
+            f"Confirmed winner {results['best_candidate_id']}: "
+            f"rank_score={results['best_value']:.6e}"
+        )
         print(f"Best params: {json.dumps(results['best_params'], indent=2)}")
         print(f"Artifacts saved to: {results['output_dir']}")
 
@@ -637,7 +652,7 @@ def _indices_for_test_split(
         test_idx = [sim_to_idx[name] for name in test_sims]
         return test_idx, train_sims, test_sims
 
-    reconstructed_split = _normalize_split_cfg(dict(split_meta), default_seed=42)
+    reconstructed_split = normalize_split_cfg(dict(split_meta), default_seed=42)
     train_idx, test_idx, train_sims, test_sims = split_indices(
         num_cases=len(sim_names),
         split_cfg=reconstructed_split,
@@ -647,9 +662,19 @@ def _indices_for_test_split(
     return test_idx, train_sims, test_sims
 
 
+def validate_training_run_meta(run_meta: dict[str, Any], path: Path | str) -> None:
+    """Require the current checkpoint metadata schema."""
+    schema = run_meta.get("training_run_meta_schema")
+    if schema != 3:
+        raise ValueError(
+            f"Unsupported training_run_meta_schema={schema!r} in {path}; "
+            "this workflow requires schema 3."
+        )
+
+
 def evaluate(cfg: dict | Any) -> dict[str, Any]:
     """Evaluate checkpoint using run_meta.json to reconstruct dataset and split."""
-    cfg_dict = _to_plain_dict(cfg)
+    cfg_dict = to_plain_dict(cfg)
 
     eval_cfg = dict(cfg_dict.get("eval") or {})
     output_cfg = dict(cfg_dict.get("output") or {})
@@ -662,7 +687,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    run_meta_value = eval_cfg.get("run_meta")
+    run_meta_value = eval_cfg.get("run_meta") or output_cfg.get("run_meta")
     run_meta_path = (
         _resolve_path(str(run_meta_value))
         if run_meta_value
@@ -675,6 +700,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
         )
 
     run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    validate_training_run_meta(run_meta, run_meta_path)
 
     adapter_name = str(run_meta["adapter"])
     adapter = get_adapter(adapter_name)
@@ -694,7 +720,9 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
                 data_meta.get("local_velocity_normalization", False)
             ),
             "target_transform": data_meta.get("target_transform"),
+            "target_transform_kwargs": data_meta.get("target_transform_kwargs", {}),
             "dataset_entrypoint": data_meta.get("dataset_entrypoint"),
+            "include_acceleration_head": data_meta.get("include_acceleration_head"),
             "exclude_cases": data_meta.get("exclude_cases", []),
             "min_Dr": data_meta.get("min_Dr"),
         }
@@ -715,27 +743,21 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     else:
         eval_dataset = Subset(dataset, test_idx)
 
-    device = _resolve_device(str(eval_cfg.get("device", "auto")))
+    device = resolve_device(str(eval_cfg.get("device", "auto")))
     batch_size = int(eval_cfg.get("batch_size", 4))
     num_workers = int(eval_cfg.get("num_workers", 0))
-    if batch_size < 1:
-        raise ValueError("eval.batch_size must be >= 1.")
-    if num_workers < 0:
-        raise ValueError("eval.num_workers must be >= 0.")
 
-    dataloader = DataLoader(
+    dataloader = build_dataloader(
         eval_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        persistent_workers=num_workers > 0,
+        device=device,
         collate_fn=adapter.collate_fn(),
+        config_prefix="eval",
     )
 
-    # PhysicsNeMo re-exports Module at the top level. NGC physicsnemo:25.11
-    # dropped the legacy `physicsnemo.core.module` path; the top-level export
-    # works in both NGC and the vendored submodule.
+    # PhysicsNeMo exports Module at the supported top-level API.
     module_cls = import_physicsnemo_attr("physicsnemo", "Module")
     model = module_cls.from_checkpoint(str(checkpoint_path)).to(device)
 
@@ -745,7 +767,7 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
     experiment_entrypoint = eval_cfg.get("experiment") or run_meta.get("training", {}).get(
         "experiment"
     )
-    experiment = _build_experiment(
+    experiment = build_experiment(
         experiment_entrypoint=experiment_entrypoint,
         model=model,
         optimizer=None,
@@ -893,9 +915,9 @@ def evaluate(cfg: dict | Any) -> dict[str, Any]:
             )
         ],
         "plots": {
-            "plot_dir": str(_resolve_path(str(plot_dir_value)))
-            if plot_dir_value is not None
-            else None,
+            "plot_dir": (
+                str(_resolve_path(str(plot_dir_value))) if plot_dir_value is not None else None
+            ),
             "num_saved": len(plot_files),
             "files": plot_files,
         },

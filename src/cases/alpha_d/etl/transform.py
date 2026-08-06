@@ -34,7 +34,11 @@ logger = logging.getLogger(__name__)
 
 
 def _local_diameter(
-    z: np.ndarray, z_throat_start: float, z_throat_end: float, D_big: float, D_small: float
+    z: np.ndarray,
+    z_throat_start: float,
+    z_throat_end: float,
+    D_big: float,
+    D_small: float,
 ) -> np.ndarray:
     """Compute local pipe diameter along the z-axis.
 
@@ -118,7 +122,11 @@ class AlphaDTransformation(DataTransformation):
 
         if Re <= 0 or Dr <= 0 or Lr <= 0:
             logger.warning(
-                "Skipping %s: invalid case parameters (Re=%s Dr=%s Lr=%s)", case_name, Re, Dr, Lr
+                "Skipping %s: invalid case parameters (Re=%s Dr=%s Lr=%s)",
+                case_name,
+                Re,
+                Dr,
+                Lr,
             )
             return None
 

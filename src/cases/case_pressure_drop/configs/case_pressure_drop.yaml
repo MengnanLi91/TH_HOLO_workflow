@@ -17,6 +17,7 @@ data:
     # regardless of the random split. Override on the CLI, e.g.:
     #   data.split.force_test='[Re_43938__Dr_0p522__Lr_0p073]'
     force_test: []
+    force_test_file: null
 
 feature_selection:
   enabled: true

@@ -21,6 +21,8 @@ V1 contract
   plug-compatible with the existing sklearn-based ``run_feature_selection``.
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import logging

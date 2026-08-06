@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 
 from training import _require_pyg
+from training.case_lists import load_case_selection
 from training.datasets import GraphPairDataset, GridPairDataset, parse_field_list
 
 
@@ -14,6 +15,7 @@ class ModelAdapter:
     """Interface for model/data-family-specific behavior."""
 
     family: str
+    supports_fold_normalization = False
 
     def build_dataset(self, data_cfg: dict):
         raise NotImplementedError
@@ -193,6 +195,7 @@ class PointwiseAdapter(ModelAdapter):
     """
 
     family = "pointwise"
+    supports_fold_normalization = True
 
     def build_dataset(self, data_cfg: dict):
         from training.datasets_tabular import TabularPairDataset
@@ -218,9 +221,11 @@ class PointwiseAdapter(ModelAdapter):
             v = data_cfg.get(key)
             return float(v) if v is not None else None
 
-        exclude_cases = data_cfg.get("exclude_cases")
-        if exclude_cases is not None:
-            exclude_cases = [str(c) for c in exclude_cases]
+        exclude_cases = load_case_selection(
+            data_cfg.get("exclude_cases"),
+            data_cfg.get("exclude_cases_file"),
+            label="exclude_cases",
+        )
 
         eng_ep = data_cfg.get("engineered_features_entrypoint")
         eng_names = None
@@ -249,6 +254,7 @@ class PointwiseAdapter(ModelAdapter):
             local_velocity_normalization=bool(data_cfg.get("local_velocity_normalization", False)),
             min_Dr=_opt_float("min_Dr"),
             target_transform=target_transform,
+            target_transform_kwargs=dict(data_cfg.get("target_transform_kwargs") or {}),
             engineered_feature_names=eng_names,
             engineered_feature_builder=eng_builder,
         )
@@ -334,6 +340,7 @@ class ProfileAdapter(ModelAdapter):
     """
 
     family = "profile"
+    supports_fold_normalization = True
 
     def build_dataset(self, data_cfg: dict):
         ep = data_cfg.get("dataset_entrypoint")

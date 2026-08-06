@@ -34,14 +34,16 @@ flowchart LR
         Z1["{sim_name}.zarr<br/>mesh · fields · grid · probes"]
         Z2["{case}.zarr<br/>features · targets · metadata"]
     end
-    subgraph TRAIN["One generic trainer"]
+    subgraph TRAIN["Training and study execution"]
         TF["train.py / evaluate.py<br/>adapters: grid · graph · pointwise · profile"]
+        WF["multifid-workflow<br/>plan · run · status · publish"]
     end
     E1 --> Z1
     E2 --> Z2
     Z1 --> TF
     Z2 --> TF
     TF --> M["FNO · MeshGraphNet · AFNO · Pix2Pix<br/>MLP · Conv1DProfile"]
+    WF --> TF
 ```
 
 The whole story in one sentence: **two ETL pipelines feed one trainer
@@ -63,31 +65,40 @@ Open the Getting Started guide.
 :::
 
 :::{grid-item-card} {octicon}`play` Alpha-D surrogate
-:link: user/alpha_d_surrogate
+:link: user/running_alpha_d
 :link-type: doc
 
-Reproduce the Darcy-resistance MLP end-to-end, ETL through evaluation.
+Run the tracked alpha-D study from ETL through MOOSE coupling and reporting.
 
-Open the Alpha-D Surrogate tutorial.
+Open the Alpha-D running guide.
 :::
 
 :::{grid-item-card} {octicon}`code` New model
-:link: architecture
+:link: dev/workflows
 :link-type: doc
 
-How adapters, datasets, and the runner fit together when adding a model.
+Implement a registered or custom model, adapter, experiment, or exporter.
 
-Open the Architecture page.
+Open the workflow extension guide.
 :::
 
-:::{grid-item-card} {octicon}`beaker` Coupling physics
-:link: dev/alpha_d_coupling_physics
+:::{grid-item-card} {octicon}`workflow` Reproducible workflow
+:link: user/running_workflows
 :link-type: doc
 
-Equations, averaging conventions, and the α_D → MOOSE Forchheimer
-mapping with the resolved CFD vs PINSFV verification.
+Select an ML method, plan a study, resume it, and publish checked artifacts.
 
-Open the Physics Reference.
+Open the workflow user guide.
+:::
+
+:::{grid-item-card} {octicon}`beaker` Alpha-D coupling demo
+:link: demo_cases/alpha_d_coupling_physics
+:link-type: doc
+
+An end-to-end demonstration of the α_D pipeline and its MOOSE PINSFV
+coupling, including resolved-CFD and surrogate validation.
+
+Open the Alpha-D coupling demo.
 :::
 
 ::::
@@ -133,40 +144,27 @@ docker compose run --rm etl bash -lc \
 Use `etl-ngc` if you prefer the NGC PhysicsNeMo base image; CLI flags
 override YAML values, for example `training.epochs=50`.
 
-## Train the Alpha-D MLP surrogate
+## Run the Alpha-D coupled study
 
-The alpha-D workflow extracts Darcy-resistance coefficient profiles from
-a parametric study of flow contraction-expansion simulations and trains
-a PhysicsNeMo `FullyConnected` MLP:
+The current alpha-D path is the provenance-tracked workflow, which runs the
+default Conv1D profile method across the configured panels, exports the
+Forchheimer closure, executes MOOSE, and writes the evidence report:
 
 ```bash
-# 1. Extract alpha_D profiles from CFD output
-docker compose run --rm etl bash -lc \
-  'cd src && python cases/alpha_d/run_etl.py'
+uv sync
+export MULTIFID_PYTHON_IMAGE=/absolute/path/to/multifid-th.sif
+export MULTIFID_MOOSE_IMAGE=/absolute/path/to/moose-dev.sif
 
-# 2. PyCaret feature selection (writes selected_features.txt that
-#    train_mlp consumes via data.input_columns_file)
-docker compose run --rm etl bash -lc \
-  'cd src && python cases/alpha_d/run_feature_selection_pycaret.py'
-
-# 3. Train (HPO + retrain best, one command)
-docker compose run --rm etl bash -lc \
-  'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp'
-
-# 3b. Or skip HPO and train directly
-docker compose run --rm etl bash -lc \
-  'cd src && python train.py --config-path cases/alpha_d/configs --config-name train_mlp hpo=null'
-
-# 4. Evaluate
-docker compose run --rm etl bash -lc \
-  'cd src && python evaluate.py --config-path cases/alpha_d/configs --config-name train_mlp'
+uv run multifid-workflow plan \
+  --config src/cases/alpha_d/configs/coupling_study.toml
+uv run multifid-workflow run \
+  --config src/cases/alpha_d/configs/coupling_study.toml \
+  --run-id alpha-d-conv1d-002
 ```
 
-The Conv1D path (`--config-name train_conv1d`) hard-codes its input
-columns and does not need step 2.
-
-The full walkthrough is in the
-[Alpha-D Surrogate Tutorial](user/alpha_d_surrogate.md).
+See [Running the Alpha-D Case](user/running_alpha_d.md) for ETL, resume, and
+publication. The [Alpha-D surrogate component tutorial](user/alpha_d_surrogate.md)
+retains direct ETL, MLP, and evaluation commands for focused development.
 
 ## Site contents
 
@@ -183,6 +181,13 @@ architecture
 
 user/index
 cases/index
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Demonstrations
+
+demo_cases/index
 ```
 
 ```{toctree}

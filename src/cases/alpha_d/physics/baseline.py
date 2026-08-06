@@ -1,13 +1,14 @@
 """Closed-form sudden contraction + throat-friction alpha_D baseline.
 
 For an axisymmetric pipe with an abrupt contraction-then-expansion this
-baseline keeps two terms whose CFD signature is genuinely localised:
+baseline keeps three terms whose CFD signature is genuinely localised:
 
-  ΔP_baseline = K_c · q_throat + f_Darcy · (L_throat / D_throat) · q_throat
+  ΔP_baseline = ΔP_accel + K_c · q_throat + f_Darcy · (L_throat / D_throat) · q_throat
 
-with q_throat = 0.5 ρ V_throat², and
+with q_throat = 0.5 ρ V_throat², q_bulk = 0.5 ρ V_bulk², and
 
   β²        = (D_throat / D_big)² = Dr²
+  ΔP_accel  = q_throat − q_bulk = q_bulk · (1/Dr⁴ − 1)   # acceleration head
   K_c       = 0.5 · (1 − β²)                 # sudden contraction (Idelchik)
   V_throat  = V_bulk / Dr²
   Re_throat = Re_bulk / Dr
@@ -16,26 +17,48 @@ with q_throat = 0.5 ρ V_throat², and
 For this dataset Re_throat ∈ [5.5e3, 7.5e5] — always turbulent, so the
 laminar branch is omitted.
 
-The Borda-Carnot expansion loss K_e = (1 − β²)² is **deliberately not
-included**.  In CFD the expansion loss is dissipated gradually over
-several diameters downstream, and the local α_D right at the expansion
-plane is dominated by Bernoulli-like pressure recovery (often slightly
-negative).  Adding K_e as a single positive spike at the outlet bin
-forces the model to fight a phantom artifact (worth O(K_e · D_h / dz)
-in α_D), which empirically destroyed the residual fit.  We let the
-model learn the distributed downstream loss on its own.
+**Acceleration head (ΔP_accel).**  The dominant term, ~half of the true
+ΔP across the whole grid (see
+``docs/superpowers/specs/2026-06-18-where-does-dp-live-findings.md``).
+Because the contraction is *sudden* (d_local steps 1 → Dr in one cell),
+the static pressure drops sharply at the contraction plane as the flow
+accelerates to V_throat; the truncated 1-diameter downstream ROI never
+recovers it, so it appears in ΔP_case.  Empirically (CFD α_D, 13 cases
+over Dr∈[0.05,0.9], Lr∈[0.01,0.2]) this drop is a spike concentrated in
+the last 1–2 stations *before* the throat entrance, of magnitude ≈
+q_throat − q_bulk (matched within ~6–15%).  We deposit the analytic head
+at the last station upstream of the throat — magnitude analytic (∝1/Dr⁴),
+location geometric, no fitted constants.  This is a **shape prior matching
+the measured static profile**, not a momentum-consistent reversible term:
+the matching downstream recovery is absent from the ROI, so we do not add
+it.  Putting the 1/Dr⁴ head in the baseline (rather than leaving the model
+to invent it as a residual) is what lets the coupled prediction extrapolate
+to small Dr.
+
+The Borda-Carnot expansion loss K_e = (1 − β²)² is still **deliberately not
+included**.  The downstream buffer carries ≈ 0 net ΔP in CFD (a sharp
+Bernoulli recovery spike then flat), so the current baseline already matches
+it; adding K_e as a positive spike there forces the model to fight a phantom
+(worth O(K_e · D_h / dz) in α_D), which empirically destroyed the residual
+fit.  The unrecovered expansion loss is already accounted for via ΔP_accel
+above (for small Dr, K_e ≈ 1 ⇒ almost none of q_throat recovers, so the
+acceleration head and the expansion loss are two views of the same head).
 
 The baseline is exposed as a *profile* α_D(z) so that integrating
 
   dp/dz = α_D · ρ V_bulk² / (2 D_h)          # bulk-basis convention
 
-over the ROI reproduces ΔP_baseline above.  K_c is localised at the
-contraction-inlet bin (single station of physical width dz_phys =
-L_roi / n_stations); friction is uniform across the throat interior.
+over the ROI reproduces ΔP_baseline above.  ΔP_accel is localised at the
+last upstream bin (D_h = D_big), K_c at the contraction-inlet bin
+(D_h = Dr·D_big); both are single stations of physical width dz_phys =
+L_roi / n_stations.  Friction is uniform across the throat interior.
 
-The closed form is intentionally simple — its job is to provide a
-smooth shape prior so the MLP can fit the *residual* against CFD,
-not to replace the CFD computation.
+The closed form is intentionally simple — its job is to provide a shape
+prior so the model can fit the *residual* against CFD, not to replace the
+CFD computation.  ``include_acceleration_head`` (default True) gates the
+ΔP_accel term for A/B testing and reversibility; it must be the same at
+training (``transforms.alpha_d_residual_transform``) and inference
+(``export_friction_profile``) time, which the shared default guarantees.
 """
 
 from __future__ import annotations
@@ -86,7 +109,12 @@ def _blasius_friction_factor(re: float | np.ndarray) -> float | np.ndarray:
     return 0.316 * np.power(np.maximum(re, 1e-12), -0.25)
 
 
-def alpha_d_baseline_profile(z_hat: np.ndarray, geom: BaselineGeometry) -> np.ndarray:
+def alpha_d_baseline_profile(
+    z_hat: np.ndarray,
+    geom: BaselineGeometry,
+    *,
+    include_acceleration_head: bool = True,
+) -> np.ndarray:
     """Compute the bulk-basis α_D baseline at each station.
 
     Parameters
@@ -95,6 +123,12 @@ def alpha_d_baseline_profile(z_hat: np.ndarray, geom: BaselineGeometry) -> np.nd
         Per-station normalised axial coordinate, shape ``[n_stations]``.
     geom
         Geometry + flow constants for the case.
+    include_acceleration_head
+        When True (default), deposit the sudden-contraction acceleration head
+        ``ΔP_accel = q_throat − q_bulk`` at the last station upstream of the
+        throat. See the module docstring. The flag exists for A/B / regression
+        testing and reversibility; it must match between training and
+        inference, which the shared default guarantees.
 
     Returns
     -------
@@ -130,14 +164,35 @@ def alpha_d_baseline_profile(z_hat: np.ndarray, geom: BaselineGeometry) -> np.nd
     # over a span of dz_phys.
     alpha[is_inlet_bin] += K_c * D_h_throat / (Dr4 * geom.dz_phys)
 
+    # Acceleration head: the static drop as the flow accelerates into the
+    # sudden contraction. CFD places it as a spike in the last 1–2 stations
+    # *before* the throat entrance (d_local still = 1, so D_h = D_big). Deposit
+    # the analytic head at the last upstream station, scaled so it integrates to
+    #   ΔP_accel = q_throat − q_bulk = q_bulk · (1/Dr⁴ − 1)
+    # over a span of dz_phys:  α = ΔP_accel · 2 D_big / (ρ V_bulk² · dz_phys).
+    if include_acceleration_head:
+        upstream = z < geom.z_throat_start_norm
+        if np.any(upstream):
+            accel_idx = np.flatnonzero(upstream)[int(np.argmax(z[upstream]))]
+            alpha[accel_idx] += (1.0 / Dr4 - 1.0) * geom.D_big / geom.dz_phys
+
     # K_e is intentionally omitted — see the module docstring for why.
     return alpha
 
 
-def integrated_baseline_delta_p(geom: BaselineGeometry) -> float:
-    """ΔP predicted by the closed-form profile (K_c + throat friction).
+def integrated_baseline_delta_p(
+    geom: BaselineGeometry,
+    *,
+    include_acceleration_head: bool = True,
+) -> float:
+    """ΔP predicted by the closed-form profile.
 
-    K_e is intentionally excluded — see the module docstring.
+    ``ΔP_accel + K_c · q_throat + friction`` when ``include_acceleration_head``
+    (default), else the legacy ``K_c · q_throat + friction``. By construction
+    the per-station profile integrates trapezoidally to this value (each
+    single-cell deposit contributes its full ΔP via two half-intervals); see
+    ``tests/cases/alpha_d/test_baseline.py``. K_e is intentionally excluded —
+    see the module docstring.
     """
     Dr2 = geom.Dr**2
     K_c = 0.5 * (1.0 - Dr2)
@@ -145,6 +200,11 @@ def integrated_baseline_delta_p(geom: BaselineGeometry) -> float:
     f = _blasius_friction_factor(Re_throat)
     V_throat = geom.V_bulk / Dr2
     q_throat = 0.5 * geom.rho * V_throat**2
+    q_bulk = 0.5 * geom.rho * geom.V_bulk**2
     L_throat = geom.Lr * geom.outer_height_m
     D_throat = geom.D_big * geom.Dr
-    return float((K_c + f * L_throat / D_throat) * q_throat)
+    dp = (K_c + f * L_throat / D_throat) * q_throat
+    if include_acceleration_head:
+        # ΔP_accel = q_throat − q_bulk = q_bulk · (1/Dr⁴ − 1)
+        dp += q_throat - q_bulk
+    return float(dp)

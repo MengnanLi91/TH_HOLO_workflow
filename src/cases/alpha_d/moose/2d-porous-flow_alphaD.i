@@ -94,6 +94,7 @@ middle_length = 0.073
 end_length = ${fparse (total_length - middle_length) / 2}
 inlet_velocity = 1
 outlet_pressure = 0
+delta_p_initial = 0
 
 [Mesh]
   [mesh]
@@ -166,6 +167,17 @@ outlet_pressure = 0
     v = superficial_vel_y
     porosity = porosity
     rho = ${rho}
+  []
+[]
+
+[FVICs]
+  # The alpha-D integral supplies a case-specific pressure scale. This only
+  # initializes Newton; the converged equations and boundary conditions are
+  # unchanged.
+  [pressure]
+    type = FVFunctionIC
+    variable = pressure
+    function = '${delta_p_initial} * (1 - x / ${total_length})'
   []
 []
 
@@ -329,9 +341,10 @@ outlet_pressure = 0
   solve_type = 'NEWTON'
   petsc_options_iname = '-pc_type -ksp_gmres_restart -sub_pc_type -sub_pc_factor_shift_type'
   petsc_options_value = 'asm      300                lu           NONZERO'
-  line_search = 'none'
-  nl_rel_tol = 1e-11
-  nl_abs_tol = 1e-14
+  line_search = 'bt'
+  nl_max_its = 100
+  nl_rel_tol = 1e-10
+  nl_abs_tol = 1e-12
 []
 
 [Postprocessors]

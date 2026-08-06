@@ -70,7 +70,15 @@ if constF is not None:
     all_pts.append(constF)
 lo = float(min(p.min() for p in all_pts) * 0.5)
 hi = float(max(p.max() for p in all_pts) * 1.8)
-ax.plot([lo, hi], [lo, hi], color="black", linewidth=1.0, linestyle="--", zorder=0, label="y = x")
+ax.plot(
+    [lo, hi],
+    [lo, hi],
+    color="black",
+    linewidth=1.0,
+    linestyle="--",
+    zorder=0,
+    label="y = x",
+)
 ax.plot(
     [lo, hi],
     [1.1 * lo, 1.1 * hi],

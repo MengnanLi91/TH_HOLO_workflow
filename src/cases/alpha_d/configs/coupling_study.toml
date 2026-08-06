@@ -1,0 +1,121 @@
+[workflow]
+id = "alpha_d_coupling"
+version = 4
+entrypoint = "cases.alpha_d.study_workflow:build_workflow"
+output_root = "data/workflows"
+
+[inputs]
+# "reuse" fingerprints this processed tree. Change to "raw_etl" to run the
+# existing Exodus ETL first and place its processed output inside the run.
+mode = "reuse"
+zarr_dir = "data/flow_contraction_expansion/parametric_study/processed"
+raw_dir = "data/flow_contraction_expansion/parametric_study"
+
+[executors.python]
+kind = "apptainer"
+image_env = "MULTIFID_PYTHON_IMAGE"
+binds = ["{repo_root}:{repo_root}"]
+
+[executors.moose]
+kind = "apptainer"
+image_env = "MULTIFID_MOOSE_IMAGE"
+binds = ["{repo_root}:{repo_root}"]
+
+[study]
+python_executor = "python"
+alpha_min_dr = 0.333
+exclude_below_dr = 0.1
+
+[training.alpha]
+id = "conv1d_profile"
+runner_module = "cases.alpha_d.train"
+config_name = "train_conv1d"
+artifact_contract = "alpha_d_profile_v1"
+checkpoint = "model.mdlus"
+run_meta = "run_meta.json"
+include_acceleration_head = true
+
+[training.alpha.hpo]
+enabled = true
+
+[training.alpha.feature_selection]
+module = "cases.alpha_d.run_feature_selection_pycaret"
+config_name = "pycaret_conv1d"
+
+[training.alpha.export]
+module = "cases.alpha_d.export_friction_profile"
+contract = "forchheimer_profile_v1"
+
+[[panels]]
+tag = "indist_panel"
+kind = "indist"
+count = 36
+guard_k = 2
+reg_min_dr = 0.333
+
+[[panels]]
+tag = "Dr_low_pure"
+kind = "ood"
+axis = "Dr"
+side = "low"
+k = 2
+guard_axes = ["Re", "Lr"]
+guard_k = 2
+reg_min_dr = 0.1
+
+[[panels]]
+tag = "Dr_high_guarded"
+kind = "ood"
+axis = "Dr"
+side = "high"
+k = 2
+guard_axes = ["Re", "Lr"]
+guard_k = 2
+reg_min_dr = 0.333
+
+[[panels]]
+tag = "Re_low"
+kind = "ood"
+axis = "Re"
+side = "low"
+k = 2
+reg_min_dr = 0.333
+
+[[panels]]
+tag = "Re_high"
+kind = "ood"
+axis = "Re"
+side = "high"
+k = 2
+reg_min_dr = 0.333
+
+[[panels]]
+tag = "Lr_low"
+kind = "ood"
+axis = "Lr"
+side = "low"
+k = 2
+reg_min_dr = 0.333
+
+[[panels]]
+tag = "Lr_high"
+kind = "ood"
+axis = "Lr"
+side = "high"
+k = 2
+reg_min_dr = 0.333
+
+[moose]
+executor = "moose"
+executable = "moose/modules/navier_stokes/navier_stokes-opt"
+input_template = "src/cases/alpha_d/moose/2d-porous-flow_alphaD.i"
+primary_panel = "Dr_low_pure"
+control_panels = ["indist_panel", "Dr_high_guarded", "Re_high", "Lr_low"]
+retry = true
+
+[publish]
+manifest = "docs/demo_cases/alpha_d_published_results.json"
+
+[[publish.files]]
+source = "report/pressure_drop_comparison_errors.svg"
+destination = "docs/_static/alpha_d_pressure_drop_comparison_errors.svg"
